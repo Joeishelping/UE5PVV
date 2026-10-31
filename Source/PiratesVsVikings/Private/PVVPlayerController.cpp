@@ -2,6 +2,7 @@
 #include "PVVBoat.h"
 #include "PVVCharacter.h"
 #include "PVVGameMode.h"
+#include "Engine/World.h"
 
 void APVVPlayerController::RequestFaction(EPVVFaction Faction)
 {

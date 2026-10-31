@@ -7,6 +7,7 @@
 #include "PVVPlayerState.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
+#include "Engine/World.h"
 
 #define LOCTEXT_NAMESPACE "PVVGameMode"
 

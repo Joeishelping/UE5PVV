@@ -23,6 +23,9 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 
 #define LOCTEXT_NAMESPACE "PVVCharacter"
 

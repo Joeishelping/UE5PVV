@@ -3,6 +3,7 @@
 #include "PVVGameMode.h"
 #include "Components/BoxComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/World.h"
 
 #define LOCTEXT_NAMESPACE "PVVDetentionZone"
 

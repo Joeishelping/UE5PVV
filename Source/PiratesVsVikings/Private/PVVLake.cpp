@@ -2,6 +2,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Engine/StaticMesh.h"
 
 APVVLake::APVVLake()
 {
