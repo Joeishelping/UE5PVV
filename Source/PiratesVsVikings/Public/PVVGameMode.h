@@ -25,7 +25,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
-	virtual bool ShouldSpawnAtStartSpot_Implementation(AController* Player) override { return false; }
+	virtual bool ShouldSpawnAtStartSpot(AController* Player) override { return false; }
 	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
 
 	void RequestFaction(APlayerController* PC, EPVVFaction Faction);
