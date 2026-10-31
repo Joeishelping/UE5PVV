@@ -41,6 +41,10 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_Announce(const FText& Message);
 
+	/** Local copy of the last few announcements (with arrival time) for the HUD. */
+	TArray<FString> RecentMessages;
+	TArray<float> RecentMessageTimes;
+
 protected:
 	UFUNCTION()
 	void OnRep_MatchPhase();

@@ -6,8 +6,11 @@
 
 APVVLake::APVVLake()
 {
+	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(Root);
+
 	Surface = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Surface"));
-	SetRootComponent(Surface);
+	Surface->SetupAttachment(Root);
 	Surface->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Surface->SetRelativeScale3D(FVector(400.f, 400.f, 1.f)); // 400m x 400m from the engine 1m plane
 

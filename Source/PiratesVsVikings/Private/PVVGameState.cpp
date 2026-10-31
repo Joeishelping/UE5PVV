@@ -1,6 +1,7 @@
 #include "PVVGameState.h"
 #include "PVVPlayerState.h"
 #include "PiratesVsVikings.h"
+#include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 
 void APVVGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -59,6 +60,13 @@ int32 APVVGameState::CountPlayers(EPVVFaction Faction) const
 void APVVGameState::Multicast_Announce_Implementation(const FText& Message)
 {
 	UE_LOG(LogPVV, Log, TEXT("%s"), *Message.ToString());
+	RecentMessages.Add(Message.ToString());
+	RecentMessageTimes.Add(GetWorld()->GetTimeSeconds());
+	if (RecentMessages.Num() > 6)
+	{
+		RecentMessages.RemoveAt(0);
+		RecentMessageTimes.RemoveAt(0);
+	}
 	OnAnnouncement(Message);
 }
 

@@ -41,7 +41,19 @@ defaults are only created when no mapping context is assigned.
 
 ---
 
-## Getting it running
+## Quick start (no setup)
+
+1. Open the project. Any level works, even an empty one.
+2. Next to the green **Play** button, click the **⋮** menu and set **Number of Players = 2** (or more)
+   and **Net Mode = Play As Listen Server**.
+3. Press **Play**. With no `PVV Lake` in the level, the game builds a greybox **test arena** high above
+   the level: a lake, two shores, the Learning Center, the Viking Processing Facility with its cell,
+   docks, boats and lighting. On-screen text tells each player their team, goal and controls.
+
+When you build a real map, place a `PVV Lake`. The arena then stops spawning (you can also turn it
+off with `bBuildTestArenaIfNoLake` on the GameMode).
+
+## Getting it running (full setup)
 
 ### 1. Build
 1. Install **Visual Studio 2022** with the *Game development with C++* workload. On Mac, use Xcode.

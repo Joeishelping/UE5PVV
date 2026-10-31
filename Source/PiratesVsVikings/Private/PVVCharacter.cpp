@@ -3,6 +3,7 @@
 #include "PVVDetentionZone.h"
 #include "PVVGameMode.h"
 #include "PVVInputUtils.h"
+#include "PVVLake.h"
 #include "PVVPlayerState.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -20,6 +21,8 @@
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
+#include "EngineUtils.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -102,6 +105,7 @@ void APVVCharacter::BeginPlay()
 
 	MeshRelativeTransform = GetMesh()->GetRelativeTransform();
 	PlaceholderBody->SetHiddenInGame(GetMesh()->GetSkeletalMeshAsset() != nullptr);
+	PlaceholderMID = PlaceholderBody->CreateDynamicMaterialInstance(0);
 
 	if (HasAuthority())
 	{
@@ -249,6 +253,7 @@ void APVVCharacter::Tick(float DeltaSeconds)
 		TickHold(DeltaSeconds);
 	}
 
+	UpdateWading();
 	if (IsLocallyControlled())
 	{
 		UpdateFocus();
@@ -834,6 +839,10 @@ void APVVCharacter::UpdateMovementSpeed()
 		Speed *= CarrySpeedMultiplier;
 		Swim *= CarrySpeedMultiplier;
 	}
+	if (bIsWading)
+	{
+		Speed *= WadeSpeedMultiplier;
+	}
 	Move->MaxWalkSpeed = Speed;
 	Move->MaxSwimSpeed = Swim;
 }
@@ -880,6 +889,12 @@ void APVVCharacter::UpdateStatusLabel()
 	}
 	StatusLabel->SetText(FText::FromString(Label));
 	StatusLabel->SetTextRenderColor(PVV::FactionColor(Faction).ToFColor(true));
+
+	if (PlaceholderMID)
+	{
+		const float Shade = Condition == EPVVCondition::Normal ? 1.f : 0.4f;
+		PlaceholderMID->SetVectorParameterValue(TEXT("Color"), PVV::FactionColor(Faction) * Shade);
+	}
 }
 
 // -------------------------------------------------------------------------------------------
@@ -982,6 +997,29 @@ void APVVCharacter::Server_InteractStart_Implementation()
 void APVVCharacter::Server_InteractStop_Implementation()
 {
 	CancelHold();
+}
+
+void APVVCharacter::UpdateWading()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!CachedLake.IsValid() && Now >= NextLakeSearchTime)
+	{
+		NextLakeSearchTime = Now + 1.f;
+		for (TActorIterator<APVVLake> It(GetWorld()); It; ++It)
+		{
+			CachedLake = *It;
+			break;
+		}
+	}
+
+	const float FeetZ = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const bool bWadingNow = CachedLake.IsValid() && !CarriedBy && !CurrentBoat
+		&& FeetZ < CachedLake->GetWaterSurfaceZ() - 15.f;
+	if (bWadingNow != bIsWading)
+	{
+		bIsWading = bWadingNow;
+		UpdateMovementSpeed();
+	}
 }
 
 void APVVCharacter::TickHold(float DeltaSeconds)

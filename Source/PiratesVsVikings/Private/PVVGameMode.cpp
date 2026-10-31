@@ -2,6 +2,9 @@
 #include "PVVBoat.h"
 #include "PVVCharacter.h"
 #include "PVVGameState.h"
+#include "PVVHUD.h"
+#include "PVVLake.h"
+#include "PVVTestArena.h"
 #include "PVVPlayerController.h"
 #include "PVVPlayerStart.h"
 #include "PVVPlayerState.h"
@@ -17,6 +20,8 @@ APVVGameMode::APVVGameMode()
 	PlayerControllerClass = APVVPlayerController::StaticClass();
 	PlayerStateClass = APVVPlayerState::StaticClass();
 	GameStateClass = APVVGameState::StaticClass();
+	HUDClass = APVVHUD::StaticClass();
+	TestArenaBoatClass = APVVBoat::StaticClass();
 }
 
 void APVVGameMode::BeginPlay()
@@ -29,6 +34,45 @@ void APVVGameMode::BeginPlay()
 		GS->SetMatchPhase(EPVVMatchPhase::InProgress, EPVVFaction::None);
 	}
 	GetWorldTimerManager().SetTimer(MatchClockTimer, this, &APVVGameMode::TickMatchClock, 1.f, true);
+
+	if (bBuildTestArenaIfNoLake && !TActorIterator<APVVLake>(GetWorld()))
+	{
+		BuildTestArena();
+	}
+}
+
+void APVVGameMode::BuildTestArena()
+{
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	APVVTestArena* Arena = GetWorld()->SpawnActor<APVVTestArena>(APVVTestArena::StaticClass(), FTransform(TestArenaLocation), Params);
+	if (!Arena)
+	{
+		return;
+	}
+	Arena->SpawnGameplayActors(TestArenaBoatClass, TestArenaBoatsPerSide);
+
+	// Anyone who joined before the arena existed gets moved (or spawned) at their team's base.
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (!PC)
+		{
+			continue;
+		}
+		if (APVVCharacter* Character = Cast<APVVCharacter>(PC->GetPawn()))
+		{
+			RespawnCharacter(Character);
+		}
+		else if (!PC->GetPawn())
+		{
+			const APVVPlayerState* PS = PC->GetPlayerState<APVVPlayerState>();
+			if (PS && PS->GetFaction() != EPVVFaction::None)
+			{
+				RestartPlayer(PC);
+			}
+		}
+	}
 }
 
 void APVVGameMode::HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer)

@@ -6,6 +6,7 @@
 #include "PVVBoat.generated.h"
 
 class APVVCharacter;
+class APVVLake;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -177,6 +178,7 @@ private:
 	UPROPERTY(Replicated)
 	float SteerInput = 0.f;
 
+	TWeakObjectPtr<APVVLake> Lake;
 	float SentThrottle = 0.f;
 	float SentSteer = 0.f;
 	float FlippedTime = 0.f;

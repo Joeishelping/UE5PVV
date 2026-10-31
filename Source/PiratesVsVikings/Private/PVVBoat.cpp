@@ -14,6 +14,7 @@
 #include "InputAction.h"
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/StaticMesh.h"
@@ -99,10 +100,13 @@ void APVVBoat::BeginPlay()
 	Hull->SetMassOverrideInKg(NAME_None, MassKg, true);
 	SpawnTransform = GetActorTransform();
 
-	for (TActorIterator<APVVLake> It(GetWorld()); It; ++It)
+	// Paint the placeholder cube like a wooden skiff.
+	if (Hull->GetStaticMesh() && Hull->GetStaticMesh()->GetPathName().StartsWith(TEXT("/Engine/BasicShapes")))
 	{
-		WaterSurfaceZ = It->GetWaterSurfaceZ();
-		break;
+		if (UMaterialInstanceDynamic* MID = Hull->CreateDynamicMaterialInstance(0))
+		{
+			MID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.35f, 0.18f, 0.07f));
+		}
 	}
 
 	if (HasAuthority())
@@ -142,6 +146,16 @@ void APVVBoat::ApplyWaterForces(float DeltaSeconds)
 		return;
 	}
 
+	if (!Lake.IsValid())
+	{
+		for (TActorIterator<APVVLake> It(GetWorld()); It; ++It)
+		{
+			Lake = *It;
+			break;
+		}
+	}
+	const float WaterZ = Lake.IsValid() ? Lake->GetWaterSurfaceZ() : WaterSurfaceZ;
+
 	const FVector Origin = Hull->GetComponentLocation();
 	const FQuat Rotation = Hull->GetComponentQuat();
 	const float Mass = Hull->GetMass();
@@ -153,7 +167,7 @@ void APVVBoat::ApplyWaterForces(float DeltaSeconds)
 	for (const FVector& Offset : PontoonOffsets)
 	{
 		const FVector Point = Origin + Rotation.RotateVector(Offset);
-		const float Depth = WaterSurfaceZ - Point.Z;
+		const float Depth = WaterZ - Point.Z;
 		if (Depth <= 0.f)
 		{
 			continue;

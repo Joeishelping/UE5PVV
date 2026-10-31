@@ -5,6 +5,7 @@
 #include "PVVTypes.h"
 #include "PVVGameMode.generated.h"
 
+class APVVBoat;
 class APVVCharacter;
 class APVVGameState;
 
@@ -71,6 +72,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "PVV|Rules")
 	float RestartDelaySeconds = 15.f;
 
+	/** Build the greybox test arena when the level has no PVV Lake (so an empty level is playable). */
+	UPROPERTY(EditDefaultsOnly, Category = "PVV|Test Arena")
+	bool bBuildTestArenaIfNoLake = true;
+
+	/** Built high above the level origin so it never collides with whatever the level already has. */
+	UPROPERTY(EditDefaultsOnly, Category = "PVV|Test Arena")
+	FVector TestArenaLocation = FVector(0.f, 0.f, 10000.f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "PVV|Test Arena")
+	TSubclassOf<APVVBoat> TestArenaBoatClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "PVV|Test Arena")
+	int32 TestArenaBoatsPerSide = 3;
+
 	UPROPERTY(EditDefaultsOnly, Category = "PVV|Scoring")
 	int32 PointsPerCapture = 1;
 
@@ -91,6 +106,7 @@ protected:
 
 private:
 	void TickMatchClock();
+	void BuildTestArena();
 	void RestartMatch();
 
 	FTimerHandle MatchClockTimer;

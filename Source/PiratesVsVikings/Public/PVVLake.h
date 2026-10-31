@@ -25,6 +25,9 @@ public:
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PVV|Water")
+	TObjectPtr<USceneComponent> Root;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PVV|Water")
 	TObjectPtr<UStaticMeshComponent> Surface;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PVV|Water")

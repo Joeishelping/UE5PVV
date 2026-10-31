@@ -8,6 +8,8 @@
 
 class APVVBoat;
 class APVVDetentionZone;
+class APVVLake;
+class UMaterialInstanceDynamic;
 class APVVPlayerState;
 class UCameraComponent;
 class UInputAction;
@@ -70,6 +72,11 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "PVV")
 	float GetBalanceFraction() const { return MaxBalance > 0.f ? Balance / MaxBalance : 0.f; }
+
+	const FText& GetFocusPrompt() const { return FocusPrompt; }
+	float GetHoldProgress() const { return HoldProgress; }
+	float GetStruggleProgress() const { return StruggleProgress; }
+	bool IsWading() const { return bIsWading; }
 
 	APVVDetentionZone* GetDetentionZone() const { return DetentionZone; }
 	bool IsPlayerCharacter() const { return bIsPlayerCharacter; }
@@ -158,6 +165,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "PVV|Movement")
 	float SwimSpeed = 400.f;
+
+	/** Speed multiplier while wading through the lake. */
+	UPROPERTY(EditDefaultsOnly, Category = "PVV|Movement")
+	float WadeSpeedMultiplier = 0.45f;
 
 	/** Zip-tied shuffle. */
 	UPROPERTY(EditDefaultsOnly, Category = "PVV|Movement")
@@ -297,7 +308,13 @@ private:
 	UPROPERTY()
 	TObjectPtr<AActor> HoldTarget;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PlaceholderMID;
+
 	TWeakObjectPtr<APVVPlayerState> CachedPlayerState;
+	TWeakObjectPtr<APVVLake> CachedLake;
+	float NextLakeSearchTime = 0.f;
+	bool bIsWading = false;
 	bool bIsPlayerCharacter = false;
 	bool bRagdollActive = false;
 	FTransform MeshRelativeTransform;
@@ -319,6 +336,7 @@ private:
 	void UpdateMovementSpeed();
 	void SetRagdoll(bool bEnable);
 	void UpdateStatusLabel();
+	void UpdateWading();
 	void EnsureDefaultInput();
 
 	AActor* FindBestInteractable();
