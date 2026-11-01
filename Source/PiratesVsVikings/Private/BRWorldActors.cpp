@@ -50,6 +50,7 @@ namespace
 ABRGreyboxActor::ABRGreyboxActor()
 {
 	bReplicates = true;
+	bAlwaysRelevant = true;
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
 

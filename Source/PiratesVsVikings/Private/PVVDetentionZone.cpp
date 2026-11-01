@@ -10,6 +10,7 @@
 APVVDetentionZone::APVVDetentionZone()
 {
 	bReplicates = true;
+	bAlwaysRelevant = true;
 
 	DepositArea = CreateDefaultSubobject<UBoxComponent>(TEXT("DepositArea"));
 	SetRootComponent(DepositArea);

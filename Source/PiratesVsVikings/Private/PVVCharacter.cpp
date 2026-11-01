@@ -35,6 +35,7 @@
 APVVCharacter::APVVCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	SetNetCullDistanceSquared(FMath::Square(50000.f));
 
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.f);
 

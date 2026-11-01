@@ -26,6 +26,7 @@ ABRDrone::ABRDrone()
 	bReplicates = true;
 	SetReplicateMovement(true);
 	SetNetUpdateFrequency(60.f);
+	SetNetCullDistanceSquared(FMath::Square(50000.f));
 	AutoPossessAI = EAutoPossessAI::Disabled;
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationPitch = false;

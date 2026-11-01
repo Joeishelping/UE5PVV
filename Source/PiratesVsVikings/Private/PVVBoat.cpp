@@ -28,6 +28,7 @@ APVVBoat::APVVBoat()
 	bReplicates = true;
 	SetReplicateMovement(true);
 	SetNetUpdateFrequency(60.f);
+	SetNetCullDistanceSquared(FMath::Square(50000.f));
 	AutoPossessAI = EAutoPossessAI::Disabled;
 	AIControllerClass = nullptr;
 	bUseControllerRotationPitch = false;
