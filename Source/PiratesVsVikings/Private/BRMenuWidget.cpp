@@ -49,7 +49,7 @@ UTextBlock* UBRMenuWidget::MakeText(const FString& Text, int32 Size, const FLine
 	return Block;
 }
 
-UButton* UBRMenuWidget::MakeButton(const FString& Label, const FLinearColor& Color, UTextBlock** OutLabel)
+UButton* UBRMenuWidget::MakeButton(const FString& Label, const FLinearColor& Color, TObjectPtr<UTextBlock>* OutLabel)
 {
 	UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
 	Button->SetBackgroundColor(Color);
@@ -62,11 +62,11 @@ UButton* UBRMenuWidget::MakeButton(const FString& Label, const FLinearColor& Col
 	return Button;
 }
 
-void UBRMenuWidget::AddRow(UVerticalBox* Box, UWidget* Widget, float Padding)
+void UBRMenuWidget::AddRow(UVerticalBox* Box, UWidget* Widget, float RowPadding)
 {
 	if (UVerticalBoxSlot* ChildSlot = Box->AddChildToVerticalBox(Widget))
 	{
-		ChildSlot->SetPadding(FMargin(Padding));
+		ChildSlot->SetPadding(FMargin(RowPadding));
 		ChildSlot->SetHorizontalAlignment(HAlign_Fill);
 	}
 }

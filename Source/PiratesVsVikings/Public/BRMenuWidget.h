@@ -31,8 +31,8 @@ private:
 
 	void BuildLayout();
 	UTextBlock* MakeText(const FString& Text, int32 Size, const FLinearColor& Color);
-	UButton* MakeButton(const FString& Label, const FLinearColor& Color, UTextBlock** OutLabel = nullptr);
-	void AddRow(UVerticalBox* Box, UWidget* Widget, float Padding = 6.f);
+	UButton* MakeButton(const FString& Label, const FLinearColor& Color, TObjectPtr<UTextBlock>* OutLabel = nullptr);
+	void AddRow(UVerticalBox* Box, UWidget* Widget, float RowPadding = 6.f);
 	class ABRPlayerController* GetBRController() const;
 	class UBRGameInstance* GetBRGameInstance() const;
 	void ChooseTeam(bool bRunner);
