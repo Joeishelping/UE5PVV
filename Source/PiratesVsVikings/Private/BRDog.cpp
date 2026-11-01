@@ -35,11 +35,11 @@ ABRDog::ABRDog()
 	Visual = CreateDefaultSubobject<USceneComponent>(TEXT("Visual"));
 	Visual->SetupAttachment(GetCapsuleComponent());
 	Visual->SetRelativeLocation(FVector(0.f, 0.f, -40.f));
-	auto Part = [this](const TCHAR* Name, UStaticMesh* Mesh, const FVector& At, const FVector& Size, const FRotator& Rot = FRotator::ZeroRotator)
+	auto Part = [this](const TCHAR* Name, UStaticMesh* PartMesh, const FVector& At, const FVector& Size, const FRotator& Rot = FRotator::ZeroRotator)
 	{
 		UStaticMeshComponent* C = CreateDefaultSubobject<UStaticMeshComponent>(Name);
 		C->SetupAttachment(Visual);
-		C->SetStaticMesh(Mesh);
+		C->SetStaticMesh(PartMesh);
 		C->SetRelativeLocationAndRotation(At, Rot);
 		C->SetRelativeScale3D(Size / 100.f);
 		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -62,13 +62,13 @@ void ABRDog::BeginPlay()
 	Home = GetActorLocation();
 	PickPatrolPoint();
 
-	TArray<UStaticMeshComponent*> Meshes;
-	GetComponents<UStaticMeshComponent>(Meshes);
-	for (UStaticMeshComponent* Mesh : Meshes)
+	TArray<UStaticMeshComponent*> Parts;
+	GetComponents<UStaticMeshComponent>(Parts);
+	for (UStaticMeshComponent* PartComp : Parts)
 	{
-		if (UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(0))
+		if (UMaterialInstanceDynamic* MID = PartComp->CreateDynamicMaterialInstance(0))
 		{
-			MID->SetVectorParameterValue(TEXT("Color"), Mesh->GetName().StartsWith(TEXT("Snout")) ? FLinearColor(0.05f, 0.04f, 0.03f) : FLinearColor(0.35f, 0.22f, 0.1f));
+			MID->SetVectorParameterValue(TEXT("Color"), PartComp->GetName().StartsWith(TEXT("Snout")) ? FLinearColor(0.05f, 0.04f, 0.03f) : FLinearColor(0.35f, 0.22f, 0.1f));
 		}
 	}
 }
