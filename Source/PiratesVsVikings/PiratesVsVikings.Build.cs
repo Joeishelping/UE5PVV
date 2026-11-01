@@ -16,7 +16,10 @@ public class PiratesVsVikings : ModuleRules
 			"AIModule",
 			"AssetRegistry",
 			"OnlineSubsystem",
-			"OnlineSubsystemUtils"
+			"OnlineSubsystemUtils",
+			"UMG",
+			"Slate",
+			"SlateCore"
 		});
 	}
 }

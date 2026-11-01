@@ -13,6 +13,10 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Components/TextRenderComponent.h"
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
@@ -50,6 +54,26 @@ ABRCharacter::ABRCharacter()
 	OutfitBottom = MakeOutfit(TEXT("OutfitBottom"));
 	OutfitHead = MakeOutfit(TEXT("OutfitHead"));
 	OutfitFace = MakeOutfit(TEXT("OutfitFace"));
+
+	// Greybox gun (pointing along +X, grip down). Restyled per weapon at runtime.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	WeaponRoot = CreateDefaultSubobject<USceneComponent>(TEXT("WeaponRoot"));
+	WeaponRoot->SetupAttachment(GetCapsuleComponent());
+	auto GunPart = [this](const TCHAR* Name, UStaticMesh* PartMesh)
+	{
+		UStaticMeshComponent* C = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		C->SetupAttachment(WeaponRoot);
+		C->SetStaticMesh(PartMesh);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		C->SetCastShadow(false);
+		return C;
+	};
+	GunBody = GunPart(TEXT("GunBody"), Cube.Object);
+	GunBarrel = GunPart(TEXT("GunBarrel"), Cylinder.Object);
+	GunGrip = GunPart(TEXT("GunGrip"), Cube.Object);
+	GunExtra = GunPart(TEXT("GunExtra"), Cylinder.Object);
+	WeaponRoot->SetVisibility(false, true);
 }
 
 void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -510,7 +534,7 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 	APVVCharacter* Victim = bHit ? Cast<APVVCharacter>(Hit.GetActor()) : nullptr;
 	const bool bHostileHit = Victim && PVV::IsHostile(GetFaction(), Victim->GetFaction());
 
-	const FVector Muzzle = GetActorLocation() + GetActorForwardVector() * 45.f + GetActorRightVector() * 18.f + FVector(0.f, 0.f, 45.f);
+	const FVector Muzzle = GetMuzzleLocation();
 	Multicast_Shot(Muzzle, bHit ? FVector(Hit.ImpactPoint) : End, bLethal || bRunnerGun, bHostileHit);
 	if (bLethal || bRunnerGun)
 	{
@@ -865,7 +889,107 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		}
 	}
 
+	UpdateGunVisual();
 	UpdateLocalVisibility();
+}
+
+FVector ABRCharacter::GetMuzzleLocation() const
+{
+	if (WeaponRoot && WeaponRoot->IsVisible())
+	{
+		return WeaponRoot->GetComponentTransform().TransformPosition(FVector(26.f, 0.f, 5.f));
+	}
+	return GetActorLocation() + GetActorForwardVector() * 45.f + GetActorRightVector() * 18.f + FVector(0.f, 0.f, 45.f);
+}
+
+void ABRCharacter::UpdateGunVisual()
+{
+	// Which gun?
+	int32 Style = 0;
+	if (HasWeapon())
+	{
+		Style = IsRunner() ? 3 : (bLethalMode ? 2 : 1);
+	}
+	if (Style != GunStyle)
+	{
+		GunStyle = Style;
+		WeaponRoot->SetVisibility(Style != 0, true);
+		UStaticMesh* Custom = Style == 1 ? CustomTaserMesh.Get() : (Style == 2 ? CustomPistolMesh.Get() : (Style == 3 ? CustomRevolverMesh.Get() : nullptr));
+		auto Shape = [](UStaticMeshComponent* Part, const FVector& At, const FVector& SizeCm, const FRotator& Rot, const FLinearColor& Color, bool bShow)
+		{
+			Part->SetVisibility(bShow);
+			Part->SetRelativeLocationAndRotation(At, Rot);
+			Part->SetRelativeScale3D(SizeCm / 100.f);
+			if (UMaterialInstanceDynamic* MID = Part->CreateDynamicMaterialInstance(0))
+			{
+				MID->SetVectorParameterValue(TEXT("Color"), Color);
+			}
+		};
+		const FRotator AlongX(90.f, 0.f, 0.f);
+		const FLinearColor Black(0.03f, 0.03f, 0.03f), Steel(0.55f, 0.55f, 0.58f), Wood(0.35f, 0.18f, 0.07f), Yellow(0.95f, 0.75f, 0.05f);
+		if (Custom)
+		{
+			GunBody->SetStaticMesh(Custom);
+			GunBody->SetVisibility(Style != 0);
+			GunBody->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+			GunBody->SetRelativeScale3D(FVector::OneVector);
+			GunBarrel->SetVisibility(false);
+			GunGrip->SetVisibility(false);
+			GunExtra->SetVisibility(false);
+		}
+		else if (Style == 1) // taser: chunky yellow
+		{
+			Shape(GunBody, FVector(6.f, 0.f, 4.f), FVector(20.f, 4.5f, 7.f), FRotator::ZeroRotator, Yellow, true);
+			Shape(GunBarrel, FVector(17.f, 0.f, 4.f), FVector(5.f, 5.f, 3.f), AlongX, Black, true);
+			Shape(GunGrip, FVector(-1.f, 0.f, -3.f), FVector(4.5f, 3.8f, 10.f), FRotator(-15.f, 0.f, 0.f), Black, true);
+			Shape(GunExtra, FVector(6.f, 0.f, 8.f), FVector(2.f, 2.f, 1.f), FRotator::ZeroRotator, Yellow, false);
+		}
+		else if (Style == 2) // service pistol: black slide
+		{
+			Shape(GunBody, FVector(7.f, 0.f, 4.f), FVector(20.f, 3.5f, 5.f), FRotator::ZeroRotator, Black, true);
+			Shape(GunBarrel, FVector(17.5f, 0.f, 4.5f), FVector(1.6f, 1.6f, 2.f), AlongX, Steel, true);
+			Shape(GunGrip, FVector(-1.f, 0.f, -3.5f), FVector(4.f, 3.3f, 10.f), FRotator(-15.f, 0.f, 0.f), Black, true);
+			Shape(GunExtra, FVector(5.f, 0.f, -1.f), FVector(4.f, 4.f, 0.8f), FRotator(0.f, 0.f, 90.f), Black, true);
+		}
+		else if (Style == 3) // black-market revolver
+		{
+			Shape(GunBody, FVector(2.f, 0.f, 4.f), FVector(10.f, 3.f, 5.f), FRotator::ZeroRotator, Steel, true);
+			Shape(GunBarrel, FVector(14.f, 0.f, 5.f), FVector(2.f, 2.f, 18.f), AlongX, Steel, true);
+			Shape(GunGrip, FVector(-4.f, 0.f, -3.f), FVector(4.5f, 3.5f, 10.f), FRotator(-20.f, 0.f, 0.f), Wood, true);
+			Shape(GunExtra, FVector(3.f, 0.f, 4.f), FVector(6.f, 6.f, 6.f), AlongX, FLinearColor(0.3f, 0.3f, 0.32f), true);
+		}
+	}
+	if (GunStyle == 0)
+	{
+		return;
+	}
+
+	// Where is it? In the hand normally; raised in front of you (pointing where you aim) while aiming.
+	const int32 Placement = bAiming ? 1 : 0;
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	const bool bHasHand = MeshComp && MeshComp->GetSkeletalMeshAsset() && MeshComp->DoesSocketExist(HandSocket);
+	if (Placement != GunPlacement)
+	{
+		GunPlacement = Placement;
+		if (Placement == 0 && bHasHand)
+		{
+			WeaponRoot->AttachToComponent(MeshComp, FAttachmentTransformRules::SnapToTargetNotIncludingScale, HandSocket);
+			WeaponRoot->SetRelativeTransform(HandGripOffset);
+		}
+		else
+		{
+			WeaponRoot->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			if (Placement == 0)
+			{
+				WeaponRoot->SetRelativeLocationAndRotation(FVector(22.f, 38.f, -5.f), FRotator(-60.f, 0.f, 0.f)); // held low at your side
+			}
+		}
+	}
+	if (Placement == 1)
+	{
+		const float Pitch = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch);
+		WeaponRoot->SetRelativeLocationAndRotation(AimGunOffset, FRotator(FMath::Clamp(Pitch, -70.f, 70.f), 0.f, 0.f));
+	}
 }
 
 void ABRCharacter::UpdateLocalVisibility()

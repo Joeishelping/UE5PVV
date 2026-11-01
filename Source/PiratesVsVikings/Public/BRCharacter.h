@@ -80,6 +80,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Outfit") TObjectPtr<USkeletalMeshComponent> OutfitHead;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Outfit") TObjectPtr<USkeletalMeshComponent> OutfitFace;
 
+	/** The gun in your hand (greybox parts; set CustomGunMesh to use a real model instead). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Weapons") TObjectPtr<USceneComponent> WeaponRoot;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Weapons") TObjectPtr<UStaticMeshComponent> GunBody;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Weapons") TObjectPtr<UStaticMeshComponent> GunBarrel;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Weapons") TObjectPtr<UStaticMeshComponent> GunGrip;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Weapons") TObjectPtr<UStaticMeshComponent> GunExtra;
+
 	// --- Input (built at runtime unless assigned) -------------------------------------
 
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> AimAction;
@@ -110,6 +117,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") TObjectPtr<USoundBase> GunSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") TObjectPtr<USoundBase> TaserSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") TObjectPtr<USoundBase> ReloadSound;
+	/** Optional real gun models (e.g. from Fab). Leave empty for the built-in greybox guns. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") TObjectPtr<UStaticMesh> CustomPistolMesh;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") TObjectPtr<UStaticMesh> CustomTaserMesh;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") TObjectPtr<UStaticMesh> CustomRevolverMesh;
+	/** Hand bone the gun attaches to, and the offset/rotation that makes it sit right in your model's hand. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") FName HandSocket = TEXT("hand_r");
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") FTransform HandGripOffset;
+	/** Where the gun floats while aiming (relative to the character, cartoon style). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") FVector AimGunOffset = FVector(55.f, 24.f, 48.f);
 
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Drone") float DroneCooldown = 20.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Wardens") int32 MaxTeamTraps = 8;
@@ -149,6 +165,8 @@ private:
 	bool bInDeepWater = false;
 	bool bSlowApplied = false;
 	bool bWobbleOn = false;
+	int32 GunStyle = -1;   // 0 none, 1 taser, 2 pistol, 3 revolver
+	int32 GunPlacement = -1; // 0 hand, 1 aiming
 	FTimerHandle ReloadTimer;
 
 	ABRDesertArena* FindArena();
@@ -161,6 +179,8 @@ private:
 	float ReloadSeconds() const;
 	void FinishReload();
 	void Drown();
+	void UpdateGunVisual();
+	FVector GetMuzzleLocation() const;
 
 	UFUNCTION() void OnRep_Aiming();
 	UFUNCTION() void OnRep_Slow();
