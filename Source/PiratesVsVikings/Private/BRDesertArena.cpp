@@ -1,9 +1,12 @@
 #include "BRDesertArena.h"
+#include "BRAudio.h"
 #include "BRCar.h"
+#include "BRDog.h"
 #include "BRGameState.h"
 #include "BRWorldActors.h"
 #include "PVVDetentionZone.h"
 #include "PVVPlayerStart.h"
+#include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -16,6 +19,8 @@
 #include "Engine/SkyLight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "Sound/SoundBase.h"
 #include "EngineUtils.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -43,7 +48,7 @@ ABRDesertArena::ABRDesertArena()
 	RiverBed = CreateDefaultSubobject<UBoxComponent>(TEXT("RiverBed"));
 	RiverBed->SetupAttachment(Root);
 	RiverBed->SetBoxExtent(FVector(RiverHalfWidth + 100.f, HalfY, 10.f));
-	RiverBed->SetRelativeLocation(FVector(0.f, 0.f, -130.f));
+	RiverBed->SetRelativeLocation(FVector(0.f, 0.f, RiverBedZ - 10.f));
 	RiverBed->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	RiverBed->SetCollisionObjectType(ECC_WorldStatic);
 	RiverBed->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -55,8 +60,15 @@ ABRDesertArena::ABRDesertArena()
 	const float FloorLen = HalfX - BankX;
 	AddBlock(TEXT("Sand_West"), FVector(-(BankX + FloorLen * 0.5f), 0.f, Ground - 200.f), FVector(FloorLen, HalfY * 2.f, 400.f), Sand);
 	AddBlock(TEXT("Sand_East"), FVector(BankX + FloorLen * 0.5f, 0.f, Ground - 200.f), FVector(FloorLen, HalfY * 2.f, 400.f), Sand);
-	AddBlock(TEXT("Sand_WestBank"), FVector(-1913.f, 0.f, -58.f), FVector(830.f, HalfY * 2.f, 100.f), Sand, FRotator(-15.4f, 0.f, 0.f));
-	AddBlock(TEXT("Sand_EastBank"), FVector(1913.f, 0.f, -58.f), FVector(830.f, HalfY * 2.f, 100.f), Sand, FRotator(15.4f, 0.f, 0.f));
+	// Banks: from the desert floor (+100) down to the river bed (-150) over 8 m.
+	AddBlock(TEXT("Sand_WestBank"), FVector(-1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), Sand, FRotator(-17.4f, 0.f, 0.f));
+	AddBlock(TEXT("Sand_EastBank"), FVector(1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), Sand, FRotator(17.4f, 0.f, 0.f));
+
+	// The road: town -> bridge -> checkpoint -> far side.
+	AddBlock(TEXT("Road_Strip"), FVector(0.f, RoadY, Ground + 2.f), FVector(HalfX * 2.f, 700.f, 4.f), FLinearColor(0.12f, 0.12f, 0.13f), FRotator::ZeroRotator, false);
+	AddBlock(TEXT("Bridge_Deck"), FVector(0.f, RoadY, Ground - 50.f), FVector(BankX * 2.f + 200.f, 800.f, 100.f), FLinearColor(0.4f, 0.4f, 0.42f));
+	AddBlock(TEXT("Bridge_RailN"), FVector(0.f, RoadY + 410.f, Ground + 50.f), FVector(BankX * 2.f, 20.f, 100.f), FLinearColor(0.3f, 0.3f, 0.32f));
+	AddBlock(TEXT("Bridge_RailS"), FVector(0.f, RoadY - 410.f, Ground + 50.f), FVector(BankX * 2.f, 20.f, 100.f), FLinearColor(0.3f, 0.3f, 0.32f));
 
 	// Map edges.
 	AddBlock(TEXT("Edge_N"), FVector(0.f, HalfY + 100.f, 300.f), FVector(HalfX * 2.f + 400.f, 200.f, 1000.f), Adobe);
@@ -113,6 +125,13 @@ ABRDesertArena::ABRDesertArena()
 	Atmosphere->SetupAttachment(Root);
 	Fog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("Fog"));
 	Fog->SetupAttachment(Root);
+
+	// Background music: every song in Content/Music/Ambient, played on each player's machine.
+	AmbientMusic = CreateDefaultSubobject<UAudioComponent>(TEXT("AmbientMusic"));
+	AmbientMusic->SetupAttachment(Root);
+	AmbientMusic->bAutoActivate = false;
+	AmbientMusic->bAllowSpatialization = false;
+	AmbientMusic->bIsUISound = true;
 }
 
 UStaticMeshComponent* ABRDesertArena::AddBlock(const TCHAR* Name, const FVector& Center, const FVector& SizeCm, const FLinearColor& Color, const FRotator& Rotation, bool bCollide)
@@ -199,6 +218,28 @@ void ABRDesertArena::BeginPlay()
 		Fog->DestroyComponent();
 		Fog = nullptr;
 	}
+
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		TArray<USoundBase*> Tracks;
+		BRAudio::LoadSounds(TEXT("/Game/Music/Ambient"), Tracks);
+		AmbientTracks.Reset();
+		for (USoundBase* Track : Tracks) { AmbientTracks.Add(Track); }
+		AmbientMusic->OnAudioFinished.AddDynamic(this, &ABRDesertArena::PlayNextAmbient);
+		PlayNextAmbient();
+	}
+}
+
+void ABRDesertArena::PlayNextAmbient()
+{
+	if (AmbientTracks.Num() == 0)
+	{
+		return;
+	}
+	AmbientIndex = (AmbientIndex + 1 + (AmbientTracks.Num() > 1 ? FMath::RandRange(0, AmbientTracks.Num() - 2) : 0)) % AmbientTracks.Num();
+	AmbientMusic->SetSound(AmbientTracks[AmbientIndex]);
+	AmbientMusic->SetVolumeMultiplier(AmbientVolume);
+	AmbientMusic->Play();
 }
 
 void ABRDesertArena::Tick(float DeltaSeconds)
@@ -219,6 +260,18 @@ void ABRDesertArena::Tick(float DeltaSeconds)
 	else
 	{
 		DisplayedTime = FMath::FInterpTo(DisplayedTime, GS->TimeOfDay, DeltaSeconds, 2.f);
+	}
+
+	if (AmbientMusic && AmbientMusic->IsPlaying())
+	{
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		const ABRCar* Car = PC ? Cast<ABRCar>(PC->GetPawn()) : nullptr;
+		float Target = AmbientVolume;
+		if (Car && Car->IsRadioOn())
+		{
+			Target *= 0.15f; // radio takes over
+		}
+		AmbientMusic->SetVolumeMultiplier(FMath::FInterpTo(AmbientMusic->VolumeMultiplier, Target, DeltaSeconds, 2.f));
 	}
 
 	const float WeatherDim = GS->Weather == EBRWeather::Clear ? 1.f : (GS->Weather == EBRWeather::Rain ? 0.4f : 0.5f);
@@ -244,6 +297,44 @@ bool ABRDesertArena::IsInRiver(const FVector& WorldLocation) const
 {
 	const FVector Local = WorldLocation - GetActorLocation();
 	return FMath::Abs(Local.X) < RiverHalfWidth && FMath::Abs(Local.Y) < HalfY && Local.Z < 15.f;
+}
+
+bool ABRDesertArena::IsDeepWater(const FVector& WorldLocation) const
+{
+	const FVector Local = WorldLocation - GetActorLocation();
+	const bool bOnBridge = FMath::Abs(Local.Y - RoadY) < 420.f && Local.Z > Ground - 60.f;
+	return !bOnBridge && FMath::Abs(Local.X) < DeepHalfWidth && FMath::Abs(Local.Y) < HalfY && Local.Z < 15.f;
+}
+
+void ABRDesertArena::GetNPCRoute(TArray<FVector>& OutRoute, int32& OutCheckpointIndex) const
+{
+	const FVector O = GetActorLocation();
+	const float Z = Ground + 90.f;
+	OutRoute = {
+		O + FVector(-6000.f, RoadY, Z),
+		O + FVector(0.f, RoadY, Z),
+		O + FVector(WallX - 700.f, RoadY, Z),	// wait here for the checkpoint
+		O + FVector(WallX + 900.f, RoadY, Z),
+		O + FVector(11000.f, RoadY, Z),
+		O + FVector(HalfX - 600.f, RoadY, Z)
+	};
+	OutCheckpointIndex = 2;
+}
+
+FTransform ABRDesertArena::GetNPCSpawn() const
+{
+	return FTransform(FRotator::ZeroRotator, GetActorLocation() + FVector(-HalfX + 900.f, RoadY, Ground + 90.f));
+}
+
+void ABRDesertArena::GetDogHomes(TArray<FVector>& OutHomes) const
+{
+	const FVector O = GetActorLocation();
+	OutHomes = {
+		O + FVector(2700.f, -5000.f, Ground + 60.f),
+		O + FVector(2700.f, 4000.f, Ground + 60.f),
+		O + FVector(5500.f, -1200.f, Ground + 60.f),
+		O + FVector(-2600.f, 1500.f, Ground + 60.f)
+	};
 }
 
 FVector ABRDesertArena::GetCatapultLanding() const
@@ -300,9 +391,33 @@ void ABRDesertArena::SpawnGameplayActors()
 	World->SpawnActor<ABRLineBarrier>(ABRLineBarrier::StaticClass(), At(LineX, 0.f, Ground), Params);
 	for (float Y = -HalfY + 600.f; Y <= HalfY - 600.f; Y += 400.f)	// gaps at both far ends (risky routes)
 	{
+		if (FMath::Abs(Y - RoadY) < 500.f)
+		{
+			continue; // the road goes through
+		}
 		World->SpawnActor<ABRSpikeFence>(ABRSpikeFence::StaticClass(), At(FenceX, Y, Ground), Params);
 	}
 	World->SpawnActor<ABRWall>(ABRWall::StaticClass(), At(WallX, 0.f, Ground), Params);
+	Gate = World->SpawnActor<ABRCheckpointGate>(ABRCheckpointGate::StaticClass(), At(WallX, RoadY, Ground), Params);
+
+	// --- Cockfight pit + betting counters
+	if (ABRCockfightPit* Pit = World->SpawnActor<ABRCockfightPit>(ABRCockfightPit::StaticClass(), At(-9000.f, 2200.f, Ground), Params))
+	{
+		auto Bet = [&](float X, float Y, int32 Side, int32 Amount, const FString& Title)
+		{
+			const FTransform T = At(X, Y, Ground);
+			if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+			{
+				S->Kind = EBRStationKind::Bet; S->BetSide = Side; S->Price = Amount; S->Pit = Pit; S->Title = Title;
+				S->Color = Side == 0 ? FLinearColor(0.8f, 0.1f, 0.05f) : FLinearColor(0.1f, 0.25f, 0.85f);
+				S->FinishSpawning(T);
+			}
+		};
+		Bet(-9550.f, 1950.f, 0, 20, TEXT("RED $20"));
+		Bet(-9550.f, 2450.f, 0, 0, TEXT("RED ALL IN"));
+		Bet(-8450.f, 1950.f, 1, 20, TEXT("BLUE $20"));
+		Bet(-8450.f, 2450.f, 1, 0, TEXT("BLUE ALL IN"));
+	}
 
 	// --- Warden base
 	World->SpawnActor<APVVDetentionZone>(APVVDetentionZone::StaticClass(), At(7000.f, 4000.f, Ground + 150.f), Params);
@@ -311,7 +426,7 @@ void ABRDesertArena::SpawnGameplayActors()
 	auto Car = [&](float X, float Y, float Yaw, bool bWarden, const FLinearColor& Paint)
 	{
 		const FTransform T = At(X, Y, Ground + 80.f, Yaw);
-		if (ABRCar* C = World->SpawnActorDeferred<ABRCar>(ABRCar::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		if (ABRTruck* C = World->SpawnActorDeferred<ABRTruck>(ABRTruck::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 		{
 			C->bRequiresKey = !bWarden;
 			C->bInfiniteFuel = bWarden;
@@ -319,9 +434,19 @@ void ABRDesertArena::SpawnGameplayActors()
 			C->FinishSpawning(T);
 		}
 	};
-	Car(5200.f, -2500.f, 0.f, true, FLinearColor(0.9f, 0.9f, 0.9f));
-	Car(5200.f, -4500.f, 0.f, true, FLinearColor(0.9f, 0.9f, 0.9f));
-	Car(-9500.f, -1200.f, 0.f, false, FLinearColor(0.5f, 0.2f, 0.1f));
+	Car(5200.f, -3000.f, 0.f, true, FLinearColor(0.85f, 0.88f, 0.85f));
+	Car(5200.f, -5000.f, 0.f, true, FLinearColor(0.85f, 0.88f, 0.85f));
+	Car(-9500.f, -2400.f, 0.f, false, FLinearColor(0.5f, 0.2f, 0.1f));
+
+	// --- Patrol dogs (Warden side + the near bank)
+	TArray<FVector> Homes;
+	GetDogHomes(Homes);
+	for (const FVector& Home : Homes)
+	{
+		FActorSpawnParameters DogParams;
+		DogParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+		World->SpawnActor<ABRDog>(ABRDog::StaticClass(), Home, FRotator::ZeroRotator, DogParams);
+	}
 
 	// --- Player starts
 	auto Start = [&](float X, float Y, float Yaw, EPVVFaction Faction)

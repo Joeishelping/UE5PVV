@@ -142,15 +142,20 @@ void ABRHUD::DrawHUD()
 	// --- Driving
 	if (const APVVBoat* Vehicle = Cast<APVVBoat>(Pawn))
 	{
-		Centered(TEXT("DRIVING  -  W/S throttle  A/D steer  E get out"), SY - 90.f, White, Big, 1.2f);
+		Centered(TEXT("DRIVING  -  W/S throttle  A/D steer  E get out  |  R/T radio  Backspace off  H horn"), SY - 90.f, White, Big, 1.1f);
 		FString Info = FString::Printf(TEXT("%.0f km/h"), FMath::Abs(Vehicle->GetForwardSpeed()) * 0.036f);
 		if (const ABRCar* Car = Cast<ABRCar>(Vehicle))
 		{
 			Info += Car->bInfiniteFuel ? TEXT("   |   Fuel: government-funded") : FString::Printf(TEXT("   |   Fuel %d%%"), FMath::RoundToInt(Car->Fuel * 100.f));
-			if (!Car->bInfiniteFuel && Car->Fuel <= 0.f)
+			if (Car->IsFlooded())
+			{
+				Centered(TEXT("ENGINE FLOODED! Trucks don't swim."), SY * 0.4f, Red, Big, 1.6f);
+			}
+			else if (!Car->bInfiniteFuel && Car->Fuel <= 0.f)
 			{
 				Centered(TEXT("OUT OF GAS! Bring a Gas Can."), SY * 0.4f, Red, Big, 1.6f);
 			}
+			Centered(FString::Printf(TEXT("RADIO: %s"), *Car->GetStationName()), SY - 125.f, FLinearColor(0.6f, 0.9f, 1.f), Big, 1.1f);
 		}
 		Centered(Info, SY - 60.f, Yellow, Big, 1.2f);
 		return;
@@ -200,14 +205,46 @@ void ABRHUD::DrawHUD()
 			DrawText(TEXT("CROSSED"), Red, 560.f, SY - 116.f, Small, 1.2f);
 		}
 	}
+	if (Me->HasWeapon())
+	{
+		const FLinearColor WeaponCol = (bWarden && !Me->IsLethalMode()) ? FLinearColor(0.4f, 0.8f, 1.f) : Red;
+		const FString AmmoText = Me->IsReloading() ? TEXT("RELOADING...") : FString::Printf(TEXT("%d / %d"), Me->GetAmmo(), Me->GetMagSize());
+		DrawText(FString::Printf(TEXT("%s   %s"), *Me->GetWeaponName(), *AmmoText), WeaponCol, SX - 520.f, SY - 70.f, Big, 1.2f);
+	}
+
+	// Crosshair + hit marker.
+	if (Me->IsAiming())
+	{
+		const float CX = SX * 0.5f, CY = SY * 0.5f;
+		const FLinearColor CrossCol(1.f, 1.f, 1.f, 0.9f);
+		DrawRect(CrossCol, CX - 12.f, CY - 1.f, 8.f, 2.f);
+		DrawRect(CrossCol, CX + 4.f, CY - 1.f, 8.f, 2.f);
+		DrawRect(CrossCol, CX - 1.f, CY - 12.f, 2.f, 8.f);
+		DrawRect(CrossCol, CX - 1.f, CY + 4.f, 2.f, 8.f);
+		if (Now - PC->HitMarkerTime < 0.25f)
+		{
+			Centered(TEXT("X"), CY - 14.f, PC->bHitMarkerLethal ? Red : FLinearColor(0.4f, 0.8f, 1.f), Big, 1.4f);
+		}
+	}
 	else
 	{
-		DrawText(Me->IsLethalMode() ? TEXT("WEAPON: GUN (lethal)  [X to switch]") : TEXT("WEAPON: TASER  [X to switch]"), Me->IsLethalMode() ? Red : FLinearColor(0.4f, 0.8f, 1.f), 20.f, SY - 116.f, Big);
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.5f), SX * 0.5f - 2.f, SY * 0.5f - 2.f, 4.f, 4.f);
+	}
+
+	// Breath (deep water) and grabbed/stuck warnings.
+	if (Me->GetBreath() < 0.999f)
+	{
+		Centered(TEXT("BREATH"), SY * 0.33f - 22.f, FLinearColor(0.5f, 0.8f, 1.f), Small, 1.2f);
+		Bar(SX * 0.5f - 150.f, SY * 0.33f, 300.f, 16.f, Me->GetBreath(), Me->GetBreath() > 0.35f ? FLinearColor(0.4f, 0.75f, 1.f) : Red);
+	}
+	if (Me->IsSlowed())
+	{
+		Centered(TEXT("STUCK!"), SY * 0.36f + 30.f, Red, Big, 1.4f);
 	}
 
 	DrawText(bWarden
-		? TEXT("WASD move | Shift sprint | C crouch | LMB punch | RMB fire | X taser/gun | Q drone | E interact")
-		: TEXT("WASD move | Shift sprint | C crouch | LMB punch | RMB fire (if armed) | F eat | E interact (tap / hold)"),
+		? TEXT("WASD move | Shift sprint | C crouch | LMB punch | hold RMB aim + LMB shoot | R reload | X taser/gun | V scan | B trap | Q drone | E interact")
+		: TEXT("WASD move | Shift sprint | C crouch | LMB punch | hold RMB aim + LMB shoot (if armed) | R reload | F eat | E interact"),
 		FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 40.f, Small, 1.1f);
 
 	// --- Status

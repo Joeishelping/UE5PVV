@@ -11,6 +11,40 @@ The default GameMode is now `BRGameMode`. The original Pirates vs. Vikings mode 
 3. Play ▸ ⋮ ▸ **Number of Players = 2+**, **Net Mode = Play As Listen Server** ▸ **Play**.
    The first player is a Runner. After that about a third of the players become Wardens.
 
+## Update 2: trucks, NPC traffic, guns, dogs, traps, cockfights, music
+
+| Feature | How it works |
+|---|---|
+| **Pickup trucks** | Real truck shape with an open cab (driver + passenger) and a bed (2 more). Headlights. |
+| **Truck radio** | Every song you import into `Content/Music/Radio` is a station. Driver: **R** next, **T** previous, **Backspace** off, **H** horn (Wardens hear it). Everyone near the truck hears the same part of the song. |
+| **Background music** | Songs in `Content/Music/Ambient` play shuffled for everyone. They get quieter while your truck radio is on. |
+| **NPC traffic** | During the Invasion, trucks with 1–3 look-alike NPCs drive the road over the **bridge** to the **checkpoint** in the Wall. Runners can hop into a free seat while one goes by. NPC trucks wait at the gate, and if no Warden checks them within 25 s, they get waved through. |
+| **Checkpoint** | Wardens hold E at the gate to open or close it. **V** = scanner: on a truck it says how many aboard are *heat anomalies* (players) and tags them; on a person it says citizen or Runner. Holding E on a truck orders everyone out. Searching a truck with only citizens costs **Approval −5**. Arresting or shooting an NPC is a scandal. |
+| **Guns** | **Hold RMB** to aim (over-the-shoulder zoom, slower walk), **LMB** to shoot, **R** to reload. Ammo, recoil, a bit of spread, tracers, muzzle flash and hit markers. Wardens: taser (1 shot) or pistol (12). Runners: black-market revolver (6). Assign sound files on the character Blueprint (GunSound / TaserSound / ReloadSound). |
+| **Drowning** | The middle of the river is deep: a breath bar drains (14 s), and then you drown and wake up back at base. Trucks flood. Use the **bridge**, a **boat** (marina), or the shallow edges. Wading still drags you downstream. |
+| **Dogs** | 4 patrol dogs. During the Invasion they **smell** Runners within about 22 m (darkness doesn't help, crouching does a bit, water hides your scent), chase, bark (Warden ping) and grab your leg. |
+| **Warden traps** | **B** places a trap at your feet, cycling bear trap → glue pad → alarm wire (team max 8). Runners only see traps up close and can disarm them (hold E). |
+| **Wire cutters, nerfed** | 8 s cut, very loud, tags the cutter for 6 s, and **2 cuts per pair**, then they snap. |
+| **Cockfighting** | Pit in town: 40 s of betting, then a 12 s cartoon fight. Bet $20 (pays ×2) or **ALL IN** (pays ×2.5) on RED or BLUE. |
+| **Wobbly physics body** | Once your character has a real skeletal mesh with a Physics Asset, the body is physics-driven (it wobbles when hit and goes limp when knocked down). |
+| **Outfit slots** | `OutfitTop / OutfitBottom / OutfitHead / OutfitFace` on the character, all following the body. |
+
+### Characters and outfits (Blueprint setup, about 15 minutes)
+1. Import `Art/Characters/SK_PVV_Body_Custom.glb` (your body) and **let it create a skeleton** and a Physics Asset.
+2. Import everything in `Art/Characters/Outfits/` with **Skeleton = that body's skeleton**.
+   - **Runner set:** `SK_Outfit_WorkShirt`, `SK_Outfit_Jeans`, `SK_Outfit_CowboyHat`, `SK_Outfit_Bandana`
+   - **Border Patrol set:** `SK_Outfit_PatrolUniform`, `SK_Outfit_PatrolPants`, `SK_Outfit_PatrolCap`, `SK_Outfit_Sunglasses`
+3. Create Blueprints with parent **BRCharacter**: `BP_Runner` and `BP_Warden`. In each one:
+   - **Mesh:** Skeletal Mesh = the body. Location Z −96 (and Rotation Z −90 if it faces sideways). Anim class = a mannequin Anim BP if you retargeted, or none for now.
+   - **OutfitTop / OutfitBottom / OutfitHead / OutfitFace:** pick that team's pieces.
+   - Skin tone: on the body's skin material slot, use a material with a `Color` parameter.
+4. Create `BP_BRGameMode` (parent **BRGameMode**): Pirate Character Class = `BP_Runner` (Runners), Viking Character Class = `BP_Warden` (Wardens),
+   **NPC Passenger Class = `BP_Runner`** so NPCs look exactly like players. Then Project Settings → Maps & Modes → Default GameMode = `BP_BRGameMode`.
+
+### Music
+Drag `.wav` files into `Content/Music/Radio` (truck stations) and `Content/Music/Ambient` (background) in the Content Browser.
+Packaged builds include them automatically.
+
 ## How a match goes
 | Phase | Default | What happens |
 |---|---|---|

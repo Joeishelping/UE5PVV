@@ -6,8 +6,11 @@
 #include "BRTypes.h"
 #include "BRWorldActors.generated.h"
 
+class ABRCockfightPit;
+class ABRPlayerState;
 class APVVCharacter;
 class UBoxComponent;
+class UPointLightComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
@@ -30,6 +33,7 @@ protected:
 	UPROPERTY() TObjectPtr<UStaticMesh> CubeMesh;
 	UPROPERTY() TObjectPtr<UStaticMesh> ConeMesh;
 	UPROPERTY() TObjectPtr<UStaticMesh> CylinderMesh;
+	UPROPERTY() TObjectPtr<UStaticMesh> SphereMesh;
 
 	UStaticMeshComponent* AddMesh(const TCHAR* Name, UStaticMesh* Mesh, const FVector& Location, const FVector& SizeCm, const FLinearColor& Color,
 		const FRotator& Rotation = FRotator::ZeroRotator, bool bCollide = true);
@@ -63,6 +67,9 @@ public:
 	UPROPERTY(Replicated) bool bNightOnly = false;
 	UPROPERTY(Replicated) FString Title;
 	UPROPERTY(Replicated) FLinearColor Color = FLinearColor(0.6f, 0.6f, 0.6f);
+	/** Bet stations: which rooster (0 = RED, 1 = BLUE) and the pit. Price 0 = ALL IN. */
+	UPROPERTY(Replicated) int32 BetSide = 0;
+	UPROPERTY(Replicated) TObjectPtr<ABRCockfightPit> Pit;
 	FVector BoatSpawn = FVector::ZeroVector;
 
 protected:
@@ -86,7 +93,7 @@ public:
 	virtual void BeginPlay() override;
 
 	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
-	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 4.f; }
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 8.f; }
 	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
@@ -114,6 +121,9 @@ public:
 
 	static constexpr float Height = 600.f;
 	static constexpr float HalfLength = 8100.f;
+	/** The road passes through a gate in the wall here (relative Y). */
+	static constexpr float GateY = -1200.f;
+	static constexpr float GateHalfWidth = 350.f;
 };
 
 // ===========================================================================================
@@ -176,4 +186,137 @@ protected:
 
 private:
 	float FlingTime = -100.f;
+};
+
+// ===========================================================================================
+/** The checkpoint gate in the Wall where the road (and NPC traffic) crosses. Wardens hold E to open/close. */
+UCLASS()
+class PIRATESVSVIKINGS_API ABRCheckpointGate : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRCheckpointGate();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.6f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	bool IsOpen() const { return bOpen; }
+	/** Server. */
+	void OpenFor(float Seconds);
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UBoxComponent> Barrier;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> ArmPivot;
+
+private:
+	UPROPERTY(Replicated) bool bOpen = false;
+	float CloseAt = 0.f;
+	float ArmAngle = 0.f;
+	int32 AppliedState = -1;
+};
+
+// ===========================================================================================
+/** Warden trap. Runners only see it up close. Bear = rooted, Glue = slowed, Alarm = tagged. Runners can disarm (hold E). */
+UCLASS()
+class PIRATESVSVIKINGS_API ABRTrap : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRTrap();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 3.f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	UPROPERTY(Replicated) EBRTrap Type = EBRTrap::Bear;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USphereComponent> Trigger;
+
+	UFUNCTION()
+	void OnTriggered(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+private:
+	bool bHiddenLocally = false;
+};
+
+namespace BRPit
+{
+	enum EState : uint8 { Betting = 0, Fighting = 1, Result = 2 };
+}
+
+struct FBRPitBet
+{
+	TWeakObjectPtr<ABRPlayerState> Player;
+	int32 Side = 0;
+	int32 Amount = 0;
+	bool bAllIn = false;
+};
+
+// ===========================================================================================
+/** Cockfight pit in town. 40 s of betting, a 12 s fight, then payout. Bet stations around it take the money. */
+UCLASS()
+class PIRATESVSVIKINGS_API ABRCockfightPit : public ABRGreyboxActor
+{
+	GENERATED_BODY()
+
+public:
+	ABRCockfightPit();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	bool IsTakingBets() const { return State == BRPit::Betting; }
+	bool HasBet(const ABRPlayerState* Player) const;
+	/** Server. Amount 0 = ALL IN. Returns the amount actually bet. */
+	int32 PlaceBet(ABRPlayerState* Player, int32 Side, int32 Amount);
+
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float BettingSeconds = 40.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float FightSeconds = 12.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float ResultSeconds = 6.f;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> RoosterRed;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> RoosterBlue;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Board;
+
+private:
+	UPROPERTY(Replicated) uint8 State = BRPit::Betting;
+	UPROPERTY(Replicated) float StateEndsAt = 0.f;
+	UPROPERTY(Replicated) int32 Winner = 0;
+	UPROPERTY(Replicated) int32 PotRed = 0;
+	UPROPERTY(Replicated) int32 PotBlue = 0;
+
+	TArray<FBRPitBet> Bets;
+
+	void AdvanceState(float ServerNow);
+	void PayOut();
+	void BuildRooster(USceneComponent* Parent, const TCHAR* Prefix, const FLinearColor& Accent);
+};
+
+// ===========================================================================================
+/** Local-only bullet / taser tracer with a muzzle flash and an impact puff. */
+UCLASS()
+class PIRATESVSVIKINGS_API ABRTracerFX : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ABRTracerFX();
+	void Init(const FVector& Start, const FVector& End, bool bLethal, bool bHitSomeone);
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beam;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Impact;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Flash;
 };

@@ -30,6 +30,10 @@ public:
 
 	void AdvancePhase();
 	void HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter);
+	void HandleDrowned(APVVCharacter* Victim);
+	/** A Warden ordered everyone out of a vehicle. Finding no Runners = harassing citizens. */
+	void OnVehicleSearched(APVVCharacter* Warden, int32 RunnersFound);
+	void ChangeApproval(float Delta);
 
 protected:
 	virtual void StartMatchFlow() override;
@@ -55,12 +59,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float ScandalPenalty = 35.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float WrongfulArrestPenalty = 10.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float GoodCatchBonus = 3.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float HarassmentPenalty = 5.f;
+
+	/** NPC traffic through the checkpoint during the Invasion. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FVector2D NPCTruckEverySeconds = FVector2D(40.f, 75.f);
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxNPCTrucks = 3;
+	/** Class used for NPC passengers - set it to your Runner Blueprint so they look like players. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") TSubclassOf<APawn> NPCPassengerClass;
 
 private:
 	UPROPERTY() TObjectPtr<ABRDesertArena> Arena;
 
 	FTimerHandle TickTimer;
 	float NextWeatherChange = 0.f;
+	float NextNPCTruck = 30.f;
 	bool bCarKeyGiven = false;
 	bool bAnnouncedDroneLoss = false;
 	bool bAnnouncedGunLoss = false;
@@ -71,6 +83,7 @@ private:
 	void GiveCarKey();
 	void LaunchFromPen(APVVCharacter* Prisoner);
 	void RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner);
-	void ChangeApproval(float Delta);
+	void SpawnNPCTruck();
+	void SendHomeLater(APVVCharacter* Character, float Seconds);
 	FString NameOf(const APVVCharacter* Character) const;
 };

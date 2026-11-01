@@ -363,7 +363,7 @@ void APVVCharacter::Input_SprintStop()
 
 void APVVCharacter::Input_Attack()
 {
-	if (CanAttack())
+	if (CanAttack() && WantsMeleeOnAttack())
 	{
 		Server_Attack();
 	}
@@ -817,6 +817,7 @@ void APVVCharacter::RefreshStateEffects()
 		bToppled ? FRotator(90.f, 0.f, 0.f) : FRotator::ZeroRotator);
 	UpdateMovementSpeed();
 	UpdateStatusLabel();
+	OnStateEffectsRefreshed();
 	OnStateChanged();
 }
 

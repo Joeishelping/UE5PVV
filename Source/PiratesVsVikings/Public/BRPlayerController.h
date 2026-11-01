@@ -17,6 +17,13 @@ public:
 	FText LocalMessage;
 	float LocalMessageTime = -100.f;
 
+	/** Shooter feedback: an X on the crosshair. */
+	UFUNCTION(Client, Unreliable)
+	void Client_HitMarker(bool bLethal);
+
+	float HitMarkerTime = -100.f;
+	bool bHitMarkerLethal = false;
+
 	// --- Multiplayer (press ~ to open the console) -------------------------------------
 	/** Reopen this map as a listen server so friends can join (e.g. over Radmin VPN). */
 	UFUNCTION(Exec) void Host();

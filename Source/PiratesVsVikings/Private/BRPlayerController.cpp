@@ -13,6 +13,12 @@ void ABRPlayerController::Client_Notify_Implementation(const FText& Message)
 	LocalMessageTime = GetWorld()->GetTimeSeconds();
 }
 
+void ABRPlayerController::Client_HitMarker_Implementation(bool bLethal)
+{
+	HitMarkerTime = GetWorld()->GetTimeSeconds();
+	bHitMarkerLethal = bLethal;
+}
+
 void ABRPlayerController::Host()
 {
 	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);

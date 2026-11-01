@@ -1,4 +1,5 @@
 #include "BRGameMode.h"
+#include "BRCar.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
 #include "BRGameState.h"
@@ -20,6 +21,7 @@ ABRGameMode::ABRGameMode()
 	PlayerStateClass = ABRPlayerState::StaticClass();
 	GameStateClass = ABRGameState::StaticClass();
 	HUDClass = ABRHUD::StaticClass();
+	NPCPassengerClass = ABRCharacter::StaticClass();
 	bBuildTestArenaIfNoLake = false;
 	bVikingsWinWhenAllPiratesDetained = false;
 }
@@ -129,6 +131,15 @@ void ABRGameMode::TickBR()
 		Announce(LOCTEXT("OneMinute", "One minute until the Line opens!"));
 	}
 	TickRunners(GS);
+	if (GS->Phase == EBRPhase::Invasion)
+	{
+		NextNPCTruck -= 1.f;
+		if (NextNPCTruck <= 0.f)
+		{
+			NextNPCTruck = FMath::FRandRange(NPCTruckEverySeconds.X, NPCTruckEverySeconds.Y);
+			SpawnNPCTruck();
+		}
+	}
 	if (GS->PhaseSecondsLeft == 0)
 	{
 		AdvancePhase();
@@ -147,6 +158,7 @@ void ABRGameMode::AdvancePhase()
 		GS->Phase = EBRPhase::Invasion;
 		GS->PhaseSecondsLeft = InvasionSeconds;
 		GS->RunnersNeeded = FMath::Max(1, FMath::DivideAndRoundUp(GS->CountPlayers(BR::Runners), 2));
+		NextNPCTruck = 8.f;
 		Announce(FText::Format(LOCTEXT("Invasion", "THE LINE IS OPEN! Runners: get {0} of you to the Safe Zone. Wardens: catch, don't kill."), GS->RunnersNeeded));
 	}
 	else if (GS->Phase == EBRPhase::Invasion)
@@ -250,6 +262,14 @@ void ABRGameMode::GiveCarKey()
 
 void ABRGameMode::NotifyDetained(APVVCharacter* Victim, APVVCharacter* Captor)
 {
+	if (const ABRCharacter* NPC = Cast<ABRCharacter>(Victim); NPC && NPC->IsNPC())
+	{
+		ChangeApproval(-WrongfulArrestPenalty);
+		Announce(FText::Format(LOCTEXT("Tourist", "{0} locked up a random citizen! Approval -{1}"), FText::FromString(NameOf(Captor)), FMath::RoundToInt(WrongfulArrestPenalty)));
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(Victim, [Victim]() { Victim->Destroy(); }), 15.f, false);
+		return;
+	}
 	Super::NotifyDetained(Victim, Captor);
 
 	ABRPlayerState* PS = Victim ? Cast<ABRPlayerState>(Victim->GetPVVPlayerState()) : nullptr;
@@ -292,6 +312,15 @@ void ABRGameMode::LaunchFromPen(APVVCharacter* Prisoner)
 
 void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter)
 {
+	if (const ABRCharacter* NPC = Cast<ABRCharacter>(Victim); NPC && NPC->IsNPC())
+	{
+		ChangeApproval(-ScandalPenalty);
+		Announce(FText::Format(LOCTEXT("CivilianShot", "SCANDAL! {0} shot an innocent citizen! Approval -{1}"), FText::FromString(NameOf(Shooter)), FMath::RoundToInt(ScandalPenalty)));
+		Victim->ApplyKnockdown(Shooter, FVector(0.f, 0.f, 200.f));
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(Victim, [Victim]() { Victim->Destroy(); }), 10.f, false);
+		return;
+	}
 	ABRPlayerState* PS = Victim ? Cast<ABRPlayerState>(Victim->GetPVVPlayerState()) : nullptr;
 	if (!PS || Victim->GetFaction() != BR::Runners || Victim->GetCondition() == EPVVCondition::Detained)
 	{
@@ -318,8 +347,99 @@ void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter
 	{
 		BRC->Notify(LOCTEXT("YouDied", "You were shot. Respawning in town..."));
 	}
+	SendHomeLater(Victim, RunnerRespawnSeconds);
+}
+
+void ABRGameMode::SendHomeLater(APVVCharacter* Character, float Seconds)
+{
 	FTimerHandle Handle;
-	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateUObject(this, &ABRGameMode::RespawnRunner, TWeakObjectPtr<APVVCharacter>(Victim)), RunnerRespawnSeconds, false);
+	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateUObject(this, &ABRGameMode::RespawnRunner, TWeakObjectPtr<APVVCharacter>(Character)), Seconds, false);
+}
+
+void ABRGameMode::HandleDrowned(APVVCharacter* Victim)
+{
+	if (!Victim || Victim->GetCondition() == EPVVCondition::Detained)
+	{
+		return;
+	}
+	Announce(FText::Format(LOCTEXT("Drowned", "{0} tried to swim the river and DROWNED. Should've bought a boat."), FText::FromString(NameOf(Victim))));
+	if (APVVCharacter* Carrier = Victim->GetCarrier())
+	{
+		Carrier->DropCarried();
+	}
+	if (Victim->GetCondition() == EPVVCondition::Normal)
+	{
+		Victim->ApplyKnockdown(nullptr, FVector::ZeroVector);
+	}
+	SendHomeLater(Victim, 6.f);
+}
+
+void ABRGameMode::OnVehicleSearched(APVVCharacter* Warden, int32 RunnersFound)
+{
+	if (RunnersFound > 0)
+	{
+		Announce(FText::Format(LOCTEXT("SearchHit", "{0} searched a truck and found {1} Runner(s)!"), FText::FromString(NameOf(Warden)), RunnersFound));
+		ChangeApproval(GoodCatchBonus);
+	}
+	else
+	{
+		ChangeApproval(-HarassmentPenalty);
+		Announce(FText::Format(LOCTEXT("Harass", "{0} dragged innocent citizens out of their truck. Approval -{1}"), FText::FromString(NameOf(Warden)), FMath::RoundToInt(HarassmentPenalty)));
+	}
+}
+
+void ABRGameMode::SpawnNPCTruck()
+{
+	if (!Arena)
+	{
+		return;
+	}
+	int32 Alive = 0;
+	for (TActorIterator<ABRTruck> It(GetWorld()); It; ++It)
+	{
+		Alive += It->IsNPCTruck() ? 1 : 0;
+	}
+	if (Alive >= MaxNPCTrucks)
+	{
+		return;
+	}
+
+	const FTransform Spawn = Arena->GetNPCSpawn();
+	ABRTruck* Truck = GetWorld()->SpawnActorDeferred<ABRTruck>(ABRTruck::StaticClass(), Spawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!Truck)
+	{
+		return;
+	}
+	const FLinearColor Paints[] = { {0.8f, 0.8f, 0.75f}, {0.2f, 0.35f, 0.6f}, {0.35f, 0.5f, 0.2f}, {0.6f, 0.55f, 0.1f}, {0.3f, 0.3f, 0.3f} };
+	Truck->PaintColor = Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Paints)) - 1)];
+	Truck->bRequiresKey = true;	// players can hide in the back but can't steal it
+	Truck->bInfiniteFuel = true;
+	Truck->FinishSpawning(Spawn);
+
+	TArray<FVector> Route;
+	int32 CheckpointIndex = INDEX_NONE;
+	Arena->GetNPCRoute(Route, CheckpointIndex);
+	Truck->StartNPCRoute(Route, CheckpointIndex, Arena->GetGate());
+
+	// 1-4 look-alike NPCs (driver first). Empty seats are where Runners hide.
+	const int32 Count = FMath::RandRange(1, 3);
+	UClass* NPCClass = NPCPassengerClass ? NPCPassengerClass.Get() : ABRCharacter::StaticClass();
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const FTransform NPCSpawn(Spawn.GetLocation() + FVector(0.f, 0.f, 300.f + i * 220.f));
+		ABRCharacter* NPC = GetWorld()->SpawnActorDeferred<ABRCharacter>(NPCClass, NPCSpawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!NPC)
+		{
+			continue;
+		}
+		NPC->InitAsNPC();
+		NPC->FinishSpawning(NPCSpawn);
+		Truck->AddNPC(NPC);
+	}
+	if (Truck->GetStationCount() > 0)
+	{
+		Truck->SetRadioStation(FMath::RandRange(0, Truck->GetStationCount() - 1));
+	}
 }
 
 void ABRGameMode::RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner)
@@ -330,9 +450,12 @@ void ABRGameMode::RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner)
 	{
 		return;
 	}
-	PS->RemoveIllegalItems();
-	PS->bHasCrossedLine = false;
-	PS->bIsAggressor = false;
+	if (C->GetFaction() == BR::Runners)
+	{
+		PS->RemoveIllegalItems();
+		PS->bHasCrossedLine = false;
+		PS->bIsAggressor = false;
+	}
 	RespawnCharacter(C);
 }
 

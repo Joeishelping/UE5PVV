@@ -53,6 +53,7 @@ public:
 	float GetForwardSpeed() const;
 
 	UStaticMeshComponent* GetHull() const { return Hull; }
+	const TArray<TObjectPtr<APVVCharacter>>& GetOccupants() const { return Occupants; }
 
 	// Server only.
 	bool TryBoard(APVVCharacter* Character);
@@ -179,6 +180,10 @@ protected:
 
 	TWeakObjectPtr<APVVLake> Lake;
 
+	virtual void EnsureDefaultInput();
+	void SeatCharacter(APVVCharacter* Character, int32 SeatIndex);
+	int32 FindFreePassengerSeat() const;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Occupants, BlueprintReadOnly, Category = "PVV|Boat")
 	TArray<TObjectPtr<APVVCharacter>> Occupants;
 
@@ -202,11 +207,8 @@ private:
 
 	void ApplyWaterForces(float DeltaSeconds);
 	void TickFlipRecovery(float DeltaSeconds);
-	void SeatCharacter(APVVCharacter* Character, int32 SeatIndex);
 	void ClearSeat(int32 SeatIndex);
-	int32 FindFreePassengerSeat() const;
 	void ResetToTransform(const FTransform& Transform);
-	void EnsureDefaultInput();
 	void SendDriveInput();
 
 	void Input_Throttle(const FInputActionValue& Value);

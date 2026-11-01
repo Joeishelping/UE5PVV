@@ -32,6 +32,10 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	bool bReachedSafety = false;
 
+	/** Cuts left before the wire cutters snap (each pair = 2 cuts). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 WireCutterCharges = 0;
+
 	/** Seconds left in the holding pen (0 = free). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 SentenceSeconds = 0;

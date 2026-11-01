@@ -46,7 +46,16 @@ enum class EBRStationKind : uint8
 	BuyItem,	// pay Price, get Item
 	SellItem,	// give Item, get Price
 	BuyBoat,	// pay Price, a boat appears at BoatSpawn
-	Job			// hold to work, get Price (and Item if set)
+	Job,		// hold to work, get Price (and Item if set)
+	Bet			// bet Price (0 = ALL IN) on a rooster at the cockfight pit
+};
+
+UENUM(BlueprintType)
+enum class EBRTrap : uint8
+{
+	Bear,	// roots the Runner for a few seconds
+	Glue,	// slows them a lot
+	Alarm	// pings and tags them for the Wardens
 };
 
 namespace BR

@@ -5,7 +5,10 @@
 #include "BRDesertArena.generated.h"
 
 class ABRCatapult;
+class ABRCheckpointGate;
 class ABRGameMode;
+class UAudioComponent;
+class USoundBase;
 class UBoxComponent;
 class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
@@ -36,6 +39,13 @@ public:
 	void SpawnGameplayActors();
 
 	bool IsInRiver(const FVector& WorldLocation) const;
+	/** Middle of the river: you can't touch the bottom (drowning), and vehicles flood. Not on the bridge. */
+	bool IsDeepWater(const FVector& WorldLocation) const;
+	/** Road route for NPC traffic (town -> checkpoint -> far side). */
+	void GetNPCRoute(TArray<FVector>& OutRoute, int32& OutCheckpointIndex) const;
+	FTransform GetNPCSpawn() const;
+	ABRCheckpointGate* GetGate() const { return Gate; }
+	void GetDogHomes(TArray<FVector>& OutHomes) const;
 	FVector GetRiverFlowDirection() const { return FVector(0.f, 1.f, 0.f); }
 	float GetLineX() const { return GetActorLocation().X + LineX; }
 	float GetSafeX() const { return GetActorLocation().X + SafeX; }
@@ -50,6 +60,9 @@ public:
 	static constexpr float FenceX = -3500.f;
 	static constexpr float WallX = 3500.f;
 	static constexpr float SafeX = 14000.f;
+	static constexpr float RoadY = -1200.f;
+	static constexpr float RiverBedZ = -150.f;
+	static constexpr float DeepHalfWidth = 1100.f;
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UBoxComponent> RiverBed;
@@ -61,9 +74,16 @@ protected:
 	UPROPERTY() TObjectPtr<UStaticMesh> CubeMesh;
 	UPROPERTY() TMap<FName, FLinearColor> BlockColors;
 	UPROPERTY() TObjectPtr<ABRCatapult> Catapult;
+	UPROPERTY() TObjectPtr<ABRCheckpointGate> Gate;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UAudioComponent> AmbientMusic;
+	UPROPERTY() TArray<TObjectPtr<USoundBase>> AmbientTracks;
+	UPROPERTY(EditAnywhere, Category = "BR|Music") float AmbientVolume = 0.45f;
 
 private:
 	float DisplayedTime = -1.f;
+	int32 AmbientIndex = -1;
+
+	UFUNCTION() void PlayNextAmbient();
 	float FogDensity = 0.002f;
 
 	UStaticMeshComponent* AddBlock(const TCHAR* Name, const FVector& Center, const FVector& SizeCm, const FLinearColor& Color, const FRotator& Rotation = FRotator::ZeroRotator, bool bCollide = true);

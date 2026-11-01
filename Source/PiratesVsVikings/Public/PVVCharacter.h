@@ -345,6 +345,10 @@ private:
 
 protected:
 	void RefreshStateEffects();
+	/** Called at the end of RefreshStateEffects on every machine. */
+	virtual void OnStateEffectsRefreshed() {}
+	/** Left-click punches unless a subclass wants it for something else (e.g. firing while aiming). */
+	virtual bool WantsMeleeOnAttack() const { return true; }
 	virtual void UpdateMovementSpeed();
 	virtual void EnsureDefaultInput();
 	void CancelHold();

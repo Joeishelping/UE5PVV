@@ -10,6 +10,7 @@ void ABRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPlayerState, bHasCrossedLine);
 	DOREPLIFETIME(ABRPlayerState, bIsAggressor);
 	DOREPLIFETIME(ABRPlayerState, bReachedSafety);
+	DOREPLIFETIME(ABRPlayerState, WireCutterCharges);
 	DOREPLIFETIME(ABRPlayerState, SentenceSeconds);
 }
 

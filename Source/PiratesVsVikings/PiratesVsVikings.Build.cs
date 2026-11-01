@@ -12,7 +12,9 @@ public class PiratesVsVikings : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
-			"EnhancedInput"
+			"EnhancedInput",
+			"AIModule",
+			"AssetRegistry"
 		});
 	}
 }
