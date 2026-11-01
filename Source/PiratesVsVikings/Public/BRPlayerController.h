@@ -23,6 +23,10 @@ public:
 	/** Connect to a host, e.g. "Join 26.12.34.56". */
 	UFUNCTION(Exec) void Join(const FString& Address);
 
+	/** Switch teams. */
+	UFUNCTION(Exec) void JoinRunners();
+	UFUNCTION(Exec) void JoinWardens();
+
 	// --- Test commands -----------------------------------------------------------------
 	/** Jump to the next phase (Prep -> Invasion -> End). */
 	UFUNCTION(Exec) void SkipPhase();

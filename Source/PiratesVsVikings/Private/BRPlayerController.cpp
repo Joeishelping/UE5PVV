@@ -27,6 +27,9 @@ void ABRPlayerController::Join(const FString& Address)
 	}
 }
 
+void ABRPlayerController::JoinRunners() { RequestFaction(BR::Runners); }
+void ABRPlayerController::JoinWardens() { RequestFaction(BR::Wardens); }
+
 void ABRPlayerController::SkipPhase() { Server_SkipPhase(); }
 void ABRPlayerController::GiveMoney(int32 Amount) { Server_GiveMoney(Amount); }
 void ABRPlayerController::SetTime(float Hours) { Server_SetTime(Hours); }
