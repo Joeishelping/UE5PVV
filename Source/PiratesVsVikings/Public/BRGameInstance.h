@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "PVVTypes.h"
 #include "BRGameInstance.generated.h"
 
 class FOnlineSessionSearch;
@@ -35,6 +36,11 @@ public:
 
 	/** Short status line for the HUD. */
 	FString StatusText;
+
+	/** Team picked in the main menu (kept across map reloads / joining). None = let the game balance teams. */
+	EPVVFaction PreferredTeam = EPVVFaction::None;
+	/** The startup menu only shows once per launch. */
+	bool bMenuDone = false;
 
 private:
 	IOnlineSessionPtr GetSessions() const;

@@ -11,6 +11,10 @@ The default GameMode is now `BRGameMode`. The original Pirates vs. Vikings mode 
 3. Play ▸ ⋮ ▸ **Number of Players = 2+**, **Net Mode = Play As Listen Server** ▸ **Play**.
    The first player is a Runner. After that about a third of the players become Wardens.
 
+## Main menu
+The game opens with a menu: **pick your side** (Runner / Border Patrol), then **Host (Steam invites)**, **Find a friend's game**,
+**Host (Radmin/LAN)**, **Join IP**, **Play** or **Quit**. Press **M** in game to reopen it, for example to switch teams.
+
 ## Playing with friends over Steam (invites)
 
 Unreal's built-in **Online Subsystem Steam** is switched on, using Valve's free test app **480**.

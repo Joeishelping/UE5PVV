@@ -4,12 +4,23 @@
 #include "PVVPlayerController.h"
 #include "BRPlayerController.generated.h"
 
+class UBRMenuWidget;
+
 UCLASS()
 class PIRATESVSVIKINGS_API ABRPlayerController : public APVVPlayerController
 {
 	GENERATED_BODY()
 
 public:
+	virtual void BeginPlay() override;
+	virtual void SetupInputComponent() override;
+
+	/** Main menu (team choice, host/join). Opens at startup and with M in game. */
+	void ShowMenu();
+	void HideMenu();
+	void ToggleMenu();
+	bool IsMenuOpen() const { return Menu != nullptr; }
+
 	/** Short message in the middle of this player's screen. */
 	UFUNCTION(Client, Reliable)
 	void Client_Notify(const FText& Message);
@@ -47,6 +58,10 @@ public:
 	virtual void PawnLeavingGame() override;
 
 protected:
+	UPROPERTY() TObjectPtr<UBRMenuWidget> Menu;
+	FTimerHandle PreferredTeamTimer;
+	void ApplyPreferredTeam();
+
 	UFUNCTION(Server, Reliable) void Server_SkipPhase();
 	UFUNCTION(Server, Reliable) void Server_GiveMoney(int32 Amount);
 	UFUNCTION(Server, Reliable) void Server_SetTime(float Hours);

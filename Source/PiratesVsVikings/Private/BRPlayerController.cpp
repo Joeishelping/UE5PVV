@@ -1,11 +1,104 @@
 #include "BRPlayerController.h"
 #include "BRCharacter.h"
 #include "BRDrone.h"
+#include "BRGameInstance.h"
 #include "BRGameMode.h"
+#include "BRMenuWidget.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/InputComponent.h"
+#include "InputCoreTypes.h"
+#include "TimerManager.h"
 #include "BRGameState.h"
 #include "BRPlayerState.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+
+void ABRPlayerController::BeginPlay()
+{
+	Super::BeginPlay();
+	if (!IsLocalController())
+	{
+		return;
+	}
+	UBRGameInstance* GI = GetGameInstance<UBRGameInstance>();
+	if (GI && GI->PreferredTeam != EPVVFaction::None)
+	{
+		// Wait a moment so the automatic team balancing has run, then switch to the chosen side.
+		GetWorldTimerManager().SetTimer(PreferredTeamTimer, this, &ABRPlayerController::ApplyPreferredTeam, 1.f, false);
+	}
+	if (GI && !GI->bMenuDone && GetNetMode() == NM_Standalone)
+	{
+		ShowMenu();
+	}
+}
+
+void ABRPlayerController::ApplyPreferredTeam()
+{
+	const UBRGameInstance* GI = GetGameInstance<UBRGameInstance>();
+	const ABRPlayerState* PS = GetPlayerState<ABRPlayerState>();
+	if (GI && GI->PreferredTeam != EPVVFaction::None && (!PS || PS->GetFaction() != GI->PreferredTeam))
+	{
+		RequestFaction(GI->PreferredTeam);
+	}
+}
+
+void ABRPlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ABRPlayerController::ToggleMenu);
+	}
+}
+
+void ABRPlayerController::ShowMenu()
+{
+	if (Menu || !IsLocalController())
+	{
+		return;
+	}
+	Menu = CreateWidget<UBRMenuWidget>(this, UBRMenuWidget::StaticClass());
+	if (!Menu)
+	{
+		return;
+	}
+	Menu->AddToViewport(50);
+	SetShowMouseCursor(true);
+	FInputModeGameAndUI Mode;
+	Mode.SetHideCursorDuringCapture(false);
+	SetInputMode(Mode);
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+}
+
+void ABRPlayerController::HideMenu()
+{
+	if (Menu)
+	{
+		Menu->RemoveFromParent();
+		Menu = nullptr;
+	}
+	SetShowMouseCursor(false);
+	SetInputMode(FInputModeGameOnly());
+	ResetIgnoreMoveInput();
+	ResetIgnoreLookInput();
+	if (UBRGameInstance* GI = GetGameInstance<UBRGameInstance>())
+	{
+		GI->bMenuDone = true;
+	}
+}
+
+void ABRPlayerController::ToggleMenu()
+{
+	if (Menu)
+	{
+		HideMenu();
+	}
+	else
+	{
+		ShowMenu();
+	}
+}
 
 void ABRPlayerController::Client_Notify_Implementation(const FText& Message)
 {
