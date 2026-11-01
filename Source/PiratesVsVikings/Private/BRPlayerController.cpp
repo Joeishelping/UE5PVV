@@ -5,11 +5,26 @@
 #include "BRGameState.h"
 #include "BRPlayerState.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 
 void ABRPlayerController::Client_Notify_Implementation(const FText& Message)
 {
 	LocalMessage = Message;
 	LocalMessageTime = GetWorld()->GetTimeSeconds();
+}
+
+void ABRPlayerController::Host()
+{
+	const FString Map = UGameplayStatics::GetCurrentLevelName(this, true);
+	UGameplayStatics::OpenLevel(this, FName(*Map), true, TEXT("listen"));
+}
+
+void ABRPlayerController::Join(const FString& Address)
+{
+	if (!Address.IsEmpty())
+	{
+		ClientTravel(Address.TrimStartAndEnd(), TRAVEL_Absolute);
+	}
 }
 
 void ABRPlayerController::SkipPhase() { Server_SkipPhase(); }

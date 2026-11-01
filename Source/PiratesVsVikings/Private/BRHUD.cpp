@@ -97,6 +97,12 @@ void ABRHUD::DrawHUD()
 		}
 	}
 
+	// --- Solo session: how to play with friends
+	if (GetNetMode() == NM_Standalone)
+	{
+		DrawText(TEXT("SOLO - press ~ and type  Host  (you host)  or  Join 26.x.x.x  (your friend's Radmin IP)"), Yellow, 20.f, SY - 210.f, Small, 1.2f);
+	}
+
 	// --- Personal message
 	if (Now - PC->LocalMessageTime < 4.f)
 	{

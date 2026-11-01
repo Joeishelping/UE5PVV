@@ -17,7 +17,13 @@ public:
 	FText LocalMessage;
 	float LocalMessageTime = -100.f;
 
-	// --- Test commands (press ~ to open the console) -------------------------------------
+	// --- Multiplayer (press ~ to open the console) -------------------------------------
+	/** Reopen this map as a listen server so friends can join (e.g. over Radmin VPN). */
+	UFUNCTION(Exec) void Host();
+	/** Connect to a host, e.g. "Join 26.12.34.56". */
+	UFUNCTION(Exec) void Join(const FString& Address);
+
+	// --- Test commands -----------------------------------------------------------------
 	/** Jump to the next phase (Prep -> Invasion -> End). */
 	UFUNCTION(Exec) void SkipPhase();
 	/** Give yourself money, e.g. "GiveMoney 500". */
