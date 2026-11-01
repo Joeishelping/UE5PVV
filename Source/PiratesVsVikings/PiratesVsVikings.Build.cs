@@ -14,7 +14,9 @@ public class PiratesVsVikings : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",
-			"AssetRegistry"
+			"AssetRegistry",
+			"OnlineSubsystem",
+			"OnlineSubsystemUtils"
 		});
 	}
 }

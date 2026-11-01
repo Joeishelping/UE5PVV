@@ -2,6 +2,7 @@
 #include "BRCar.h"
 #include "BRCharacter.h"
 #include "BRDrone.h"
+#include "BRGameInstance.h"
 #include "BRGameState.h"
 #include "BRPlayerController.h"
 #include "BRPlayerState.h"
@@ -100,7 +101,11 @@ void ABRHUD::DrawHUD()
 	// --- Solo session: how to play with friends
 	if (GetNetMode() == NM_Standalone)
 	{
-		DrawText(TEXT("SOLO - press ~ and type  Host  (you host)  or  Join 26.x.x.x  (your friend's Radmin IP)"), Yellow, 20.f, SY - 210.f, Small, 1.2f);
+		DrawText(TEXT("SOLO - press ~ and type  HostSteam  then Shift+Tab to invite friends   (no Steam? Host / Join 26.x.x.x via Radmin)"), Yellow, 20.f, SY - 210.f, Small, 1.2f);
+	}
+	if (const UBRGameInstance* GI = GetGameInstance<UBRGameInstance>())
+	{
+		DrawText(GI->StatusText, FLinearColor(0.7f, 0.7f, 0.7f), 20.f, SY - 230.f, Small, 1.0f);
 	}
 
 	// --- Personal message

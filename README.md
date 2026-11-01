@@ -11,6 +11,19 @@ The default GameMode is now `BRGameMode`. The original Pirates vs. Vikings mode 
 3. Play ▸ ⋮ ▸ **Number of Players = 2+**, **Net Mode = Play As Listen Server** ▸ **Play**.
    The first player is a Runner. After that about a third of the players become Wardens.
 
+## Playing with friends over Steam (invites)
+
+Unreal's built-in **Online Subsystem Steam** is switched on, using Valve's free test app **480**.
+1. Both of you: have **Steam running and logged in**. Use the **packaged game** (or Standalone), not Play-In-Editor.
+2. Host: press **~** → `HostSteam`. The map reloads as a hosted match.
+3. Host: **Shift+Tab** (Steam overlay) → friends list → right-click your sibling → **Invite to Game** (or type `Invite`).
+4. Sibling: accept the invite in Steam (or right-click you → **Join Game**) and they load straight into your match.
+   Fallback: they type `FindGame`, which joins the first Border Run session it finds.
+5. `LeaveGame` ends the session.
+
+No Steam? Everything falls back to normal IP networking, so the Radmin route (`Host` / `Join 26.x.x.x`) still works.
+App 480 is shared by every developer testing Steam, so the Steam overlay calls your game "Spacewar". That's normal.
+
 ## Update 2: trucks, NPC traffic, guns, dogs, traps, cockfights, music
 
 | Feature | How it works |
