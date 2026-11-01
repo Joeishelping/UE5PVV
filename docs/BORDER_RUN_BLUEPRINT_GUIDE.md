@@ -182,6 +182,42 @@ Item **Boombox** (rare, $120, black market or a task reward). Use it (key **T**)
 
 ---
 
+## 11b. Truck radio (switch stations while driving)
+
+Everyone in or near the truck hears the same song, and the driver changes stations.
+
+**Assets:**
+- 3–6 music tracks (Sound Waves) set to **Looping ✓**, plus a short "static/tune" crackle sound.
+- A Sound Attenuation asset `SA_Radio` (Inner 300, Falloff 1500) so people outside hear it faintly as the truck passes.
+- **Use music you have the rights to** (royalty-free libraries, Fab audio packs, or your own). Copyrighted songs get streams muted or DMCA'd.
+
+**Data:** Struct `S_RadioStation` (Name: Text, Track: Sound Base). Make an array variable `Stations` on the truck,
+e.g. "KDST 101.5 Desert Hits", "Polka Loco", "News: Wardens Budget Talks", "Static".
+
+**On the truck Blueprint:**
+1. Add an **Audio** component `RadioAudio`, attached to the truck body, Auto Activate ✗, Attenuation = SA_Radio.
+2. Variables (replicated):
+   - `StationIndex` (int, **RepNotify**, −1 = off)
+   - `StationStartTime` (float, Replicated): the server time when the song started, so late joiners hear the same part of the song.
+3. **Input** (driver only, in the vehicle's input): **R** = next station, **Shift+R** = previous, **Backspace** = radio off.
+   → `SR_ChangeStation(Delta)` (Server): `StationIndex = (StationIndex + Delta) mod Stations Length` →
+   `StationStartTime = Get Game State → Get Server World Time Seconds`.
+4. **OnRep_StationIndex** (runs on every machine, and on the server too):
+   - Play Sound 2D of the static crackle (local only, short), or play it at the truck location.
+   - If StationIndex == −1 → RadioAudio **Stop**.
+   - Else → RadioAudio **Set Sound** (Stations[StationIndex].Track) →
+     **Play** (Start Time = (ServerWorldTime − StationStartTime) **mod** track Duration). That keeps everyone in sync.
+   - Show a little toast for the driver and passengers: "📻 KDST 101.5 — Desert Hits".
+5. **Truck starts with a random station** on BeginPlay (Authority). NPC trucks too, so you can **hear** traffic coming.
+
+**Gameplay hooks (the fun part):**
+- **Loud = visible:** while the radio is on, the truck sends a soft NOISE ping to Wardens every 20 s. Sneaking means **radio off**.
+- **"Breaking news" station:** the radio reads the kill feed or Approval changes as fake news headlines (Text-to-speech, or a few recorded lines).
+- **NPC trucks always play music.** A Runner truck with the radio off at the checkpoint looks suspicious, so leave it on and blend in.
+- **Boombox synergy:** the truck radio can play the Boombox track (Section 11) for a moving dance party. Wardens near the truck dance; 60 s cooldown.
+
+---
+
 ## 12. Voice chat (proximity VOIP)
 
 Easiest working route: **Steam** (free test App ID 480).
