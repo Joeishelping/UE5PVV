@@ -164,6 +164,21 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "PVV|Boat")
 	void OnOccupantsChanged();
 
+	/** Height the hull floats at for a sample point. Boats: the lake. Cars: the ground under them. */
+	virtual bool GetSurfaceZ(const FVector& Point, float& OutZ) const;
+	/** Multiplies engine force (cars: 0 when out of fuel). */
+	virtual float GetDriveScale() const { return 1.f; }
+	/** Whether this character may take the driver's seat (cars: needs the key). */
+	virtual bool CanDrive(const APVVCharacter* Character) const { return true; }
+
+	UPROPERTY(Replicated)
+	float ThrottleInput = 0.f;
+
+	UPROPERTY(Replicated)
+	float SteerInput = 0.f;
+
+	TWeakObjectPtr<APVVLake> Lake;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Occupants, BlueprintReadOnly, Category = "PVV|Boat")
 	TArray<TObjectPtr<APVVCharacter>> Occupants;
 
@@ -172,13 +187,6 @@ protected:
 	float WetFraction = 0.f;
 
 private:
-	UPROPERTY(Replicated)
-	float ThrottleInput = 0.f;
-
-	UPROPERTY(Replicated)
-	float SteerInput = 0.f;
-
-	TWeakObjectPtr<APVVLake> Lake;
 	float SentThrottle = 0.f;
 	float SentSteer = 0.f;
 	float FlippedTime = 0.f;

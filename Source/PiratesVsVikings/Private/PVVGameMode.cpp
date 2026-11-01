@@ -27,7 +27,11 @@ APVVGameMode::APVVGameMode()
 void APVVGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+	StartMatchFlow();
+}
 
+void APVVGameMode::StartMatchFlow()
+{
 	if (APVVGameState* GS = GetPVVGameState())
 	{
 		GS->RemainingSeconds = MatchDurationSeconds;
@@ -51,7 +55,11 @@ void APVVGameMode::BuildTestArena()
 		return;
 	}
 	Arena->SpawnGameplayActors(TestArenaBoatClass, TestArenaBoatsPerSide);
+	RelocateExistingPlayers();
+}
 
+void APVVGameMode::RelocateExistingPlayers()
+{
 	// Anyone who joined before the arena existed gets moved (or spawned) at their team's base.
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{

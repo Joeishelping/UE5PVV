@@ -85,6 +85,7 @@ public:
 
 	bool CanAttack() const;
 	bool CanMove() const;
+	bool IsSprinting() const { return bIsSprinting; }
 
 	// --- Server actions --------------------------------------------------------------------
 
@@ -332,21 +333,24 @@ private:
 	UFUNCTION()
 	void OnRep_Sprinting();
 
-	void RefreshStateEffects();
-	void UpdateMovementSpeed();
 	void SetRagdoll(bool bEnable);
 	void UpdateStatusLabel();
 	void UpdateWading();
-	void EnsureDefaultInput();
-
 	AActor* FindBestInteractable();
 	void UpdateFocus();
 	void TickHold(float DeltaSeconds);
-	void CancelHold();
 	void PerformAttackSweep();
 	void BreakFree();
 	void ReleaseAllAttachments();
+
+protected:
+	void RefreshStateEffects();
+	virtual void UpdateMovementSpeed();
+	virtual void EnsureDefaultInput();
+	void CancelHold();
 	void SetState(EPVVCondition NewCondition);
+
+private:
 
 	// Input handlers
 	void Input_Move(const FInputActionValue& Value);

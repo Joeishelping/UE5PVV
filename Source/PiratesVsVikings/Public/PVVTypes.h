@@ -7,8 +7,8 @@ UENUM(BlueprintType)
 enum class EPVVFaction : uint8
 {
 	None		UMETA(DisplayName = "Unassigned"),
-	Pirates		UMETA(DisplayName = "Pirates"),
-	Vikings		UMETA(DisplayName = "Vikings")
+	Pirates		UMETA(DisplayName = "Runners"),	// attackers (Pirates in the original mode)
+	Vikings		UMETA(DisplayName = "Wardens")	// defenders (Vikings in the original mode)
 };
 
 /** What a character is currently able to do. Carrying / seating are tracked separately. */

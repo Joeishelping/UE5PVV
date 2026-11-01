@@ -30,7 +30,7 @@ public:
 	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
 
 	void RequestFaction(APlayerController* PC, EPVVFaction Faction);
-	EPVVFaction PickBalancedFaction() const;
+	virtual EPVVFaction PickBalancedFaction() const;
 	AActor* ChooseStartForFaction(EPVVFaction Faction) const;
 	void RespawnCharacter(APVVCharacter* Character);
 
@@ -102,6 +102,10 @@ protected:
 	void Announce(const FText& Message) const;
 
 	virtual void CheckWinConditions();
+	/** Called from BeginPlay. Default: match clock + greybox lake arena. */
+	virtual void StartMatchFlow();
+	/** Moves/spawns players who joined before the map was built. */
+	void RelocateExistingPlayers();
 	void EndMatch(EPVVFaction Winner);
 
 private:

@@ -1,3 +1,57 @@
+# BORDER RUN (current default mode) — UE 5.6 C++ prototype
+
+Team vs. team: **Runners** prepare in a desert town, then try to get across the border. **Wardens** have trucks,
+drones and guns, and must **catch, not kill**. Caught Runners are sent back over the Wall **by catapult**.
+
+The default GameMode is now `BRGameMode`. The original Pirates vs. Vikings mode (`PVVGameMode`) is still in the code below.
+
+## Play it
+1. Build and open the project as before: right-click `.uproject` → *Generate Visual Studio project files*, then double-click → Yes.
+2. Any level works, even an empty one. The game builds the desert map itself, high above the level.
+3. Play ▸ ⋮ ▸ **Number of Players = 2+**, **Net Mode = Play As Listen Server** ▸ **Play**.
+   The first player is a Runner. After that about a third of the players become Wardens.
+
+## How a match goes
+| Phase | Default | What happens |
+|---|---|---|
+| **Prep** | 10 min | The Line is a solid barrier. Runners work jobs (taco grill, shop register, digging junk), sell scrap, and buy ladders, wire cutters, gas, tacos, a boat, or (at night) an illegal gun. |
+| **Invasion** | 20 min | The Line opens. Runners cross the razor wire (cutters, or the gaps at the far ends), the river (wade against the current, boat, or the car if you can get it there) and the Wall (ladder). They need half their team to reach the green **Safe Zone** in the far east. |
+
+The map, west to east: **town** · THE LINE · razor wire · river · THE WALL · Warden HQ, holding pen and catapult · SAFE ZONE.
+
+### Runners
+- **Money** comes from jobs (hold E at a green counter). Shops are tap-E.
+- **Inventory:** 6 slots, shown at the bottom of the screen.
+- **Hunger:** eat with F. When starving you can't sprint, and at 0 you faint.
+- **Team car:** one random Runner gets the key. The car starts with an **empty tank**: buy a gas can and hold E at the car to pour it in.
+- **Stealth:** night, crouching (C) and sandstorms make Wardens' screens stop showing you at a distance. Sprinting and carrying a ladder make you more visible. The SEEN bar shows how visible you are.
+- **Getting caught:** you're zip-tied (mash Space to break free) and hauled to the holding pen. After the sentence (5 min, longer for repeat offenders) you're **catapulted back to town**, with no damage, and lose any illegal items. Teammates can **jailbreak** you by holding E at the cell door.
+- **River:** wading is slow, the current drags you sideways (worse in rain), and it makes you hungry.
+
+### Wardens
+- Free trucks with no key and infinite fuel. **RMB** fires: **X** switches between **taser** (knocks down) and **gun**.
+- **Q** launches a **drone**: fly with WASD and Space/Ctrl, left-click to **tag** a Runner so all Wardens see them for 10 s. Your body stays behind and is vulnerable.
+- Loud things (wire cutters, gunshots) show up as **NOISE** pings on Warden screens.
+- Catch flow: taser or punch → hold E to zip-tie → tap E to carry → carry them into the orange box at the holding pen and tap E.
+- **Approval:** shooting a Runner who **hasn't crossed the Line and hasn't drawn a gun** = **SCANDAL, −35 approval**. Arresting someone who never crossed = −10. Below 60% the drones are defunded; below 30% the guns are confiscated.
+
+### Day, night and weather
+A full day takes 24 real minutes. The match starts at 14:00, so night falls around the Invasion. Weather changes every few
+minutes: clear, **rain** (faster river current) or **sandstorm** (thick haze, great for sneaking).
+
+### Test commands (press ~ in game)
+| Command | Effect |
+|---|---|
+| `SkipPhase` | Prep → Invasion → end |
+| `GiveMoney 500` | Free money |
+| `SetTime 22` | Jump to 22:00 (night: black market opens) |
+| `SetWeather 2` | 0 clear, 1 rain, 2 sandstorm |
+| `JoinPirates` / `JoinVikings` | Switch to Runners / Wardens |
+
+Tune timers, team ratio, sentence length and penalties on `BRGameMode`. Make a Blueprint child and edit its Class Defaults.
+
+---
+
 # Pirates vs. Vikings — UE 5.6 Multiplayer Prototype
 
 An asymmetric multiplayer satire about immigration enforcement on Lake Superior.

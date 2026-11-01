@@ -154,7 +154,6 @@ void APVVBoat::ApplyWaterForces(float DeltaSeconds)
 			break;
 		}
 	}
-	const float WaterZ = Lake.IsValid() ? Lake->GetWaterSurfaceZ() : WaterSurfaceZ;
 
 	const FVector Origin = Hull->GetComponentLocation();
 	const FQuat Rotation = Hull->GetComponentQuat();
@@ -167,7 +166,12 @@ void APVVBoat::ApplyWaterForces(float DeltaSeconds)
 	for (const FVector& Offset : PontoonOffsets)
 	{
 		const FVector Point = Origin + Rotation.RotateVector(Offset);
-		const float Depth = WaterZ - Point.Z;
+		float SurfaceZ = 0.f;
+		if (!GetSurfaceZ(Point, SurfaceZ))
+		{
+			continue;
+		}
+		const float Depth = SurfaceZ - Point.Z;
 		if (Depth <= 0.f)
 		{
 			continue;
@@ -191,7 +195,8 @@ void APVVBoat::ApplyWaterForces(float DeltaSeconds)
 	const float ForwardSpeed = FVector::DotProduct(Velocity, Forward);
 	const float LateralSpeed = FVector::DotProduct(Velocity, Right);
 
-	FVector Accel = Forward * (ThrottleInput >= 0.f ? ThrottleInput * ForwardAcceleration : ThrottleInput * ReverseAcceleration);
+	const float Throttle = ThrottleInput * GetDriveScale();
+	FVector Accel = Forward * (Throttle >= 0.f ? Throttle * ForwardAcceleration : Throttle * ReverseAcceleration);
 	Accel -= Forward * ForwardSpeed * ForwardDrag;
 	Accel -= Right * LateralSpeed * LateralGrip;
 	Hull->AddForce(Accel * WetFraction, NAME_None, true);
@@ -202,6 +207,12 @@ void APVVBoat::ApplyWaterForces(float DeltaSeconds)
 	const float TargetYawRate = SteerInput * MaxTurnRate * Authority * Direction;
 	const float YawRate = Hull->GetPhysicsAngularVelocityInRadians().Z;
 	Hull->AddTorqueInRadians(FVector(0.f, 0.f, (TargetYawRate - YawRate) * TurnResponsiveness * WetFraction), NAME_None, true);
+}
+
+bool APVVBoat::GetSurfaceZ(const FVector& Point, float& OutZ) const
+{
+	OutZ = Lake.IsValid() ? Lake->GetWaterSurfaceZ() : WaterSurfaceZ;
+	return true;
 }
 
 void APVVBoat::TickFlipRecovery(float DeltaSeconds)
@@ -306,7 +317,7 @@ bool APVVBoat::TryBoard(APVVCharacter* Character)
 		return false;
 	}
 
-	const bool bCanDrive = Character->GetCondition() == EPVVCondition::Normal && Character->GetController();
+	const bool bCanDrive = Character->GetCondition() == EPVVCondition::Normal && Character->GetController() && CanDrive(Character);
 	int32 Seat = (bCanDrive && Occupants.Num() > 0 && !Occupants[0]) ? 0 : FindFreePassengerSeat();
 	if (Seat == INDEX_NONE)
 	{

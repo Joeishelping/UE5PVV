@@ -907,6 +907,7 @@ AActor* APVVCharacter::FindBestInteractable()
 	ObjectParams.AddObjectTypesToQuery(ECC_Vehicle);
 	ObjectParams.AddObjectTypesToQuery(ECC_PhysicsBody);
 	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(PVVInteract), false, this);
 	if (CarriedCharacter)
