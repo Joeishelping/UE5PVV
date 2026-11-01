@@ -23,6 +23,7 @@
 #include "Sound/SoundBase.h"
 #include "EngineUtils.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -189,7 +190,11 @@ void ABRDesertArena::BeginPlay()
 	GetComponents<UStaticMeshComponent>(Meshes);
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
-		if (const FLinearColor* Color = BlockColors.Find(Mesh->GetFName()))
+		if (const TObjectPtr<UMaterialInterface>* Material = BlockMaterials.Find(Mesh->GetFName()); Material && *Material)
+		{
+			Mesh->SetMaterial(0, *Material);
+		}
+		else if (const FLinearColor* Color = BlockColors.Find(Mesh->GetFName()))
 		{
 			if (UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(0))
 			{
@@ -342,7 +347,7 @@ FVector ABRDesertArena::GetCatapultLanding() const
 	return GetActorLocation() + FVector(-8500.f, 0.f, Ground + 50.f);
 }
 
-void ABRDesertArena::SpawnGameplayActors()
+void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass, TSubclassOf<ABRTruck> WardenTruckClass, TSubclassOf<ABRDog> DogClass)
 {
 	UWorld* World = GetWorld();
 	if (!HasAuthority() || !World)
@@ -426,11 +431,16 @@ void ABRDesertArena::SpawnGameplayActors()
 	auto Car = [&](float X, float Y, float Yaw, bool bWarden, const FLinearColor& Paint)
 	{
 		const FTransform T = At(X, Y, Ground + 80.f, Yaw);
-		if (ABRTruck* C = World->SpawnActorDeferred<ABRTruck>(ABRTruck::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		UClass* TruckClass = bWarden ? WardenTruckClass.Get() : RunnerTruckClass.Get();
+		if (!TruckClass) TruckClass = ABRTruck::StaticClass();
+		if (ABRTruck* C = World->SpawnActorDeferred<ABRTruck>(TruckClass, T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 		{
 			C->bRequiresKey = !bWarden;
 			C->bInfiniteFuel = bWarden;
-			C->PaintColor = Paint;
+			if (TruckClass == ABRTruck::StaticClass())
+			{
+				C->PaintColor = Paint; // your Blueprint trucks keep their own colour
+			}
 			C->FinishSpawning(T);
 		}
 	};
@@ -445,7 +455,7 @@ void ABRDesertArena::SpawnGameplayActors()
 	{
 		FActorSpawnParameters DogParams;
 		DogParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		World->SpawnActor<ABRDog>(ABRDog::StaticClass(), Home, FRotator::ZeroRotator, DogParams);
+		World->SpawnActor<ABRDog>(DogClass ? DogClass.Get() : ABRDog::StaticClass(), Home, FRotator::ZeroRotator, DogParams);
 	}
 
 	// --- Player starts

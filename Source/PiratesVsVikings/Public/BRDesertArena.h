@@ -6,6 +6,9 @@
 
 class ABRCatapult;
 class ABRCheckpointGate;
+class ABRDog;
+class ABRTruck;
+class UMaterialInterface;
 class ABRGameMode;
 class UAudioComponent;
 class USoundBase;
@@ -36,7 +39,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	/** Server: shops, fences, wall, catapult, pen, cars, player starts. */
-	void SpawnGameplayActors();
+	void SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass, TSubclassOf<ABRTruck> WardenTruckClass, TSubclassOf<ABRDog> DogClass);
 
 	bool IsInRiver(const FVector& WorldLocation) const;
 	/** Middle of the river: you can't touch the bottom (drowning), and vehicles flood. Not on the bridge. */
@@ -72,7 +75,10 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USkyAtmosphereComponent> Atmosphere;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UExponentialHeightFogComponent> Fog;
 	UPROPERTY() TObjectPtr<UStaticMesh> CubeMesh;
-	UPROPERTY() TMap<FName, FLinearColor> BlockColors;
+	/** Colour of every map block, by name (Sand_West, ToolShop_Back, Road_Strip...). Edit in a Blueprint child of this class. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TMap<FName, FLinearColor> BlockColors;
+	/** Put a real material (textured sand, wood, concrete...) on any block by name. Wins over BlockColors. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TMap<FName, TObjectPtr<UMaterialInterface>> BlockMaterials;
 	UPROPERTY() TObjectPtr<ABRCatapult> Catapult;
 	UPROPERTY() TObjectPtr<ABRCheckpointGate> Gate;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UAudioComponent> AmbientMusic;

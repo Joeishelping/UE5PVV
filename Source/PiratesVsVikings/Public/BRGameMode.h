@@ -6,6 +6,8 @@
 #include "BRGameMode.generated.h"
 
 class ABRDesertArena;
+class ABRDog;
+class ABRTruck;
 class ABRGameState;
 class APVVCharacter;
 
@@ -38,6 +40,13 @@ public:
 protected:
 	virtual void StartMatchFlow() override;
 	virtual void CheckWinConditions() override;
+
+	// --- Your Blueprints: make Blueprint children of these classes, then pick them here. -----
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") TSubclassOf<ABRDesertArena> ArenaClass;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") TSubclassOf<ABRTruck> RunnerTruckClass;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") TSubclassOf<ABRTruck> WardenTruckClass;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") TSubclassOf<ABRTruck> NPCTruckClass;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") TSubclassOf<ABRDog> DogClass;
 
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") int32 PrepSeconds = 600;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") int32 InvasionSeconds = 1200;

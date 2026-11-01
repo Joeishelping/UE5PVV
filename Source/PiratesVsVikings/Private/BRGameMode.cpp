@@ -2,6 +2,7 @@
 #include "BRCar.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
+#include "BRDog.h"
 #include "BRGameState.h"
 #include "BRHUD.h"
 #include "BRPlayerController.h"
@@ -22,6 +23,11 @@ ABRGameMode::ABRGameMode()
 	GameStateClass = ABRGameState::StaticClass();
 	HUDClass = ABRHUD::StaticClass();
 	NPCPassengerClass = ABRCharacter::StaticClass();
+	ArenaClass = ABRDesertArena::StaticClass();
+	RunnerTruckClass = ABRTruck::StaticClass();
+	WardenTruckClass = ABRTruck::StaticClass();
+	NPCTruckClass = ABRTruck::StaticClass();
+	DogClass = ABRDog::StaticClass();
 	bBuildTestArenaIfNoLake = false;
 	bVikingsWinWhenAllPiratesDetained = false;
 }
@@ -45,10 +51,11 @@ void ABRGameMode::StartMatchFlow()
 	{
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		Arena = GetWorld()->SpawnActor<ABRDesertArena>(ABRDesertArena::StaticClass(), FTransform(ArenaLocation), Params);
+		UClass* MapClass = ArenaClass ? ArenaClass.Get() : ABRDesertArena::StaticClass();
+		Arena = GetWorld()->SpawnActor<ABRDesertArena>(MapClass, FTransform(ArenaLocation), Params);
 		if (Arena)
 		{
-			Arena->SpawnGameplayActors();
+			Arena->SpawnGameplayActors(RunnerTruckClass, WardenTruckClass, DogClass);
 		}
 		RelocateExistingPlayers();
 	}
@@ -405,13 +412,17 @@ void ABRGameMode::SpawnNPCTruck()
 	}
 
 	const FTransform Spawn = Arena->GetNPCSpawn();
-	ABRTruck* Truck = GetWorld()->SpawnActorDeferred<ABRTruck>(ABRTruck::StaticClass(), Spawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	UClass* TruckClass = NPCTruckClass ? NPCTruckClass.Get() : ABRTruck::StaticClass();
+	ABRTruck* Truck = GetWorld()->SpawnActorDeferred<ABRTruck>(TruckClass, Spawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!Truck)
 	{
 		return;
 	}
 	const FLinearColor Paints[] = { {0.8f, 0.8f, 0.75f}, {0.2f, 0.35f, 0.6f}, {0.35f, 0.5f, 0.2f}, {0.6f, 0.55f, 0.1f}, {0.3f, 0.3f, 0.3f} };
-	Truck->PaintColor = Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Paints)) - 1)];
+	if (TruckClass == ABRTruck::StaticClass())
+	{
+		Truck->PaintColor = Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Paints)) - 1)];
+	}
 	Truck->bRequiresKey = true;	// players can hide in the back but can't steal it
 	Truck->bInfiniteFuel = true;
 	Truck->FinishSpawning(Spawn);
