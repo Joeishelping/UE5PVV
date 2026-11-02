@@ -73,7 +73,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDancing() const;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsOnShoulders() const { return bOnShoulders; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDiving() const { return bDiving; }
-	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsHoldingProp() const { return HeldProp != nullptr; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsHoldingProp() const;
 	/** Selected inventory slot (mouse wheel). */
 	int32 GetSelectedSlot() const { return SelectedSlot; }
 	/** Server: dance uncontrollably for a while (mariachi). */

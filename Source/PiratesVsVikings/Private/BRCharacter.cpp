@@ -1924,6 +1924,7 @@ void ABRCharacter::UpdateLocalVisibility()
 // Brawling: slaps, grab & throw, dive tackles, shoulder rides, props
 
 void ABRCharacter::Input_Grab() { Server_Grab(); }
+bool ABRCharacter::IsHoldingProp() const { return HeldProp != nullptr; }
 void ABRCharacter::Input_Dive() { Server_Dive(); }
 
 bool ABRCharacter::HandleJumpPressed()
