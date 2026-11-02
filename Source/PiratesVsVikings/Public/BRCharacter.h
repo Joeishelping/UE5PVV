@@ -316,6 +316,10 @@ private:
 	TArray<int32> SkinSlotsCache;
 	TWeakObjectPtr<USkeletalMesh> SkinSlotsMesh;
 	bool bWarnedNoMorphs = false;
+	// Face shapes are applied a moment after spawning (the body must be fully set up first).
+	bool bFacePending = false;
+	FBRLook PendingFace;
+	float FaceReadyTime = 0.f;
 	void PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectPtr<USkeletalMesh>>& Styles, int32 Index);
 	void ApplyFaceShape(const FBRLook& L);
 	void TickWander(float DeltaSeconds);

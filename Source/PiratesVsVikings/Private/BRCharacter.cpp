@@ -184,7 +184,8 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	{
 		OutfitHead->SetHiddenInGame(!L.bHat);
 	}
-	ApplyFaceShape(L);
+	PendingFace = L;
+	bFacePending = true; // applied in Tick once the body is ready
 }
 
 void ABRCharacter::PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectPtr<USkeletalMesh>>& Styles, int32 Index)
@@ -229,13 +230,20 @@ void ABRCharacter::ApplyFaceShape(const FBRLook& InLook)
 	{
 		const float SmallWeight = FMath::Clamp((0.5f - Slider) * 2.f, 0.f, 1.f);
 		const float BigWeight = FMath::Clamp((Slider - 0.5f) * 2.f, 0.f, 1.f);
-		for (USkeletalMeshComponent* Part : { GetMesh(), OutfitHead.Get(), OutfitFace.Get(), Hair.Get(), FacialHair.Get() })
+		// Only on the body: hair, hats and glasses copy the body's shape keys by name automatically.
+		USkeletalMeshComponent* Body = GetMesh();
+		const USkeletalMesh* Asset = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+		if (!Asset)
 		{
-			if (Part && Part->GetSkeletalMeshAsset())
-			{
-				Part->SetMorphTarget(Small, SmallWeight, false);
-				Part->SetMorphTarget(Big, BigWeight, false);
-			}
+			return;
+		}
+		if (Asset->FindMorphTarget(Small))
+		{
+			Body->SetMorphTarget(Small, SmallWeight, true);
+		}
+		if (Asset->FindMorphTarget(Big))
+		{
+			Body->SetMorphTarget(Big, BigWeight, true);
 		}
 	};
 	Pair(TEXT("Head_Small"), TEXT("Head_Big"), L.HeadSize);
@@ -419,6 +427,11 @@ void ABRCharacter::BeginPlay()
 	DefaultSocketOffset = CameraBoom->SocketOffset;
 	DefaultFOV = FollowCamera->FieldOfView;
 	EnableWobble();
+	if (GetMesh())
+	{
+		GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	}
+	FaceReadyTime = GetWorld()->GetTimeSeconds() + 1.f;
 	ApplyLook(Look);
 }
 
@@ -1253,6 +1266,11 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority())
 	{
 		TickWander(DeltaSeconds);
+	}
+	if (bFacePending && GetNetMode() != NM_DedicatedServer && GetWorld()->GetTimeSeconds() >= FaceReadyTime)
+	{
+		bFacePending = false;
+		ApplyFaceShape(PendingFace);
 	}
 
 	if (HasAuthority() && GS)
