@@ -887,6 +887,20 @@ void ABRGameMode::OnTruckCleared(APVVCharacter* Warden)
 	Feed(FString::Printf(TEXT("%s cleared a truck at the checkpoint (budget +$%d)"), *NameOf(Warden), BudgetPerClearedTruck));
 }
 
+ABRCharacter* ABRGameMode::SpawnLuchador(const FTransform& Where, UClass* LuchadorClass)
+{
+	UClass* Type = LuchadorClass ? LuchadorClass : GetNPCClass();
+	ABRCharacter* Fighter = GetWorld()->SpawnActorDeferred<ABRCharacter>(Type, Where, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!Fighter)
+	{
+		return nullptr;
+	}
+	Fighter->AutoPossessAI = EAutoPossessAI::Disabled;
+	Fighter->InitAsNPC(NPCSkinToneMin, NPCSkinToneMax);
+	Fighter->FinishSpawning(Where);
+	return Fighter;
+}
+
 void ABRGameMode::TickLobby(ABRGameState* GS)
 {
 	int32 People = 0, Ready = 0;

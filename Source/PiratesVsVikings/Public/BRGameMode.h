@@ -60,6 +60,9 @@ public:
 	void ApplyHostSettings(const FBRHostSettings& Settings);
 	void GetHostSettings(FBRHostSettings& Out) const;
 
+	/** Server: spawn a luchador for a ring fight (your Luchador Class, or the NPC class). */
+	class ABRCharacter* SpawnLuchador(const FTransform& Where, UClass* LuchadorClass);
+
 	// --- Bots ------------------------------------------------------------------------------
 	/** Server: add a computer player to this team (None = whichever team is smaller). */
 	void AddBot(EPVVFaction Team);

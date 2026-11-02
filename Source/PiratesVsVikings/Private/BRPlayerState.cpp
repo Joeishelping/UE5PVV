@@ -28,6 +28,7 @@ void ABRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPlayerState, StatTacos);
 	DOREPLIFETIME(ABRPlayerState, StatWrongful);
 	DOREPLIFETIME(ABRPlayerState, StatDances);
+	DOREPLIFETIME(ABRPlayerState, StatLuchaWins);
 	DOREPLIFETIME(ABRPlayerState, StatClearedTrucks);
 }
 

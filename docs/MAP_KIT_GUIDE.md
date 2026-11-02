@@ -89,6 +89,7 @@ Day/night, weather and ambient music are added to your map automatically.
 | **Mariachi Trumpet** | Sell it at a Station (Item = Mariachi Trumpet). A Runner who owns one presses **G** near Border Patrol and they dance for 4 seconds. Put your music in **BP_Runner → BR Mariachi → Trumpet Sound** and a dance animation in **BR Animations → Dance Anim**. |
 
 | **BR Watchtower** | Border Patrol side. Rotate the arrow to where the spotlight should sweep. Agents climb it with E and aim the light with their view. |
+| **BR Lucha Ring** | Wrestling ring. Runners pay to fight the luchador (win = double + his mask); others bet. Its counters appear by themselves. |
 | **BR Chicken** | Put a few in a yard. They wander, flee, and can be grabbed and thrown. |
 | **BR Station, Kind = Warden Supply** | A Border Patrol shop paid from the government budget. Pick **Warden Gear** (Extra Traps, Hard Hat, Drone Recharge, Patrol Dog), or set Gear = None and pick an **Item**. |
 | **BR Station, Item = Poncho** | Sells the poncho disguise (try Price 200). |

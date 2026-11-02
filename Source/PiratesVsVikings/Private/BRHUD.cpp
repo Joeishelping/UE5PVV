@@ -144,6 +144,7 @@ void ABRHUD::DrawHUD()
 			{ TEXT("Yeet Master"), &ABRPlayerState::StatThrows, TEXT("throws") },
 			{ TEXT("Mariachi Menace"), &ABRPlayerState::StatDances, TEXT("people made to dance") },
 			{ TEXT("Taco Addict"), &ABRPlayerState::StatTacos, TEXT("tacos") },
+			{ TEXT("Luchador Slayer"), &ABRPlayerState::StatLuchaWins, TEXT("ring wins") },
 		};
 		float AwardY = SY * 0.2f + 90.f;
 		for (const FAward& Award : Awards)
@@ -421,8 +422,8 @@ void ABRHUD::DrawHUD()
 	{
 		if (!bWarden && !PS->bReachedSafety && Me->GetCondition() == EPVVCondition::Normal)
 		{
-			const FVector Goal = BRMap::GetSafeZoneGoal(GetWorld(), Me->GetActorLocation());
-			Marker(Goal + FVector(0.f, 0.f, 300.f), FString::Printf(TEXT("SAFE ZONE  %dm"), FMath::RoundToInt(FVector::Dist2D(Goal, Me->GetActorLocation()) / 100.f)), Green);
+			const FVector SafeGoal = BRMap::GetSafeZoneGoal(GetWorld(), Me->GetActorLocation());
+			Marker(SafeGoal + FVector(0.f, 0.f, 300.f), FString::Printf(TEXT("SAFE ZONE  %dm"), FMath::RoundToInt(FVector::Dist2D(SafeGoal, Me->GetActorLocation()) / 100.f)), Green);
 		}
 		if (bWarden && Me->GetCarriedCharacter())
 		{

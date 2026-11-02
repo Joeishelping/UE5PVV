@@ -501,7 +501,7 @@ void UBRMenuWidget::RefreshPickers()
 	if (HatLockedText)
 	{
 		FString Locked;
-		for (int32 i = 1; i <= static_cast<int32>(EBRHat::CannonHelmet); ++i)
+		for (int32 i = 1; i <= static_cast<int32>(EBRHat::LuchaMask); ++i)
 		{
 			const FString Need = GI->HatUnlockText(static_cast<EBRHat>(i));
 			if (!Need.IsEmpty())
@@ -522,7 +522,7 @@ void UBRMenuWidget::StepHat(int32 Step)
 	}
 	// Options: -1 team default, 0 no hat, then every unlocked hat.
 	TArray<int32> Options = { -1, 0 };
-	for (int32 i = 1; i <= static_cast<int32>(EBRHat::CannonHelmet); ++i)
+	for (int32 i = 1; i <= static_cast<int32>(EBRHat::LuchaMask); ++i)
 	{
 		if (GI->IsHatUnlocked(static_cast<EBRHat>(i)))
 		{

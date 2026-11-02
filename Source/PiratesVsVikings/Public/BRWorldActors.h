@@ -7,6 +7,7 @@
 #include "BRWorldActors.generated.h"
 
 class ABRCockfightPit;
+class ABRLuchaRing;
 class ABRPlayerState;
 class APVVCharacter;
 class UBoxComponent;
@@ -79,6 +80,8 @@ public:
 	/** Bet stations: which rooster (0 = RED, 1 = BLUE). Leave Pit empty to use the nearest pit. */
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") int32 BetSide = 0;
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") TObjectPtr<ABRCockfightPit> Pit;
+	/** Lucha stations: which ring (empty = the nearest one). */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") TObjectPtr<ABRLuchaRing> Ring;
 	/** Boat stations: where the boat appears (drag the diamond in the viewport; should be on the water). */
 	UPROPERTY(EditAnywhere, Category = "BR|Station", meta = (MakeEditWidget = "true")) FVector BoatSpawnOffset = FVector(600.f, 0.f, 0.f);
 	/** Untick to hide the grey counter box (e.g. it sits inside your own shop counter model). It still works when you walk up to it. */
@@ -761,4 +764,77 @@ protected:
 	float Age = 0.f;
 	float Life = 1.f;
 	float BlobSize = 40.f;
+};
+
+// ===========================================================================================
+/**
+ * Lucha Libre ring. A Runner pays to FIGHT THE LUCHADOR (counters around the ring: $50 / $100 / $250).
+ * Then there are 15 seconds of betting: anyone can bet on the challenger or the luchador.
+ * The fight: first to get knocked down twice loses (time up = the luchador wins on points). Leaving the ring = forfeit.
+ * The winner's side gets double their money back. Beat him and you win his mask (Lucha Mask hat).
+ * Bigger fights = tougher luchador.
+ */
+UCLASS(meta = (DisplayName = "BR Lucha Ring"))
+class PIRATESVSVIKINGS_API ABRLuchaRing : public ABRGreyboxActor
+{
+	GENERATED_BODY()
+
+public:
+	ABRLuchaRing();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** Your own luchador Blueprint (leave empty to use the NPC class). */
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") TSubclassOf<class ABRCharacter> LuchadorClass;
+	/** Ring names picked at random. */
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") TArray<FString> LuchadorNames;
+	/** Put the challenge + betting counters around the ring automatically. */
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") bool bSpawnCounters = true;
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float BettingSeconds = 15.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float FightSeconds = 90.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") int32 KnockdownsToWin = 2;
+	/** How much tougher he gets per $100 of wager (1 = +100% balance). */
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float ToughnessPer100 = 0.35f;
+	/** Size of the square ring (cm, edge to edge). */
+	static constexpr float RingSize = 700.f;
+	static constexpr float DeckHeight = 90.f;
+
+	bool IsOpenForChallenge() const;
+	bool IsTakingBets() const;
+	bool HasBet(const ABRPlayerState* Player) const;
+	bool IsChallenger(const APVVCharacter* Who) const;
+	/** Server: start a fight. */
+	bool Challenge(class ABRCharacter* Runner, int32 Wager);
+	/** Server: returns the amount taken (0 = refused). Side 0 = challenger, 1 = luchador. */
+	int32 PlaceBet(ABRPlayerState* Player, int32 Side, int32 Amount);
+	/** Server: a station or the pit's own counters. */
+	void SpawnCounters();
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Board;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> BoardBack;
+	UPROPERTY(Replicated) uint8 State = 0; // 0 open, 1 betting, 2 fighting, 3 result
+	UPROPERTY(Replicated) float StateEndsAt = 0.f;
+	UPROPERTY(Replicated) FString ChallengerName;
+	UPROPERTY(Replicated) FString FighterName;
+	UPROPERTY(Replicated) int32 ChallengerKOs = 0;
+	UPROPERTY(Replicated) int32 LuchadorKOs = 0;
+	UPROPERTY(Replicated) int32 Wager = 0;
+	UPROPERTY(Replicated) int32 PotChallenger = 0;
+	UPROPERTY(Replicated) int32 PotLuchador = 0;
+	UPROPERTY(Replicated) FString ResultText;
+
+private:
+	struct FLuchaBet { TWeakObjectPtr<ABRPlayerState> Player; int32 Side = 0; int32 Amount = 0; };
+	TArray<FLuchaBet> Bets;
+	TWeakObjectPtr<class ABRCharacter> Challenger;
+	TWeakObjectPtr<class ABRCharacter> Luchador;
+	bool bChallengerWasDown = false;
+	bool bLuchadorWasDown = false;
+	float NextSwing = 0.f;
+	FVector Corner(int32 Which) const;
+	void TickFight(float ServerNow);
+	void Finish(int32 WinnerSide, const FString& Why);
+	void UpdateBoard(float ServerNow);
 };

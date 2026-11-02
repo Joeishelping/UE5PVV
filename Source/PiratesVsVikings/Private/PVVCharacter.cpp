@@ -1056,6 +1056,18 @@ void APVVCharacter::Server_InteractStart_Implementation()
 	HoldProgress = 0.f;
 }
 
+// (These live in the .cpp on purpose: writing an RPC's _Implementation name in a header makes Unreal skip declaring it.)
+void APVVCharacter::BotAttack() { Server_Attack_Implementation(); }
+void APVVCharacter::BotStruggle() { Server_Struggle_Implementation(); }
+
+void APVVCharacter::BotSetSprinting(bool bSprint)
+{
+	if (bSprint != bIsSprinting)
+	{
+		Server_SetSprinting_Implementation(bSprint);
+	}
+}
+
 bool APVVCharacter::BotInteractWith(AActor* Target)
 {
 	if (!HasAuthority() || !Target || Condition != EPVVCondition::Normal || CarriedBy || HoldTarget || !Target->Implements<UPVVInteractable>()

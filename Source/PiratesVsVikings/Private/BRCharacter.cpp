@@ -141,6 +141,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, WornHat);
 	DOREPLIFETIME(ABRCharacter, bDisguised);
 	DOREPLIFETIME(ABRCharacter, HeldItem);
+	DOREPLIFETIME(ABRCharacter, LuchaName);
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -2299,7 +2300,8 @@ void ABRCharacter::Server_Dive_Implementation()
 	bDiving = true;
 	BlowDisguise();
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
-	LaunchCharacter(Forward * DiveSpeed + FVector(0.f, 0.f, 320.f), true, true);
+	const float MaskBoost = WornHat == EBRHat::LuchaMask ? 1.4f : 1.f; // Lucha Mask: flying dives
+	LaunchCharacter(Forward * DiveSpeed * MaskBoost + FVector(0.f, 0.f, 320.f), true, true);
 }
 
 void ABRCharacter::ClimbOnto(ABRCharacter* Base)
@@ -2398,7 +2400,8 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 			if (Victim && Victim != this && Victim->GetCondition() == EPVVCondition::Normal && !Victim->GetCarrier() && !Victim->GetCurrentBoat())
 			{
 				bDiving = false;
-				Victim->ApplyKnockdown(this, Forward * 650.f + FVector(0.f, 0.f, 300.f));
+				const float TackleBoost = WornHat == EBRHat::LuchaMask ? 1.5f : 1.f;
+				Victim->ApplyKnockdown(this, (Forward * 650.f + FVector(0.f, 0.f, 300.f)) * TackleBoost);
 				if (ABRPlayerState* PS = GetBRPlayerState())
 				{
 					++PS->StatTackles;
@@ -2738,6 +2741,28 @@ void ABRCharacter::Multicast_Emote_Implementation(uint8 Index)
 	}
 }
 
+// (In the .cpp on purpose: an RPC's _Implementation name written in a header stops Unreal declaring it.)
+void ABRCharacter::BotMash() { Server_Mash_Implementation(); }
+void ABRCharacter::BotEat() { Server_Eat_Implementation(); }
+void ABRCharacter::BotDive() { Server_Dive_Implementation(); }
+
+void ABRCharacter::MakeLuchador(const FString& RingName, float Toughness)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	LuchaName = RingName;
+	SetCombatStats(100.f * Toughness, 25.f * (0.8f + 0.25f * Toughness));
+	BaseAttackDamage = -1.f; // re-read the new damage next time it holds something
+	SetHat(EBRHat::LuchaMask);
+	FBRLook Fighter = Look;
+	Fighter.ShirtColor = FMath::FRandRange(0.06f, 1.f);
+	Fighter.PantsColor = FMath::FRandRange(0.06f, 1.f);
+	SetLook(Fighter);
+	ForceNetUpdate();
+}
+
 void ABRCharacter::Input_DropCash() { Server_DropCash(); }
 
 void ABRCharacter::Server_DropCash_Implementation()
@@ -2792,6 +2817,11 @@ void ABRCharacter::TickHeadTag()
 	if (Now < EmoteBubbleUntil)
 	{
 		Text = EmoteBubble;
+	}
+	else if (!LuchaName.IsEmpty())
+	{
+		Text = LuchaName;
+		Color = FColor(255, 150, 40);
 	}
 	else if (bBounty)
 	{

@@ -24,6 +24,7 @@ In the Content Browser, open the folder where your outfits are.
 - `SK_Hat_Sombrero.glb`
 - `SK_Hat_HardHat.glb`
 - `SK_Hat_CannonHelmet.glb`
+- `SK_Hat_LuchaMask.glb`
 - `SK_Outfit_Poncho.glb`
 
 In the import window:
@@ -46,7 +47,7 @@ Open **BP_Runner** → **Class Defaults** (top bar). Do the same in **BP_Warden*
 Tip: type the category name in the Details search box.
 
 ### BR | Hats
-**Hat Meshes**: click **+** five times. Set each row's left box to a hat and the right box to its mesh:
+**Hat Meshes**: click **+** six times. Set each row's left box to a hat and the right box to its mesh:
 
 | Hat | Mesh |
 |---|---|
@@ -55,8 +56,9 @@ Tip: type the category name in the Details search box.
 | Patrol Cap | SK_Outfit_PatrolCap |
 | Hard Hat | SK_Hat_HardHat |
 | Cannon Helmet | SK_Hat_CannonHelmet |
+| Lucha Mask | SK_Hat_LuchaMask |
 
-Fill in all five in **both** Blueprints, because hats fly off and anyone can pick them up.
+Fill in all six in **both** Blueprints, because hats fly off and anyone can pick them up.
 
 | Setting | BP_Runner | BP_Warden |
 |---|---|---|
@@ -138,6 +140,7 @@ Other sounds still live on the Blueprints:
 | Patrol Cap | scanner is twice as fast with longer range | Border Patrol starts with it |
 | Sombrero | 40% slower hunger, harder to spot in daytime | **unlock:** eat 30 tacos |
 | Hard Hat | 40% less damage from hits | **unlock:** knock out 25 people (or Border Patrol buys one at a supply counter) |
+| Lucha Mask | dives fly 40% farther, tackles hit 50% harder | **win it** by beating the luchador in the ring |
 | Cannonball Helmet | land from the cannon or catapult on your feet | **unlock:** 10 cannon shots. **Buying the Cannonball Suit puts it on right away.** Wearing it lets you use the cannon. |
 
 - Pick your hat in **M → Customize → Hat**. Locked hats show your progress ("Eat 30 tacos (12/30)").
@@ -150,6 +153,17 @@ Other sounds still live on the Blueprints:
 - About 1 in 4 locals wear ponchos too.
 - While you're disguised, scanners say "papers in order", spotlights ignore you, and Border Patrol bots ignore you.
 - **Sprinting, punching, diving, grabbing or getting hit rips the poncho**, and the disguise is blown.
+
+## Lucha Libre: fight the luchador for money
+There's a wrestling ring next to the cockfight (test map), with counters around it:
+- **Red counters: FIGHT THE LUCHADOR** for **$50, $100 or $250**. Bigger fights mean a tougher luchador.
+- You're put in your corner. For **15 seconds** everyone else can bet at the counters (**BET ON THE CHALLENGER** / **BET ON THE LUCHADOR**, $20 or $100).
+- **DING DING!** The first fighter knocked down **twice** loses. Throwing him out of the ring counts as a knockdown.
+- **Leaving the ring = you lose.** If time runs out (90 s), the luchador wins on points unless you knocked him down more.
+- **Win: you get double your money back AND his Lucha Mask** (it unlocks for good). Everyone who bet on the winner gets double their bet.
+- The board above the ring shows the score and the betting pots.
+- Settings: click the ring in the level → **BR | Lucha** (luchador names, fight length, knockdowns to win, toughness, your own **Luchador Class** Blueprint).
+- **On your own map:** place a **BR Lucha Ring**. Its counters appear by themselves.
 
 ## Border Patrol government budget
 - Border Patrol shares a budget, shown at the bottom left. It starts at **$3000**.
@@ -223,6 +237,7 @@ They aren't geniuses, but they're good for testing and for filling out small gam
 | Hats don't change / everyone has the same hat | **Hat Meshes** is empty in that Blueprint. Fill all 5 rows (Step 2). |
 | Hats float or sit inside the head | They were imported without your body's skeleton. Re-import with **Skeleton** = your body skeleton. |
 | Trumpet sits in the wrong spot | Change **Held Item Offset** (BR \| Hats). |
+| Luchador has no mask | Add the **Lucha Mask** row to **Hat Meshes** (Step 2). |
 | Emotes only show "*waves*" text | Put the Emote animations in the **BR \| Animations** slots. |
 | No lobby | It's skipped when you play solo. In multiplayer, check that **Ready-up lobby** is ON in the host settings. |
 | Bots stand still | They need the Line to be open for most things (`SkipPhase`). Runner bots also need a ladder shop on your map. |

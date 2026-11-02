@@ -54,6 +54,43 @@ strap = ring_torus(1.66, HR + .045, .012, S=56, s=6, depth=1.0)
 write("SK_Hat_CannonHelmet", [Part(helm, "hat", "M_Silver"), Part(stripe, "hat", "M_Red"), Part(goggles, "hat", "M_Lens"), Part(strap, "hat", "M_Strap")],
       [M("M_Silver", (0.8, 0.82, 0.85), .9, .25), M("M_Red", (0.85, 0.08, 0.06)), M("M_Lens", (0.1, 0.4, 0.6), .6, .1), M("M_Strap", (0.1, 0.08, 0.06))])
 
+# ---------------------------------------------------------------- Lucha mask: the real head shape, puffed out a little
+def _load_body(path="../SK_PVV_Body_Custom.glb"):
+    d = open(path, "rb").read(); jl = struct.unpack_from("<I", d, 12)[0]; g = json.loads(d[20:20 + jl]); b = d[20 + jl + 8:]
+    def acc(i):
+        a = g["accessors"][i]; v = g["bufferViews"][a["bufferView"]]
+        n = {"SCALAR": 1, "VEC3": 3}[a["type"]]; dt = {5126: np.float32, 5125: np.uint32, 5123: np.uint16}[a["componentType"]]
+        return np.frombuffer(b, dt, a["count"] * n, v.get("byteOffset", 0) + a.get("byteOffset", 0)).reshape(-1, n) if n > 1 else \
+            np.frombuffer(b, dt, a["count"], v.get("byteOffset", 0) + a.get("byteOffset", 0))
+    for prim in g["meshes"][0]["primitives"]:
+        if g["materials"][prim["material"]]["name"] == "M_Skin":
+            return acc(prim["attributes"]["POSITION"]).astype(float), acc(prim["indices"]).reshape(-1, 3).astype(int)
+    raise RuntimeError("no M_Skin in body")
+
+BV, BF = _load_body()
+cent = BV[BF].mean(1)
+keep = cent[:, 1] > 1.30
+EYE_X, EYE_Y = .105, 1.60
+def _in_ellipse(c, cx, cy, rx, ry): return ((c[:, 0] - cx) / rx) ** 2 + ((c[:, 1] - cy) / ry) ** 2
+front = cent[:, 2] > .12
+eye_d = np.minimum(_in_ellipse(cent, EYE_X, EYE_Y, .062, .045), _in_ellipse(cent, -EYE_X, EYE_Y, .062, .045))
+mouth_d = _in_ellipse(cent, 0., 1.405, .085, .05)
+hole = front & ((eye_d < 1) | (mouth_d < 1))
+keep &= ~hole
+trim = front & (((eye_d >= 1) & (eye_d < 2.1)) | ((mouth_d >= 1) & (mouth_d < 1.9)))
+crest = (np.abs(cent[:, 0]) < .03) & (cent[:, 1] > 1.66)
+flame = front & (cent[:, 1] > 1.66) & (cent[:, 1] < 1.76) & (np.abs(np.abs(cent[:, 0]) - (.06 + (cent[:, 1] - 1.66) * 1.3)) < .018)
+Nrm = normals(BV, BF)
+PV = BV + Nrm * .009  # puff it out so it sits on top of the skin
+
+def _sub(mask):
+    F = BF[mask]; used = np.unique(F); remap = -np.ones(len(PV), int); remap[used] = np.arange(len(used))
+    return PV[used], remap[F]
+red = keep & ~trim & ~crest & ~flame
+write("SK_Hat_LuchaMask", [Part(_sub(red), "hat", "M_MaskRed"), Part(_sub(keep & trim), "hat", "M_MaskWhite"),
+                           Part(_sub(keep & (crest | flame) & ~trim), "hat", "M_MaskGold")],
+      [M("M_MaskRed", (0.75, 0.05, 0.12), 0., .4), M("M_MaskWhite", (0.95, 0.95, 0.95)), M("M_MaskGold", (1.0, 0.78, 0.15), .6, .3)])
+
 # ---------------------------------------------------------------- Poncho: wide striped cone over the torso
 pth = TH(56)
 prings = []

@@ -89,10 +89,15 @@ public:
 	int32 GetEmoteChoice() const { return EmoteChoice; }
 	/** Server: drone ready to launch again right now (bought with the budget). */
 	void RechargeDrone() { LastDroneTime = -1000.f; }
+	/** Server: turn this NPC into a luchador for a ring fight (tougher with a bigger wager). */
+	void MakeLuchador(const FString& RingName, float Toughness);
+	/** Ring name shown over a luchador's head. */
+	UPROPERTY(Replicated) FString LuchaName;
+
 	// Bot controls (server).
-	void BotMash() { Server_Mash_Implementation(); }
-	void BotEat() { Server_Eat_Implementation(); }
-	void BotDive() { Server_Dive_Implementation(); }
+	void BotMash();
+	void BotEat();
+	void BotDive();
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDisguised() const { return bDisguised; }
 	/** Server: put on a hat (drops nothing - see KnockOffHat). */
 	void SetHat(EBRHat Hat);

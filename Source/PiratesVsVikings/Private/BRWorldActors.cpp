@@ -162,6 +162,7 @@ void ABRStation::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifeti
 	DOREPLIFETIME(ABRStation, Color);
 	DOREPLIFETIME(ABRStation, BetSide);
 	DOREPLIFETIME(ABRStation, Pit);
+	DOREPLIFETIME(ABRStation, Ring);
 	DOREPLIFETIME(ABRStation, NextUseServerTime);
 }
 
@@ -174,6 +175,19 @@ void ABRStation::BeginPlay()
 		if (BoatSpawn.IsNearlyZero())
 		{
 			BoatSpawn = GetActorTransform().TransformPosition(BoatSpawnOffset);
+		}
+		if ((Kind == EBRStationKind::LuchaChallenge || Kind == EBRStationKind::LuchaBet) && !Ring)
+		{
+			float BestRing = MAX_flt;
+			for (TActorIterator<ABRLuchaRing> It(GetWorld()); It; ++It)
+			{
+				const float D = FVector::DistSquared(It->GetActorLocation(), GetActorLocation());
+				if (D < BestRing)
+				{
+					BestRing = D;
+					Ring = *It;
+				}
+			}
 		}
 		if (Kind == EBRStationKind::Bet && !Pit)
 		{
@@ -201,6 +215,8 @@ void ABRStation::BeginPlay()
 		case EBRStationKind::BuyBoat: Text = FString::Printf(TEXT("BOATS $%d"), Price); break;
 		case EBRStationKind::Bet: Text = FString::Printf(TEXT("%s %s"), BetSide == 0 ? TEXT("RED") : TEXT("BLUE"), Price > 0 ? *FString::Printf(TEXT("$%d"), Price) : TEXT("ALL IN")); break;
 		case EBRStationKind::HireClient: Text = FString::Printf(TEXT("COYOTE: SMUGGLE A CLIENT (+$%d on arrival)"), Price); break;
+		case EBRStationKind::LuchaChallenge: Text = FString::Printf(TEXT("FIGHT THE LUCHADOR: $%d (win $%d)"), Price, Price * 2); break;
+		case EBRStationKind::LuchaBet: Text = FString::Printf(TEXT("BET $%d ON THE %s"), Price, BetSide == 0 ? TEXT("CHALLENGER") : TEXT("LUCHADOR")); break;
 		case EBRStationKind::WardenSupply: Text = FString::Printf(TEXT("GOV. SUPPLY: %s $%d"), *BR::WardenGearName(WardenGear, Item).ToUpper(), Price); break;
 		default: break;
 		}
@@ -243,6 +259,14 @@ bool ABRStation::CanInteract_Implementation(APVVCharacter* Interactor) const
 	if (Kind == EBRStationKind::Bet)
 	{
 		return PS && Pit && Pit->IsTakingBets() && !Pit->HasBet(PS) && PS->Money > 0;
+	}
+	if (Kind == EBRStationKind::LuchaChallenge)
+	{
+		return PS && Ring && Ring->IsOpenForChallenge() && PS->Money >= Price;
+	}
+	if (Kind == EBRStationKind::LuchaBet)
+	{
+		return PS && Ring && Ring->IsTakingBets() && !Ring->HasBet(PS) && !Ring->IsChallenger(Interactor) && PS->Money > 0;
 	}
 	return true;
 }
@@ -299,6 +323,9 @@ FText ABRStation::GetInteractPrompt_Implementation(APVVCharacter* Interactor) co
 	case EBRStationKind::Bet:
 		return Price <= 0 ? FText::Format(LOCTEXT("AllIn", "Go ALL IN on the {0} rooster (pays x2.5)"), SideText)
 			: FText::Format(LOCTEXT("Bet", "Bet ${0} on the {1} rooster (pays x2)"), Price, SideText);
+	case EBRStationKind::LuchaChallenge: return FText::Format(LOCTEXT("LuchaChallenge", "Challenge the luchador for ${0} (win ${1} + his mask)"), Price, Price * 2);
+	case EBRStationKind::LuchaBet: return FText::Format(LOCTEXT("LuchaBet", "Bet ${0} on the {1} (pays x2)"), Price,
+		BetSide == 0 ? LOCTEXT("TheChallenger", "challenger") : LOCTEXT("TheLuchador", "luchador"));
 	case EBRStationKind::HireClient: return FText::Format(LOCTEXT("Hire", "Take a smuggling client (paid ${0} when you get them to the Safe Zone)"), Price);
 	case EBRStationKind::WardenSupply:
 	{
@@ -425,6 +452,25 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 			GM->HireClient(Cast<ABRCharacter>(Interactor), GetActorLocation() + GetActorForwardVector() * 150.f, Price);
 		}
 		NextUseServerTime = GS->GetServerWorldTimeSeconds() + FMath::Max(CooldownSeconds, 5.f);
+		break;
+
+	case EBRStationKind::LuchaChallenge:
+		if (Ring)
+		{
+			Ring->Challenge(Cast<ABRCharacter>(Interactor), Price);
+		}
+		break;
+
+	case EBRStationKind::LuchaBet:
+		if (Ring)
+		{
+			const int32 Amount = Ring->PlaceBet(PS, BetSide, Price);
+			if (Amount > 0)
+			{
+				Tell(Interactor, FText::Format(LOCTEXT("LuchaBetPlaced", "You bet ${0} on the {1}."), Amount,
+					BetSide == 0 ? LOCTEXT("TheChallenger2", "challenger") : LOCTEXT("TheLuchador2", "luchador")));
+			}
+		}
 		break;
 
 	case EBRStationKind::WardenSupply:
@@ -2944,6 +2990,369 @@ void ABRVillage::Tick(float DeltaSeconds)
 			Rot = FRotator(0.f, To.Rotation().Yaw, 0.f);
 		}
 		Bird->SetRelativeLocationAndRotation(Pos, Rot);
+	}
+}
+
+// ===========================================================================================
+// Lucha Libre ring
+
+ABRLuchaRing::ABRLuchaRing()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	const float Half = RingSize * 0.5f;
+	const FLinearColor Canvas(0.2f, 0.35f, 0.75f), Apron(0.75f, 0.1f, 0.15f), Rope(0.95f, 0.95f, 0.95f), Gold(1.f, 0.78f, 0.15f);
+	AddMesh(TEXT("Deck"), CubeMesh, FVector(0.f, 0.f, DeckHeight * 0.5f), FVector(RingSize, RingSize, DeckHeight), Canvas);
+	AddMesh(TEXT("ApronN"), CubeMesh, FVector(0.f, Half + 2.f, DeckHeight * 0.45f), FVector(RingSize, 4.f, DeckHeight * 0.9f), Apron, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("ApronS"), CubeMesh, FVector(0.f, -Half - 2.f, DeckHeight * 0.45f), FVector(RingSize, 4.f, DeckHeight * 0.9f), Apron, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("ApronE"), CubeMesh, FVector(Half + 2.f, 0.f, DeckHeight * 0.45f), FVector(4.f, RingSize, DeckHeight * 0.9f), Apron, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("ApronW"), CubeMesh, FVector(-Half - 2.f, 0.f, DeckHeight * 0.45f), FVector(4.f, RingSize, DeckHeight * 0.9f), Apron, FRotator::ZeroRotator, false);
+	// Steps up to the canvas on two sides.
+	AddMesh(TEXT("StepW1"), CubeMesh, FVector(-Half - 60.f, 0.f, 22.f), FVector(120.f, 200.f, 44.f), FLinearColor(0.3f, 0.3f, 0.32f));
+	AddMesh(TEXT("StepE1"), CubeMesh, FVector(Half + 60.f, 0.f, 22.f), FVector(120.f, 200.f, 44.f), FLinearColor(0.3f, 0.3f, 0.32f));
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const float X = (i % 2) ? Half - 15.f : -Half + 15.f, Y = (i / 2) ? Half - 15.f : -Half + 15.f;
+		AddMesh(*FString::Printf(TEXT("Post%d"), i), CylinderMesh, FVector(X, Y, DeckHeight + 75.f), FVector(22.f, 22.f, 150.f), i % 3 == 0 ? Apron : Canvas);
+		AddMesh(*FString::Printf(TEXT("Pad%d"), i), CubeMesh, FVector(X, Y, DeckHeight + 140.f), FVector(28.f, 28.f, 22.f), Gold, FRotator::ZeroRotator, false);
+	}
+	for (int32 Level = 0; Level < 3; ++Level)
+	{
+		const float Z = DeckHeight + 40.f + Level * 40.f;
+		const float In = Half - 15.f;
+		AddMesh(*FString::Printf(TEXT("RopeN%d"), Level), CylinderMesh, FVector(0.f, In, Z), FVector(4.f, 4.f, RingSize - 30.f), Rope, FRotator(90.f, 0.f, 0.f), false);
+		AddMesh(*FString::Printf(TEXT("RopeS%d"), Level), CylinderMesh, FVector(0.f, -In, Z), FVector(4.f, 4.f, RingSize - 30.f), Rope, FRotator(90.f, 0.f, 0.f), false);
+		AddMesh(*FString::Printf(TEXT("RopeE%d"), Level), CylinderMesh, FVector(In, 0.f, Z), FVector(4.f, 4.f, RingSize - 30.f), Rope, FRotator(0.f, 0.f, 90.f), false);
+		AddMesh(*FString::Printf(TEXT("RopeW%d"), Level), CylinderMesh, FVector(-In, 0.f, Z), FVector(4.f, 4.f, RingSize - 30.f), Rope, FRotator(0.f, 0.f, 90.f), false);
+	}
+	Board = AddLabel(TEXT("Board"), FVector(0.f, 0.f, 430.f), 34.f, FColor(255, 210, 60));
+	BoardBack = AddLabel(TEXT("BoardBack"), FVector(0.f, 0.f, 430.f), 34.f, FColor(255, 210, 60));
+	BoardBack->SetRelativeRotation(FRotator(0.f, 180.f, 0.f));
+	LuchadorNames = { TEXT("EL TORO"), TEXT("EL BIGOTE"), TEXT("LA MOMIA"), TEXT("SR. TACO"), TEXT("EL DIABLO AZUL"), TEXT("CHUPACABRA"), TEXT("EL CACTUS") };
+}
+
+void ABRLuchaRing::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRLuchaRing, State);
+	DOREPLIFETIME(ABRLuchaRing, StateEndsAt);
+	DOREPLIFETIME(ABRLuchaRing, ChallengerName);
+	DOREPLIFETIME(ABRLuchaRing, FighterName);
+	DOREPLIFETIME(ABRLuchaRing, ChallengerKOs);
+	DOREPLIFETIME(ABRLuchaRing, LuchadorKOs);
+	DOREPLIFETIME(ABRLuchaRing, Wager);
+	DOREPLIFETIME(ABRLuchaRing, PotChallenger);
+	DOREPLIFETIME(ABRLuchaRing, PotLuchador);
+	DOREPLIFETIME(ABRLuchaRing, ResultText);
+}
+
+void ABRLuchaRing::BeginPlay()
+{
+	Super::BeginPlay();
+	if (HasAuthority() && bSpawnCounters)
+	{
+		SpawnCounters();
+	}
+}
+
+void ABRLuchaRing::SpawnCounters()
+{
+	const float Out = RingSize * 0.5f + 300.f;
+	struct FSpot { FVector Offset; EBRStationKind Kind; int32 Side; int32 Amount; };
+	const FSpot Spots[] = {
+		{ FVector(-Out, -300.f, 0.f), EBRStationKind::LuchaChallenge, 0, 50 },
+		{ FVector(-Out, 300.f, 0.f), EBRStationKind::LuchaChallenge, 0, 100 },
+		{ FVector(0.f, -Out, 0.f), EBRStationKind::LuchaChallenge, 0, 250 },
+		{ FVector(Out, -300.f, 0.f), EBRStationKind::LuchaBet, 0, 20 },
+		{ FVector(Out, 300.f, 0.f), EBRStationKind::LuchaBet, 0, 100 },
+		{ FVector(-300.f, Out, 0.f), EBRStationKind::LuchaBet, 1, 20 },
+		{ FVector(300.f, Out, 0.f), EBRStationKind::LuchaBet, 1, 100 } };
+	for (const FSpot& Spot : Spots)
+	{
+		const FVector Where = GetActorTransform().TransformPositionNoScale(Spot.Offset);
+		const FRotator Facing = (GetActorLocation() - Where).Rotation() + FRotator(0.f, 180.f, 0.f);
+		const FTransform T(FRotator(0.f, Facing.Yaw, 0.f), Where);
+		if (ABRStation* S = GetWorld()->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			S->Kind = Spot.Kind;
+			S->BetSide = Spot.Side;
+			S->Price = Spot.Amount;
+			S->Ring = this;
+			S->Color = Spot.Kind == EBRStationKind::LuchaChallenge ? FLinearColor(0.75f, 0.1f, 0.15f)
+				: (Spot.Side == 0 ? FLinearColor(0.3f, 0.6f, 0.3f) : FLinearColor(0.2f, 0.35f, 0.75f));
+			S->FinishSpawning(T);
+		}
+	}
+}
+
+FVector ABRLuchaRing::Corner(int32 Which) const
+{
+	const float C = RingSize * 0.5f - 110.f;
+	const FVector Local((Which == 0) ? -C : C, (Which == 0) ? -C : C, DeckHeight + 110.f);
+	return GetActorTransform().TransformPositionNoScale(Local);
+}
+
+bool ABRLuchaRing::IsOpenForChallenge() const { return State == 0; }
+bool ABRLuchaRing::IsTakingBets() const { return State == 1; }
+bool ABRLuchaRing::IsChallenger(const APVVCharacter* Who) const { return Who && Who == Challenger.Get(); }
+
+bool ABRLuchaRing::HasBet(const ABRPlayerState* Player) const
+{
+	return Bets.ContainsByPredicate([Player](const FLuchaBet& B) { return B.Player.Get() == Player; });
+}
+
+bool ABRLuchaRing::Challenge(ABRCharacter* Runner, int32 Amount)
+{
+	ABRPlayerState* PS = Runner ? Runner->GetBRPlayerState() : nullptr;
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	const ABRGameState* GS = BRGame(this);
+	if (!HasAuthority() || State != 0 || !PS || !GM || !GS || PS->Money < Amount)
+	{
+		return false;
+	}
+	const FVector LuchaSpot = Corner(1);
+	ABRCharacter* Fighter = GM->SpawnLuchador(FTransform((Corner(0) - LuchaSpot).Rotation(), LuchaSpot), LuchadorClass.Get());
+	if (!Fighter)
+	{
+		return false;
+	}
+	PS->AddMoney(-Amount);
+	Wager = Amount;
+	Challenger = Runner;
+	Luchador = Fighter;
+	ChallengerName = PS->GetPlayerName();
+	FighterName = LuchadorNames.Num() > 0 ? LuchadorNames[FMath::RandRange(0, LuchadorNames.Num() - 1)] : FString(TEXT("EL LUCHADOR"));
+	Fighter->MakeLuchador(FighterName, 1.f + Amount / 100.f * ToughnessPer100);
+	Runner->TeleportTo(Corner(0), (LuchaSpot - Corner(0)).Rotation(), false, true);
+	ChallengerKOs = LuchadorKOs = 0;
+	PotChallenger = PotLuchador = 0;
+	Bets.Reset();
+	bChallengerWasDown = bLuchadorWasDown = false;
+	ResultText.Reset();
+	State = 1;
+	StateEndsAt = GS->GetServerWorldTimeSeconds() + BettingSeconds;
+	GM->Feed(FString::Printf(TEXT("%s challenged %s for $%d! Place your bets at the ring!"), *ChallengerName, *FighterName, Amount));
+	ABRGameState::Sfx(this, EBRSfx::Bounty, GetActorLocation());
+	Runner->Notify(FText::Format(LOCTEXT("LuchaReady", "Get ready! The bell rings in {0} seconds. Knock {1} down twice. Don't leave the ring!"),
+		FMath::RoundToInt(BettingSeconds), FText::FromString(FighterName)));
+	ForceNetUpdate();
+	return true;
+}
+
+int32 ABRLuchaRing::PlaceBet(ABRPlayerState* Player, int32 Side, int32 Amount)
+{
+	if (!HasAuthority() || !Player || State != 1 || HasBet(Player) || Player->Money <= 0)
+	{
+		return 0;
+	}
+	FLuchaBet Bet;
+	Bet.Player = Player;
+	Bet.Side = Side == 0 ? 0 : 1;
+	Bet.Amount = FMath::Min(Amount > 0 ? Amount : Player->Money, Player->Money);
+	Player->AddMoney(-Bet.Amount);
+	(Bet.Side == 0 ? PotChallenger : PotLuchador) += Bet.Amount;
+	Bets.Add(Bet);
+	return Bet.Amount;
+}
+
+void ABRLuchaRing::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const ABRGameState* GS = BRGame(this);
+	const float ServerNow = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		UpdateBoard(ServerNow);
+	}
+	if (!HasAuthority())
+	{
+		return;
+	}
+	switch (State)
+	{
+	case 1:
+	case 2:
+		TickFight(ServerNow);
+		break;
+	case 3:
+		if (ServerNow >= StateEndsAt)
+		{
+			if (ABRCharacter* Fighter = Luchador.Get())
+			{
+				Fighter->Destroy();
+			}
+			Luchador = nullptr;
+			Challenger = nullptr;
+			State = 0;
+			ForceNetUpdate();
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+void ABRLuchaRing::TickFight(float ServerNow)
+{
+	ABRCharacter* C = Challenger.Get();
+	ABRCharacter* L = Luchador.Get();
+	if (!L)
+	{
+		Finish(0, TEXT("the luchador ran off"));
+		return;
+	}
+	const FVector Center = GetActorLocation();
+	const float Limit = RingSize * 0.5f + 250.f;
+	if (!C || C->GetCondition() == EPVVCondition::Restrained || C->GetCondition() == EPVVCondition::Detained || C->GetCarrier()
+		|| FVector::Dist2D(C->GetActorLocation(), Center) > Limit)
+	{
+		Finish(1, TEXT("the challenger left the ring"));
+		return;
+	}
+	if (State == 1)
+	{
+		// Waiting for the bell: stare each other down.
+		L->SetActorRotation(FRotator(0.f, (C->GetActorLocation() - L->GetActorLocation()).Rotation().Yaw, 0.f));
+		if (ServerNow >= StateEndsAt)
+		{
+			State = 2;
+			StateEndsAt = ServerNow + FightSeconds;
+			ABRGameState::Sfx(this, EBRSfx::RoundStart, Center);
+			C->Notify(LOCTEXT("LuchaBell", "DING DING! FIGHT!"));
+			ForceNetUpdate();
+		}
+		return;
+	}
+
+	// Knockdown counting.
+	const bool bCDown = C->GetCondition() == EPVVCondition::KnockedDown;
+	const bool bLDown = L->GetCondition() == EPVVCondition::KnockedDown;
+	if (bCDown && !bChallengerWasDown) { ++LuchadorKOs; ForceNetUpdate(); }
+	if (bLDown && !bLuchadorWasDown) { ++ChallengerKOs; ForceNetUpdate(); }
+	bChallengerWasDown = bCDown;
+	bLuchadorWasDown = bLDown;
+	// Thrown out of the ring = counts as a knockdown, then back to his corner.
+	if (FVector::Dist2D(L->GetActorLocation(), Center) > Limit && L->GetCondition() == EPVVCondition::Normal && !L->GetCarrier())
+	{
+		++ChallengerKOs;
+		L->TeleportTo(Corner(1), L->GetActorRotation(), false, true);
+		C->Notify(LOCTEXT("RingOut", "RING OUT! That counts!"));
+		ForceNetUpdate();
+	}
+	if (ChallengerKOs >= KnockdownsToWin)
+	{
+		Finish(0, TEXT("by knockout"));
+		return;
+	}
+	if (LuchadorKOs >= KnockdownsToWin)
+	{
+		Finish(1, TEXT("by knockout"));
+		return;
+	}
+	if (ServerNow >= StateEndsAt)
+	{
+		Finish(ChallengerKOs > LuchadorKOs ? 0 : 1, TEXT("on points"));
+		return;
+	}
+
+	// The luchador's brain: close in, swing, and the odd flying dive.
+	if (L->GetCondition() != EPVVCondition::Normal || bCDown)
+	{
+		return; // no hitting a man when he's down (mostly)
+	}
+	const FVector To = (C->GetActorLocation() - L->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	const float Dist = To.Size();
+	L->SetActorRotation(FRotator(0.f, To.Rotation().Yaw, 0.f));
+	if (Dist > 130.f)
+	{
+		L->AddMovementInput(To.GetSafeNormal(), 1.f);
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now >= NextSwing)
+	{
+		if (Dist < 180.f)
+		{
+			L->BotAttack();
+			NextSwing = Now + FMath::FRandRange(0.6f, 1.1f);
+		}
+		else if (Dist > 230.f && Dist < 420.f && FMath::FRand() < 0.25f)
+		{
+			L->BotDive(); // flying cross-body!
+			NextSwing = Now + 2.f;
+		}
+		else
+		{
+			NextSwing = Now + 0.3f;
+		}
+	}
+}
+
+void ABRLuchaRing::Finish(int32 WinnerSide, const FString& Why)
+{
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	const ABRGameState* GS = BRGame(this);
+	ABRCharacter* C = Challenger.Get();
+	ABRPlayerState* PS = C ? C->GetBRPlayerState() : nullptr;
+	if (WinnerSide == 0)
+	{
+		ResultText = FString::Printf(TEXT("%s WINS %s! (+$%d)"), *ChallengerName.ToUpper(), *Why, Wager * 2);
+		if (PS)
+		{
+			PS->AddMoney(Wager * 2);
+			++PS->StatLuchaWins;
+		}
+		if (C)
+		{
+			C->SetHat(EBRHat::LuchaMask); // won his mask!
+			C->Notify(FText::Format(LOCTEXT("LuchaWin", "YOU BEAT {0}! +${1} and his MASK (dives and tackles hit harder)."), FText::FromString(FighterName), Wager * 2));
+			ABRGameState::FX(this, EBRFX::MoneyText, C->GetActorLocation() + FVector(0.f, 0.f, 80.f), FString::Printf(TEXT("+$%d"), Wager * 2));
+		}
+		ABRGameState::Sfx(this, EBRSfx::Payday, GetActorLocation());
+	}
+	else
+	{
+		ResultText = FString::Printf(TEXT("%s WINS %s!"), *FighterName, *Why);
+		if (C)
+		{
+			C->Notify(FText::Format(LOCTEXT("LuchaLose", "{0} beat you. There goes ${1}."), FText::FromString(FighterName), Wager));
+		}
+		ABRGameState::Sfx(this, EBRSfx::RoundEnd, GetActorLocation());
+	}
+	// Bets: right side gets double.
+	for (const FLuchaBet& Bet : Bets)
+	{
+		if (ABRPlayerState* Better = Bet.Player.Get(); Better && Bet.Side == WinnerSide)
+		{
+			Better->AddMoney(Bet.Amount * 2);
+		}
+	}
+	if (GM)
+	{
+		GM->Feed(WinnerSide == 0 ? FString::Printf(TEXT("%s BEAT %s in the ring (+$%d)"), *ChallengerName, *FighterName, Wager * 2)
+			: FString::Printf(TEXT("%s destroyed %s in the ring"), *FighterName, *ChallengerName));
+	}
+	Bets.Reset();
+	State = 3;
+	StateEndsAt = (GS ? GS->GetServerWorldTimeSeconds() : 0.f) + 6.f;
+	ForceNetUpdate();
+}
+
+void ABRLuchaRing::UpdateBoard(float ServerNow)
+{
+	FString Text;
+	const int32 Left = FMath::Max(0, FMath::CeilToInt(StateEndsAt - ServerNow));
+	switch (State)
+	{
+	case 1: Text = FString::Printf(TEXT("%s vs %s  ($%d)\nBETS CLOSE IN %d  -  $%d vs $%d"), *ChallengerName, *FighterName, Wager, Left, PotChallenger, PotLuchador); break;
+	case 2: Text = FString::Printf(TEXT("%s  %d - %d  %s\n%d:%02d"), *ChallengerName, ChallengerKOs, LuchadorKOs, *FighterName, Left / 60, Left % 60); break;
+	case 3: Text = ResultText; break;
+	default: Text = TEXT("LUCHA LIBRE!\nBeat the luchador: DOUBLE your money + his mask"); break;
+	}
+	for (UTextRenderComponent* B : { Board.Get(), BoardBack.Get() })
+	{
+		if (B)
+		{
+			B->SetText(FText::FromString(Text));
+		}
 	}
 }
 

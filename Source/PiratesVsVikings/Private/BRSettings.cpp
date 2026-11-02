@@ -94,6 +94,7 @@ namespace BR
 		case EBRHat::PatrolCap:    return TEXT("Patrol Cap");
 		case EBRHat::HardHat:      return TEXT("Hard Hat");
 		case EBRHat::CannonHelmet: return TEXT("Cannonball Helmet");
+		case EBRHat::LuchaMask:    return TEXT("Lucha Mask");
 		default:                   return TEXT("No hat");
 		}
 	}
@@ -107,6 +108,7 @@ namespace BR
 		case EBRHat::PatrolCap:    return TEXT("scanner: longer range, twice as fast");
 		case EBRHat::HardHat:      return TEXT("take 40% less damage from hits");
 		case EBRHat::CannonHelmet: return TEXT("land from the cannon / catapult on your feet");
+		case EBRHat::LuchaMask:    return TEXT("dives and tackles fly 40% farther and hit harder");
 		default:                   return TEXT("");
 		}
 	}

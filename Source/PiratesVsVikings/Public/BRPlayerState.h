@@ -64,6 +64,7 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatTacos = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatWrongful = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatDances = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatLuchaWins = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatClearedTrucks = 0;
 
 	/** Customization picked in the menu (server copy; the character replicates it to everyone). */

@@ -62,6 +62,7 @@ public:
 	int32 LifetimeKnockdowns = 0;
 	int32 LifetimeCannonShots = 0;
 	int32 LifetimeCatches = 0;
+	int32 LifetimeLuchaWins = 0;
 	/** Add one finished round's stats (called once when a round ends). */
 	void BankRoundStats(const class ABRPlayerState* PS);
 	/** Can you start a round wearing this hat? */

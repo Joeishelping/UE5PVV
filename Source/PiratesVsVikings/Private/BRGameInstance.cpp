@@ -42,6 +42,7 @@ void UBRGameInstance::SaveLook() const
 	GConfig->SetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("LifetimeCannonShots"), LifetimeCannonShots, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("LifetimeCatches"), LifetimeCatches, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("LifetimeLuchaWins"), LifetimeLuchaWins, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("RoundsPlayed"), RoundsPlayed, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
@@ -68,6 +69,7 @@ void UBRGameInstance::LoadLook()
 	GConfig->GetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("LifetimeCannonShots"), LifetimeCannonShots, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("LifetimeCatches"), LifetimeCatches, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("LifetimeLuchaWins"), LifetimeLuchaWins, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("RoundsPlayed"), RoundsPlayed, GGameUserSettingsIni);
 	GConfig->GetBool(LookSection, TEXT("HostSet"), Host.bSet, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("HostPrep"), Host.PrepSeconds, GGameUserSettingsIni);
@@ -108,7 +110,7 @@ void UBRGameInstance::BankRoundStats(const ABRPlayerState* PS)
 		return;
 	}
 	TArray<EBRHat> Before;
-	for (int32 i = 1; i <= static_cast<int32>(EBRHat::CannonHelmet); ++i)
+	for (int32 i = 1; i <= static_cast<int32>(EBRHat::LuchaMask); ++i)
 	{
 		if (!IsHatUnlocked(static_cast<EBRHat>(i)))
 		{
@@ -119,6 +121,7 @@ void UBRGameInstance::BankRoundStats(const ABRPlayerState* PS)
 	LifetimeKnockdowns += PS->StatKnockdowns;
 	LifetimeCannonShots += PS->StatCannonShots;
 	LifetimeCatches += PS->StatCatches;
+	LifetimeLuchaWins += PS->StatLuchaWins;
 	SaveLook();
 	for (EBRHat Hat : Before)
 	{
@@ -137,6 +140,7 @@ bool UBRGameInstance::IsHatUnlocked(EBRHat Hat) const
 	case EBRHat::Sombrero:     return LifetimeTacos >= 30;
 	case EBRHat::HardHat:      return LifetimeKnockdowns >= 25;
 	case EBRHat::CannonHelmet: return LifetimeCannonShots >= 10;
+	case EBRHat::LuchaMask:    return LifetimeLuchaWins >= 1;
 	default:                   return true;
 	}
 }
@@ -152,6 +156,7 @@ FString UBRGameInstance::HatUnlockText(EBRHat Hat) const
 	case EBRHat::Sombrero:     return FString::Printf(TEXT("Eat 30 tacos (%d/30)"), LifetimeTacos);
 	case EBRHat::HardHat:      return FString::Printf(TEXT("Knock out 25 people (%d/25)"), LifetimeKnockdowns);
 	case EBRHat::CannonHelmet: return FString::Printf(TEXT("Get shot from the cannon 10 times (%d/10)"), LifetimeCannonShots);
+	case EBRHat::LuchaMask:    return TEXT("Beat the luchador in the ring");
 	default:                   return FString();
 	}
 }

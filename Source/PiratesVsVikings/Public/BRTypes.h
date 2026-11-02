@@ -47,7 +47,8 @@ enum class EBRHat : uint8
 	Sombrero		UMETA(DisplayName = "Sombrero"),
 	PatrolCap		UMETA(DisplayName = "Patrol Cap"),
 	HardHat			UMETA(DisplayName = "Hard Hat"),
-	CannonHelmet	UMETA(DisplayName = "Cannonball Helmet")
+	CannonHelmet	UMETA(DisplayName = "Cannonball Helmet"),
+	LuchaMask		UMETA(DisplayName = "Lucha Mask")
 };
 
 UENUM(BlueprintType)
@@ -67,6 +68,8 @@ enum class EBRStationKind : uint8
 	Job,		// hold to work, get Price (and Item if set)
 	Bet,		// bet Price (0 = ALL IN) on a rooster at the cockfight pit
 	HireClient,	// a smuggling client pays you to get them across: they follow you (paid on arrival)
+	LuchaChallenge,	// fight the luchador in the ring for Price (win = double)
+	LuchaBet,		// bet Price on the fight (BetSide 0 = the challenger, 1 = the luchador)
 	WardenSupply	// Border Patrol only: buy gear with the government budget (pick Warden Gear, or an Item)
 };
 
