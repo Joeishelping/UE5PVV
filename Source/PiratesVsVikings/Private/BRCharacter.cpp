@@ -104,14 +104,14 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, Look);
 }
 
-void ABRCharacter::InitAsNPC()
+void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 {
 	bIsNPC = true;
 	DefaultFaction = BR::Runners;
 	// Every NPC gets a random look so the crowd isn't all clones (and players can blend in).
 	// Ordinary-looking people: small face differences, natural dark/brown hair, plain clothes.
 	FBRLook Random;
-	Random.SkinTone = FMath::FRand();
+	Random.SkinTone = FMath::FRandRange(FMath::Clamp(FMath::Min(SkinToneMin, SkinToneMax), 0.f, 1.f), FMath::Clamp(FMath::Max(SkinToneMin, SkinToneMax), 0.f, 1.f));
 	Random.ShirtColor = FMath::RandRange(0, 2) == 0 ? 0.f : FMath::FRandRange(0.06f, 1.f);
 	Random.PantsColor = FMath::RandRange(0, 1) == 0 ? 0.f : FMath::FRandRange(0.06f, 1.f);
 	Random.bHat = FMath::RandRange(0, 2) != 0;

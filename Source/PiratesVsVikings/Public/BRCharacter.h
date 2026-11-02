@@ -41,7 +41,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsNPC() const { return bIsNPC; }
 
 	/** Call before FinishSpawning: a computer-controlled look-alike passenger. Gets a random look. */
-	void InitAsNPC();
+	void InitAsNPC(float SkinToneMin = 0.f, float SkinToneMax = 1.f);
 	/** Server, after spawning an NPC: stroll around Home (village life). */
 	void StartWandering(const FVector& Home, float Radius);
 

@@ -468,7 +468,7 @@ ABRCharacter* ABRGameMode::SpawnNPC(const FTransform& Where)
 		return nullptr;
 	}
 	NPC->AutoPossessAI = EAutoPossessAI::Disabled;
-	NPC->InitAsNPC();
+	NPC->InitAsNPC(NPCSkinToneMin, NPCSkinToneMax);
 	NPC->FinishSpawning(Where);
 	return NPC;
 }

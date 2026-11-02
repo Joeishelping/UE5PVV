@@ -85,6 +85,9 @@ protected:
 	/** Townsfolk strolling around the Runner village. 0 = none. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") int32 VillagerCount = 12;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") float VillagerWanderRadius = 1100.f;
+	/** Skin tone range for NPCs (villagers + truck passengers): 0 = lightest, 1 = darkest. Same scale as the menu's Skin slider. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village", meta = (ClampMin = "0", ClampMax = "1")) float NPCSkinToneMin = 0.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village", meta = (ClampMin = "0", ClampMax = "1")) float NPCSkinToneMax = 1.f;
 
 private:
 	UPROPERTY() TObjectPtr<ABRDesertArena> Arena;
