@@ -214,7 +214,7 @@ void ABRStation::BeginPlay()
 bool ABRStation::IsOpen() const
 {
 	const ABRGameState* GS = BRGame(this);
-	if (!GS || GS->Phase == EBRPhase::Ended)
+	if (!GS || GS->Phase == EBRPhase::Ended || GS->bLobby)
 	{
 		return false;
 	}

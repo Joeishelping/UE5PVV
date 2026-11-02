@@ -3,6 +3,8 @@
 #include "BRCharacter.h"
 #include "BRPlayerController.h"
 #include "BRTypes.h"
+#include "BRGameState.h"
+#include "BRGameMode.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -170,6 +172,145 @@ void UBRMenuWidget::BuildLayout()
 	StatusLine = MakeText(TEXT(""), 14, FLinearColor(0.7f, 0.7f, 0.7f));
 	AddRow(Box, StatusLine);
 	AddRow(Box, MakeText(TEXT("Press M in game to open this menu again."), 12, FLinearColor(0.55f, 0.55f, 0.55f)));
+	BuildHostPanel(Canvas);
+}
+
+UHorizontalBox* UBRMenuWidget::MakeStepRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, UButton*& OutPrev, UButton*& OutNext)
+{
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	USizeBox* LabelBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	LabelBox->SetWidthOverride(130.f);
+	UTextBlock* Text = MakeText(Label, 15, FLinearColor::White);
+	Text->SetJustification(ETextJustify::Left);
+	LabelBox->AddChild(Text);
+	OutPrev = MakeButton(TEXT("<"), Neutral);
+	OutNext = MakeButton(TEXT(">"), Neutral);
+	OutValue = MakeText(TEXT(""), 15, FLinearColor(1.f, 0.85f, 0.3f));
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(LabelBox)) { S->SetVerticalAlignment(VAlign_Center); }
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(OutPrev)) { S->SetVerticalAlignment(VAlign_Center); }
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(OutValue))
+	{
+		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		S->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(OutNext)) { S->SetVerticalAlignment(VAlign_Center); }
+	return Row;
+}
+
+void UBRMenuWidget::BuildHostPanel(UCanvasPanel* Canvas)
+{
+	USizeBox* Frame = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	Frame->SetWidthOverride(330.f);
+	if (UCanvasPanelSlot* FrameSlot = Canvas->AddChildToCanvas(Frame))
+	{
+		FrameSlot->SetAnchors(FAnchors(1.f, 0.5f));
+		FrameSlot->SetAlignment(FVector2D(1.f, 0.5f));
+		FrameSlot->SetPosition(FVector2D(-30.f, 0.f));
+		FrameSlot->SetAutoSize(true);
+	}
+	HostBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	Frame->AddChild(HostBox);
+	AddRow(HostBox, MakeText(TEXT("HOST SETTINGS"), 22, FLinearColor(1.f, 0.85f, 0.3f)), 4.f);
+	UButton* P = nullptr;
+	UButton* N = nullptr;
+	AddRow(HostBox, MakeStepRow(TEXT("Prep time"), HostPrepValue, P, N), 2.f);
+	P->OnClicked.AddDynamic(this, &UBRMenuWidget::OnPrepLess); N->OnClicked.AddDynamic(this, &UBRMenuWidget::OnPrepMore);
+	AddRow(HostBox, MakeStepRow(TEXT("Invasion time"), HostInvasionValue, P, N), 2.f);
+	P->OnClicked.AddDynamic(this, &UBRMenuWidget::OnInvasionLess); N->OnClicked.AddDynamic(this, &UBRMenuWidget::OnInvasionMore);
+	AddRow(HostBox, MakeStepRow(TEXT("Ready-up lobby"), HostLobbyValue, P, N), 2.f);
+	P->OnClicked.AddDynamic(this, &UBRMenuWidget::OnLobbyToggle); N->OnClicked.AddDynamic(this, &UBRMenuWidget::OnLobbyToggle);
+	AddRow(HostBox, MakeStepRow(TEXT("Best of 3"), HostSeriesValue, P, N), 2.f);
+	P->OnClicked.AddDynamic(this, &UBRMenuWidget::OnSeriesToggle); N->OnClicked.AddDynamic(this, &UBRMenuWidget::OnSeriesToggle);
+	AddRow(HostBox, MakeStepRow(TEXT("Fill with bots"), HostBotsValue, P, N), 2.f);
+	P->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBotsToggle); N->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBotsToggle);
+	AddRow(HostBox, MakeStepRow(TEXT("Runner team size"), HostBotRunnersValue, P, N), 2.f);
+	P->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBotRunnersLess); N->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBotRunnersMore);
+	AddRow(HostBox, MakeStepRow(TEXT("Patrol team size"), HostBotWardensValue, P, N), 2.f);
+	P->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBotWardensLess); N->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBotWardensMore);
+	UButton* StartButton = MakeButton(TEXT("START NOW (skip the lobby)"), Go);
+	StartButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnStartNow);
+	AddRow(HostBox, StartButton, 6.f);
+	AddRow(HostBox, MakeText(TEXT("Times apply from the next phase. Bots fill each team up to its size."), 12, FLinearColor(0.6f, 0.6f, 0.6f)), 2.f);
+	RefreshHost();
+}
+
+void UBRMenuWidget::RefreshHost()
+{
+	if (!HostBox)
+	{
+		return;
+	}
+	const bool bHost = GetWorld() && GetWorld()->GetNetMode() != NM_Client;
+	HostBox->SetVisibility(bHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	UBRGameInstance* GI = GetBRGameInstance();
+	if (!bHost || !GI)
+	{
+		return;
+	}
+	if (!GI->Host.bSet)
+	{
+		if (const ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->GetHostSettings(GI->Host); // start from the Blueprint's values
+		}
+	}
+	const FBRHostSettings& H = GI->Host;
+	auto Minutes = [](int32 Seconds) { return FText::FromString(FString::Printf(TEXT("%d:%02d"), Seconds / 60, Seconds % 60)); };
+	auto OnOff = [](bool b) { return FText::FromString(b ? TEXT("ON") : TEXT("OFF")); };
+	if (HostPrepValue) HostPrepValue->SetText(Minutes(H.PrepSeconds));
+	if (HostInvasionValue) HostInvasionValue->SetText(Minutes(H.InvasionSeconds));
+	if (HostLobbyValue) HostLobbyValue->SetText(OnOff(H.bLobby));
+	if (HostSeriesValue) HostSeriesValue->SetText(OnOff(H.bBestOf3));
+	if (HostBotsValue) HostBotsValue->SetText(OnOff(H.bFillBots));
+	if (HostBotRunnersValue) HostBotRunnersValue->SetText(FText::AsNumber(H.BotRunners));
+	if (HostBotWardensValue) HostBotWardensValue->SetText(FText::AsNumber(H.BotWardens));
+}
+
+void UBRMenuWidget::StepHost(int32 Which, int32 Dir)
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	ABRPlayerController* PC = GetBRController();
+	if (!GI || !PC)
+	{
+		return;
+	}
+	RefreshHost(); // makes sure the values started from the Blueprint
+	FBRHostSettings H = GI->Host;
+	switch (Which)
+	{
+	case 0: H.PrepSeconds = FMath::Clamp(H.PrepSeconds + Dir * 30, 30, 1800); break;
+	case 1: H.InvasionSeconds = FMath::Clamp(H.InvasionSeconds + Dir * 60, 60, 3600); break;
+	case 2: H.bLobby = !H.bLobby; break;
+	case 3: H.bBestOf3 = !H.bBestOf3; break;
+	case 4: H.bFillBots = !H.bFillBots; break;
+	case 5: H.BotRunners = FMath::Clamp(H.BotRunners + Dir, 0, 12); break;
+	case 6: H.BotWardens = FMath::Clamp(H.BotWardens + Dir, 0, 12); break;
+	default: break;
+	}
+	PC->SetHostSettings(H);
+	RefreshHost();
+}
+
+void UBRMenuWidget::OnPrepLess() { StepHost(0, -1); }
+void UBRMenuWidget::OnPrepMore() { StepHost(0, 1); }
+void UBRMenuWidget::OnInvasionLess() { StepHost(1, -1); }
+void UBRMenuWidget::OnInvasionMore() { StepHost(1, 1); }
+void UBRMenuWidget::OnLobbyToggle() { StepHost(2, 1); }
+void UBRMenuWidget::OnSeriesToggle() { StepHost(3, 1); }
+void UBRMenuWidget::OnBotsToggle() { StepHost(4, 1); }
+void UBRMenuWidget::OnBotRunnersLess() { StepHost(5, -1); }
+void UBRMenuWidget::OnBotRunnersMore() { StepHost(5, 1); }
+void UBRMenuWidget::OnBotWardensLess() { StepHost(6, -1); }
+void UBRMenuWidget::OnBotWardensMore() { StepHost(6, 1); }
+
+void UBRMenuWidget::OnStartNow()
+{
+	const ABRGameState* GS = GetWorld() ? GetWorld()->GetGameState<ABRGameState>() : nullptr;
+	ABRGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ABRGameMode>() : nullptr;
+	if (GS && GM && GS->bLobby)
+	{
+		GM->AdvancePhase();
+	}
 }
 
 void UBRMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -185,6 +326,7 @@ void UBRMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		StatusLine->SetText(FText::FromString(GI->StatusText));
 	}
 	RefreshPickers();
+	RefreshHost();
 	if (CustomizeBox)
 	{
 		CustomizeBox->SetVisibility(GI->PreferredTeam != EPVVFaction::None ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);

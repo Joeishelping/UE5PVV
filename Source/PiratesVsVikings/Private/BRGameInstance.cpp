@@ -42,6 +42,7 @@ void UBRGameInstance::SaveLook() const
 	GConfig->SetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("LifetimeCannonShots"), LifetimeCannonShots, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("LifetimeCatches"), LifetimeCatches, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("RoundsPlayed"), RoundsPlayed, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
@@ -67,14 +68,41 @@ void UBRGameInstance::LoadLook()
 	GConfig->GetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("LifetimeCannonShots"), LifetimeCannonShots, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("LifetimeCatches"), LifetimeCatches, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("RoundsPlayed"), RoundsPlayed, GGameUserSettingsIni);
+	GConfig->GetBool(LookSection, TEXT("HostSet"), Host.bSet, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("HostPrep"), Host.PrepSeconds, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("HostInvasion"), Host.InvasionSeconds, GGameUserSettingsIni);
+	GConfig->GetBool(LookSection, TEXT("HostLobby"), Host.bLobby, GGameUserSettingsIni);
+	GConfig->GetBool(LookSection, TEXT("HostBestOf3"), Host.bBestOf3, GGameUserSettingsIni);
+	GConfig->GetBool(LookSection, TEXT("HostBots"), Host.bFillBots, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("HostBotRunners"), Host.BotRunners, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("HostBotWardens"), Host.BotWardens, GGameUserSettingsIni);
 	if (Look.HatChoice >= 0 && !IsHatUnlocked(static_cast<EBRHat>(Look.HatChoice)))
 	{
 		Look.HatChoice = -1;
 	}
 }
 
+void UBRGameInstance::SaveHost() const
+{
+	if (!GConfig)
+	{
+		return;
+	}
+	GConfig->SetBool(LookSection, TEXT("HostSet"), Host.bSet, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("HostPrep"), Host.PrepSeconds, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("HostInvasion"), Host.InvasionSeconds, GGameUserSettingsIni);
+	GConfig->SetBool(LookSection, TEXT("HostLobby"), Host.bLobby, GGameUserSettingsIni);
+	GConfig->SetBool(LookSection, TEXT("HostBestOf3"), Host.bBestOf3, GGameUserSettingsIni);
+	GConfig->SetBool(LookSection, TEXT("HostBots"), Host.bFillBots, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("HostBotRunners"), Host.BotRunners, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("HostBotWardens"), Host.BotWardens, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
 void UBRGameInstance::BankRoundStats(const ABRPlayerState* PS)
 {
+	++RoundsPlayed;
 	if (!PS)
 	{
 		return;

@@ -1,4 +1,5 @@
 #include "BRGameMode.h"
+#include "BRGameInstance.h"
 #include "BRBotController.h"
 #include "BRCar.h"
 #include "BRCharacter.h"
@@ -78,8 +79,21 @@ void ABRGameMode::StartMatchFlow()
 	}
 	SpawnVillagers();
 
+	UBRGameInstance* GI = GetGameInstance<UBRGameInstance>();
+	if (GI && GI->Host.bSet)
+	{
+		ApplyHostSettings(GI->Host);
+	}
 	if (ABRGameState* GS = GetBRGameState())
 	{
+		GS->bLobby = bUseLobby && GetNetMode() != NM_Standalone;
+		GS->LobbyCountdown = 0;
+		GS->bBestOf3 = bBestOf3;
+		if (GI && bBestOf3)
+		{
+			GS->SeriesRunnerWins = GI->SeriesRunnerWins;
+			GS->SeriesWardenWins = GI->SeriesWardenWins;
+		}
 		GS->Phase = EBRPhase::Prep;
 		GS->PhaseSecondsLeft = PrepSeconds;
 		GS->TimeOfDay = StartHour;
@@ -145,6 +159,12 @@ void ABRGameMode::TickBR()
 		GiveCarKey();
 	}
 
+	if (GS->bLobby)
+	{
+		TickBots();
+		TickLobby(GS);
+		return; // the Prep clock waits until everyone's ready
+	}
 	GS->PhaseSecondsLeft = FMath::Max(0, GS->PhaseSecondsLeft - 1);
 	if (GS->PhaseSecondsLeft == 60 && GS->Phase == EBRPhase::Prep)
 	{
@@ -176,6 +196,13 @@ void ABRGameMode::AdvancePhase()
 	{
 		return;
 	}
+	if (GS->bLobby)
+	{
+		GS->bLobby = false; // host skipped the lobby
+		GS->PhaseSecondsLeft = PrepSeconds;
+		Announce(LOCTEXT("LobbySkipped", "Let's go! Prep has started."));
+		return;
+	}
 	if (GS->Phase == EBRPhase::Prep)
 	{
 		GS->Phase = EBRPhase::Invasion;
@@ -190,6 +217,32 @@ void ABRGameMode::AdvancePhase()
 		GS->Phase = EBRPhase::Ended;
 		const EPVVFaction Winner = GS->RunnerScore > GS->WardenScore ? BR::Runners : (GS->WardenScore > GS->RunnerScore ? BR::Wardens : EPVVFaction::None);
 		Announce(FText::Format(LOCTEXT("FinalScore", "TIME! {0} {1} - {2} {3}"), FText::FromString(BR::RunnerName()), GS->RunnerScore, GS->WardenScore, FText::FromString(BR::WardenName())));
+		if (bBestOf3)
+		{
+			GS->SeriesRunnerWins += Winner == BR::Runners ? 1 : 0;
+			GS->SeriesWardenWins += Winner == BR::Wardens ? 1 : 0;
+			UBRGameInstance* SeriesGI = GetGameInstance<UBRGameInstance>();
+			if (GS->SeriesRunnerWins >= 2 || GS->SeriesWardenWins >= 2)
+			{
+				const bool bRunnersWon = GS->SeriesRunnerWins >= 2;
+				Announce(FText::Format(LOCTEXT("SeriesWon", "{0} WIN THE SERIES {1} - {2}!"), FText::FromString((bRunnersWon ? BR::RunnerName() : BR::WardenName()).ToUpper()),
+					FMath::Max(GS->SeriesRunnerWins, GS->SeriesWardenWins), FMath::Min(GS->SeriesRunnerWins, GS->SeriesWardenWins)));
+				if (SeriesGI)
+				{
+					SeriesGI->SeriesRunnerWins = 0; // a new series next time
+					SeriesGI->SeriesWardenWins = 0;
+				}
+			}
+			else
+			{
+				Announce(FText::Format(LOCTEXT("SeriesScore", "Series: {0} {1} - {2} {3}. Next round!"), FText::FromString(BR::RunnerName()), GS->SeriesRunnerWins, GS->SeriesWardenWins, FText::FromString(BR::WardenName())));
+				if (SeriesGI)
+				{
+					SeriesGI->SeriesRunnerWins = GS->SeriesRunnerWins;
+					SeriesGI->SeriesWardenWins = GS->SeriesWardenWins;
+				}
+			}
+		}
 		EndMatch(Winner);
 	}
 }
@@ -818,6 +871,73 @@ void ABRGameMode::OnTruckCleared(APVVCharacter* Warden)
 	}
 	AddBudget(BudgetPerClearedTruck);
 	Feed(FString::Printf(TEXT("%s cleared a truck at the checkpoint (budget +$%d)"), *NameOf(Warden), BudgetPerClearedTruck));
+}
+
+void ABRGameMode::TickLobby(ABRGameState* GS)
+{
+	int32 People = 0, Ready = 0;
+	for (APlayerState* Each : GS->PlayerArray)
+	{
+		const ABRPlayerState* PS = Cast<ABRPlayerState>(Each);
+		if (PS && !PS->IsABot() && PS->GetFaction() != EPVVFaction::None)
+		{
+			++People;
+			Ready += PS->bReady ? 1 : 0;
+		}
+	}
+	if (People == 0 || Ready < People)
+	{
+		GS->LobbyCountdown = 0;
+		return;
+	}
+	if (GS->LobbyCountdown == 0)
+	{
+		GS->LobbyCountdown = 5;
+		Announce(LOCTEXT("AllReady", "Everyone's ready! Starting in 5..."));
+		return;
+	}
+	if (--GS->LobbyCountdown <= 0)
+	{
+		GS->bLobby = false;
+		GS->PhaseSecondsLeft = PrepSeconds;
+		Announce(LOCTEXT("PrepStart", "PREP! Work, shop and plan. The Line opens when the timer runs out."));
+	}
+}
+
+void ABRGameMode::ApplyHostSettings(const FBRHostSettings& Settings)
+{
+	PrepSeconds = FMath::Clamp(Settings.PrepSeconds, 30, 1800);
+	InvasionSeconds = FMath::Clamp(Settings.InvasionSeconds, 60, 3600);
+	bUseLobby = Settings.bLobby;
+	bBestOf3 = Settings.bBestOf3;
+	const bool bHadBots = bFillWithBots;
+	bFillWithBots = Settings.bFillBots;
+	if (bHadBots && !bFillWithBots)
+	{
+		RemoveBots();
+	}
+	FillRunnersTo = FMath::Clamp(Settings.BotRunners, 0, 12);
+	FillWardensTo = FMath::Clamp(Settings.BotWardens, 0, 12);
+	if (ABRGameState* GS = GetBRGameState())
+	{
+		GS->bBestOf3 = bBestOf3;
+		if (GS->bLobby && !bUseLobby)
+		{
+			GS->bLobby = false;
+			GS->PhaseSecondsLeft = PrepSeconds;
+		}
+	}
+}
+
+void ABRGameMode::GetHostSettings(FBRHostSettings& Out) const
+{
+	Out.PrepSeconds = PrepSeconds;
+	Out.InvasionSeconds = InvasionSeconds;
+	Out.bLobby = bUseLobby;
+	Out.bBestOf3 = bBestOf3;
+	Out.bFillBots = bFillWithBots;
+	Out.BotRunners = FillRunnersTo;
+	Out.BotWardens = FillWardensTo;
 }
 
 void ABRGameMode::AddBot(EPVVFaction Team)

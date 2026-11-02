@@ -23,6 +23,12 @@ public:
 	void ToggleMenu();
 	/** Proximity voice: your mic is open; K mutes / unmutes it. */
 	void ToggleMic();
+	/** Lobby: Y = ready / not ready. */
+	void ToggleReady();
+	/** In the Holding Pen: N = watch the next player. */
+	void SpectateNext();
+	/** Host: change the match settings (M menu). */
+	void SetHostSettings(const FBRHostSettings& Settings);
 	bool bMicOn = true;
 	bool IsMenuOpen() const { return Menu != nullptr; }
 
@@ -86,4 +92,7 @@ protected:
 	UFUNCTION(Server, Reliable) void Server_SetWeather(int32 Weather);
 	UFUNCTION(Server, Reliable) void Server_AddBots(int32 Count, uint8 Team);
 	UFUNCTION(Server, Reliable) void Server_RemoveBots();
+	UFUNCTION(Server, Reliable) void Server_ToggleReady();
+	TWeakObjectPtr<AActor> SpectateTarget;
+	int32 SpectateIndex = 0;
 };

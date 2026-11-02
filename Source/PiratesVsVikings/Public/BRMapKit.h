@@ -39,6 +39,8 @@ namespace BRMap
 	PIRATESVSVIKINGS_API FVector RiverFlow(const UWorld* World, const FVector& Location);
 	PIRATESVSVIKINGS_API bool HasCrossedLine(const UWorld* World, const FVector& Location);
 	PIRATESVSVIKINGS_API bool IsInSafeZone(const UWorld* World, const FVector& Location);
+	/** Where to head for the Safe Zone from here (nearest zone, or straight east on the test map). */
+	PIRATESVSVIKINGS_API FVector GetSafeZoneGoal(const UWorld* World, const FVector& From);
 	/** True when the level uses the map kit (has a Border Line or Safe Zone). */
 	PIRATESVSVIKINGS_API bool IsCustomMap(const UWorld* World);
 	/** NPC truck route from Road Points. False if there are none. */

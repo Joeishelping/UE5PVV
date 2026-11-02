@@ -19,6 +19,11 @@ void ABRGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRGameState, WardenBudget);
 	DOREPLIFETIME(ABRGameState, BonusTraps);
 	DOREPLIFETIME(ABRGameState, BountyTarget);
+	DOREPLIFETIME(ABRGameState, bLobby);
+	DOREPLIFETIME(ABRGameState, LobbyCountdown);
+	DOREPLIFETIME(ABRGameState, bBestOf3);
+	DOREPLIFETIME(ABRGameState, SeriesRunnerWins);
+	DOREPLIFETIME(ABRGameState, SeriesWardenWins);
 }
 
 void ABRGameState::Multicast_NoisePing_Implementation(FVector_NetQuantize Location)

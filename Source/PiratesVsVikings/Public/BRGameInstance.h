@@ -49,6 +49,14 @@ public:
 	void SaveLook() const;
 	void LoadLook();
 
+	// --- Host (kept between rounds on the host's PC) ------------------------------------------
+	FBRHostSettings Host;
+	void SaveHost() const;
+	int32 SeriesRunnerWins = 0;
+	int32 SeriesWardenWins = 0;
+	/** Rounds you've finished (tips show for the first few). */
+	int32 RoundsPlayed = 0;
+
 	// --- Unlockable hats (lifetime stats saved on this PC) ---------------------------------
 	int32 LifetimeTacos = 0;
 	int32 LifetimeKnockdowns = 0;

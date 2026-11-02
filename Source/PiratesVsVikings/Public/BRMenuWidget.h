@@ -53,6 +53,32 @@ private:
 	UPROPERTY() TObjectPtr<UTextBlock> HatLabel;
 	UPROPERTY() TObjectPtr<UTextBlock> HatLockedText;
 
+	// Host settings (only shown to the host).
+	UPROPERTY() TObjectPtr<UVerticalBox> HostBox;
+	UPROPERTY() TObjectPtr<UTextBlock> HostPrepValue;
+	UPROPERTY() TObjectPtr<UTextBlock> HostInvasionValue;
+	UPROPERTY() TObjectPtr<UTextBlock> HostLobbyValue;
+	UPROPERTY() TObjectPtr<UTextBlock> HostSeriesValue;
+	UPROPERTY() TObjectPtr<UTextBlock> HostBotsValue;
+	UPROPERTY() TObjectPtr<UTextBlock> HostBotRunnersValue;
+	UPROPERTY() TObjectPtr<UTextBlock> HostBotWardensValue;
+	void BuildHostPanel(class UCanvasPanel* Canvas);
+	UHorizontalBox* MakeStepRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, UButton*& OutPrev, UButton*& OutNext);
+	void StepHost(int32 Which, int32 Dir);
+	void RefreshHost();
+	UFUNCTION() void OnPrepLess();
+	UFUNCTION() void OnPrepMore();
+	UFUNCTION() void OnInvasionLess();
+	UFUNCTION() void OnInvasionMore();
+	UFUNCTION() void OnLobbyToggle();
+	UFUNCTION() void OnSeriesToggle();
+	UFUNCTION() void OnBotsToggle();
+	UFUNCTION() void OnBotRunnersLess();
+	UFUNCTION() void OnBotRunnersMore();
+	UFUNCTION() void OnBotWardensLess();
+	UFUNCTION() void OnBotWardensMore();
+	UFUNCTION() void OnStartNow();
+
 	void BuildLayout();
 	UTextBlock* MakeText(const FString& Text, int32 Size, const FLinearColor& Color);
 	UButton* MakeButton(const FString& Label, const FLinearColor& Color, TObjectPtr<UTextBlock>* OutLabel = nullptr);

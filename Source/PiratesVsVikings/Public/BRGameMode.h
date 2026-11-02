@@ -51,6 +51,15 @@ public:
 	/** Server: a truck waited too long at the checkpoint and pushed through. */
 	void OnTruckForcedThrough();
 
+	// --- Lobby / host settings / best of 3 ------------------------------------------------
+	/** Multiplayer: wait for everyone to press Y (ready) before Prep starts. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Lobby") bool bUseLobby = true;
+	/** Play a best-of-3 series (first team to win 2 rounds). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Lobby") bool bBestOf3 = false;
+	/** The host changed a setting in the M menu. */
+	void ApplyHostSettings(const FBRHostSettings& Settings);
+	void GetHostSettings(FBRHostSettings& Out) const;
+
 	// --- Bots ------------------------------------------------------------------------------
 	/** Server: add a computer player to this team (None = whichever team is smaller). */
 	void AddBot(EPVVFaction Team);
@@ -167,6 +176,7 @@ private:
 	float BotClock = 0.f;
 	int32 BotNameIndex = 0;
 	void TickBots();
+	void TickLobby(class ABRGameState* GS);
 	void TickBounty(class ABRGameState* GS);
 	UPROPERTY() TObjectPtr<ABRDesertArena> Arena;
 

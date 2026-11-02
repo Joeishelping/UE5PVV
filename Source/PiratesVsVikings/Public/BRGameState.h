@@ -55,6 +55,20 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	TObjectPtr<APlayerState> BountyTarget;
 
+	/** Lobby: the round waits until every player is ready (Y). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	bool bLobby = false;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 LobbyCountdown = 0;
+
+	/** Best of 3: rounds won so far in this series (0 when not playing a series). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	bool bBestOf3 = false;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 SeriesRunnerWins = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 SeriesWardenWins = 0;
+
 	/** Kill-feed line in the top-right corner of everyone's screen ("Jorge got YEETED by Dave"). */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_Feed(const FString& Line);

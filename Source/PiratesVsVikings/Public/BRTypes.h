@@ -70,6 +70,24 @@ enum class EBRStationKind : uint8
 	WardenSupply	// Border Patrol only: buy gear with the government budget (pick Warden Gear, or an Item)
 };
 
+/** Match settings the host picks in the M menu (kept on the host's PC between rounds). */
+USTRUCT(BlueprintType)
+struct FBRHostSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY() int32 PrepSeconds = 180;
+	UPROPERTY() int32 InvasionSeconds = 600;
+	/** Wait in a lobby until everyone presses Y (ready). */
+	UPROPERTY() bool bLobby = true;
+	UPROPERTY() bool bBestOf3 = false;
+	UPROPERTY() bool bFillBots = false;
+	UPROPERTY() int32 BotRunners = 3;
+	UPROPERTY() int32 BotWardens = 1;
+	/** False until the host changed something (then these replace the Blueprint values). */
+	UPROPERTY() bool bSet = false;
+};
+
 /** What a Border Patrol supply counter sells (paid from the team's government budget). */
 UENUM(BlueprintType)
 enum class EBRWardenGear : uint8

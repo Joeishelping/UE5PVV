@@ -1,6 +1,5 @@
 #include "BRBotController.h"
 #include "BRCharacter.h"
-#include "BRDesertArena.h"
 #include "BRGameState.h"
 #include "BRMapKit.h"
 #include "BRPlayerState.h"
@@ -235,28 +234,7 @@ AActor* ABRBotController::FindStation(ABRCharacter* C, ABRPlayerState* PS, bool 
 
 FVector ABRBotController::SafeZoneGoal(const ABRCharacter* C) const
 {
-	float Best = MAX_flt;
-	FVector Goal = C->GetActorLocation() + FVector(5000.f, 0.f, 0.f);
-	bool bFound = false;
-	for (TActorIterator<ABRSafeZone> It(GetWorld()); It; ++It)
-	{
-		const float D = FVector::DistSquared(It->GetActorLocation(), C->GetActorLocation());
-		if (D < Best)
-		{
-			Best = D;
-			Goal = It->GetActorLocation();
-			bFound = true;
-		}
-	}
-	if (!bFound)
-	{
-		for (TActorIterator<ABRDesertArena> It(GetWorld()); It; ++It)
-		{
-			Goal = FVector(It->GetSafeX() + 1500.f, C->GetActorLocation().Y, C->GetActorLocation().Z);
-			break;
-		}
-	}
-	return Goal;
+	return BRMap::GetSafeZoneGoal(GetWorld(), C->GetActorLocation());
 }
 
 // -------------------------------------------------------------------------------------------

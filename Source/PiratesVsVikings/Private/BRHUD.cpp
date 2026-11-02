@@ -7,6 +7,8 @@
 #include "BRPlayerController.h"
 #include "BRPlayerState.h"
 #include "BRSettings.h"
+#include "PVVDetentionZone.h"
+#include "BRMapKit.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -39,13 +41,18 @@ void ABRHUD::Bar(float X, float Y, float W, float H, float Fraction, const FLine
 
 void ABRHUD::Marker(const FVector& World, const FString& Text, const FLinearColor& Color)
 {
-	const FVector Screen = Project(World);
-	if (Screen.Z <= 0.f)
-	{
-		return;
-	}
+	FVector Screen = Project(World);
 	float W = 0.f, H = 0.f;
 	GetTextSize(Text, W, H, GEngine->GetMediumFont());
+	if (Screen.Z <= 0.f)
+	{
+		// Behind you: pin it to the bottom edge on the side it's on.
+		Screen.X = Canvas->ClipX - Screen.X;
+		Screen.Y = Canvas->ClipY - 60.f;
+	}
+	// Keep it on screen so you can always see which way to go.
+	Screen.X = FMath::Clamp(Screen.X, W * 0.5f + 10.f, Canvas->ClipX - W * 0.5f - 10.f);
+	Screen.Y = FMath::Clamp(Screen.Y, H + 90.f, Canvas->ClipY - 50.f);
 	DrawText(Text, Color, Screen.X - W * 0.5f, Screen.Y - H, GEngine->GetMediumFont());
 }
 
@@ -78,7 +85,37 @@ void ABRHUD::DrawHUD()
 		*BR::RunnerName().ToUpper(), GS->RunnerScore, GS->WardenScore, *BR::WardenName().ToUpper()); break;
 	default: PhaseText = FString::Printf(TEXT("FINAL   %s %d  -  %d %s"), *BR::RunnerName().ToUpper(), GS->RunnerScore, GS->WardenScore, *BR::WardenName().ToUpper()); break;
 	}
+	if (GS->bLobby)
+	{
+		PhaseText = GS->LobbyCountdown > 0 ? FString::Printf(TEXT("LOBBY  -  starting in %d..."), GS->LobbyCountdown)
+			: FString(TEXT("LOBBY  -  press Y when you're ready"));
+	}
+	if (GS->bBestOf3)
+	{
+		PhaseText += FString::Printf(TEXT("    [BEST OF 3: %d - %d]"), GS->SeriesRunnerWins, GS->SeriesWardenWins);
+	}
 	Centered(PhaseText, 10.f, GS->Phase == EBRPhase::Invasion ? Red : White, Big, 1.4f);
+
+	// --- Lobby: who's ready
+	if (GS->bLobby)
+	{
+		float LY = SY * 0.3f;
+		Centered(TEXT("WHO'S READY  (Y = ready,  M = menu: switch team / customize)"), LY, Yellow, Small, 1.3f);
+		LY += 26.f;
+		for (APlayerState* Each : GS->PlayerArray)
+		{
+			const ABRPlayerState* Other = Cast<ABRPlayerState>(Each);
+			if (!Other || Other->GetFaction() == EPVVFaction::None)
+			{
+				continue;
+			}
+			const bool bOtherWarden = Other->GetFaction() == BR::Wardens;
+			const FString Line = FString::Printf(TEXT("%s  -  %s  -  %s"), *Other->GetPlayerName(),
+				*(bOtherWarden ? GetDefault<UBRSettings>()->WardenSingular : GetDefault<UBRSettings>()->RunnerSingular), (Other->IsABot() || Other->bReady) ? TEXT("READY") : TEXT("not ready"));
+			Centered(Line, LY, (Other->IsABot() || Other->bReady) ? Green : (bOtherWarden ? WardenCol : RunnerCol), Small, 1.2f);
+			LY += 20.f;
+		}
+	}
 	const TCHAR* WeatherText = GS->Weather == EBRWeather::Rain ? TEXT("Rain") : GS->Weather == EBRWeather::Sandstorm ? TEXT("SANDSTORM") : TEXT("Clear");
 	Centered(FString::Printf(TEXT("%s  %s   |   %s   |   Warden approval %d%%"), *TimeOfDayText(GS->TimeOfDay), GS->IsNight() ? TEXT("(night)") : TEXT(""),
 		WeatherText, FMath::RoundToInt(GS->Approval)), 46.f, White, Small, 1.2f);
@@ -163,6 +200,32 @@ void ABRHUD::DrawHUD()
 	if (const UBRGameInstance* GI = GetGameInstance<UBRGameInstance>())
 	{
 		DrawText(GI->StatusText, FLinearColor(0.7f, 0.7f, 0.7f), 20.f, SY - 230.f, Small, 1.0f);
+	}
+
+	// --- Tips for your first few rounds
+	if (const UBRGameInstance* TipGI = GetGameInstance<UBRGameInstance>(); TipGI && TipGI->RoundsPlayed < 3 && GS->Phase != EBRPhase::Ended && PS)
+	{
+		static const TCHAR* RunnerTips[] = {
+			TEXT("TIP: Work your job (shown at the bottom) to earn cash, then buy a LADDER at the hardware store."),
+			TEXT("TIP: Lean a ladder on the Wall (hold E) - your whole crew can climb it."),
+			TEXT("TIP: Contraband (??? Package) pays $500 if you get it to the Safe Zone."),
+			TEXT("TIP: A PONCHO makes Border Patrol scanners think you're a local. Don't sprint!"),
+			TEXT("TIP: Z grabs people and things. Z again throws them. Grab a teammate to ride their shoulders."),
+			TEXT("TIP: Mash SPACE when you're knocked down or zip-tied."),
+			TEXT("TIP: Hold T for emotes. H drops $50 - anyone can pick it up..."),
+			TEXT("TIP: Watch out for the watchtower spotlights at night.") };
+		static const TCHAR* WardenTips[] = {
+			TEXT("TIP: Only arrest Runners who CROSSED the Line - wrongful arrests cost points and approval."),
+			TEXT("TIP: Punch a Runner down, hold E to zip-tie, tap E to pick them up, carry them to the Holding Pen."),
+			TEXT("TIP: Scan people in trucks with V. Clearing a legal truck raises your budget."),
+			TEXT("TIP: Spend the government budget at the GOV. SUPPLY counters (traps, dogs, drone recharge)."),
+			TEXT("TIP: Climb a watchtower (E) and aim the spotlight with your view."),
+			TEXT("TIP: The $ WANTED $ Runner is worth bonus points."),
+			TEXT("TIP: B places traps, Q launches the drone.") };
+		const bool bTipWarden = PS->GetFaction() == BR::Wardens;
+		const int32 Count = bTipWarden ? static_cast<int32>(UE_ARRAY_COUNT(WardenTips)) : static_cast<int32>(UE_ARRAY_COUNT(RunnerTips));
+		const int32 Tip = static_cast<int32>(Now / 9.f) % Count;
+		Centered(bTipWarden ? WardenTips[Tip] : RunnerTips[Tip], SY - 262.f, FLinearColor(0.6f, 0.9f, 1.f), Small, 1.2f);
 	}
 
 	// --- Personal message
@@ -353,7 +416,39 @@ void ABRHUD::DrawHUD()
 		Centered(TEXT("let go of T"), CY - 8.f, FLinearColor(0.8f, 0.8f, 0.8f), Small, 1.1f);
 	}
 
+	// --- Objective markers
+	if (GS->Phase == EBRPhase::Invasion)
+	{
+		if (!bWarden && !PS->bReachedSafety && Me->GetCondition() == EPVVCondition::Normal)
+		{
+			const FVector Goal = BRMap::GetSafeZoneGoal(GetWorld(), Me->GetActorLocation());
+			Marker(Goal + FVector(0.f, 0.f, 300.f), FString::Printf(TEXT("SAFE ZONE  %dm"), FMath::RoundToInt(FVector::Dist2D(Goal, Me->GetActorLocation()) / 100.f)), Green);
+		}
+		if (bWarden && Me->GetCarriedCharacter())
+		{
+			for (TActorIterator<APVVDetentionZone> It(GetWorld()); It; ++It)
+			{
+				Marker(It->GetActorLocation() + FVector(0.f, 0.f, 300.f), TEXT("HOLDING PEN"), Yellow);
+				break;
+			}
+		}
+		if (GS->BountyTarget && GS->BountyTarget != PS)
+		{
+			for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+			{
+				if (It->GetPlayerState() == GS->BountyTarget && (!bWarden || It->IsSpotted() || FVector::Dist(It->GetActorLocation(), Me->GetActorLocation()) < 4000.f))
+				{
+					Marker(It->GetActorLocation() + FVector(0.f, 0.f, 160.f), TEXT("$ BOUNTY $"), Green);
+				}
+			}
+		}
+	}
+
 	// --- Status
+	if (Me->GetCondition() == EPVVCondition::Detained)
+	{
+		Centered(TEXT("N = watch other players"), SY * 0.4f + 40.f, White, Small, 1.2f);
+	}
 	switch (Me->GetCondition())
 	{
 	case EPVVCondition::KnockedDown: Centered(TEXT("KNOCKED DOWN!"), SY * 0.45f, Red, Big, 1.8f); break;

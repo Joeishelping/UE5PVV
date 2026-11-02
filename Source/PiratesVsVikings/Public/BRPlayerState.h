@@ -50,6 +50,8 @@ public:
 
 	// --- Points race + end-of-round awards ---------------------------------------------
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 Points = 0;
+	/** Lobby: pressed Y. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR") bool bReady = false;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatCrossings = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatSmuggled = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatContraband = 0;

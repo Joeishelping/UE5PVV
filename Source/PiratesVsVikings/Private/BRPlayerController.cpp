@@ -11,6 +11,7 @@
 #include "BRGameState.h"
 #include "BRPlayerState.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 
 void ABRPlayerController::BeginPlay()
@@ -100,6 +101,21 @@ void ABRPlayerController::PlayerTick(float DeltaTime)
 	{
 		return;
 	}
+	// Holding Pen: watch someone else until you're out (N = next).
+	const APVVCharacter* MyBody = Cast<APVVCharacter>(GetPawn());
+	const bool bInPen = MyBody && MyBody->GetCondition() == EPVVCondition::Detained;
+	if (!bInPen && SpectateTarget.IsValid())
+	{
+		SpectateTarget = nullptr;
+		if (GetPawn())
+		{
+			SetViewTargetWithBlend(GetPawn(), 0.4f);
+		}
+	}
+	else if (bInPen && SpectateTarget.IsValid() && GetViewTarget() != SpectateTarget.Get())
+	{
+		SetViewTargetWithBlend(SpectateTarget.Get(), 0.4f);
+	}
 	if (GS->Phase != EBRPhase::Ended)
 	{
 		bBankedRound = false;
@@ -129,6 +145,8 @@ void ABRPlayerController::SetupInputComponent()
 	{
 		InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ABRPlayerController::ToggleMenu);
 		InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ABRPlayerController::ToggleMic);
+		InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ABRPlayerController::ToggleReady);
+		InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ABRPlayerController::SpectateNext);
 	}
 }
 
@@ -293,5 +311,69 @@ void ABRPlayerController::Server_RemoveBots_Implementation()
 	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>(); GM && IsLocalController())
 	{
 		GM->RemoveBots();
+	}
+}
+
+void ABRPlayerController::ToggleReady()
+{
+	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
+	if (GS && GS->bLobby)
+	{
+		Server_ToggleReady();
+	}
+}
+
+void ABRPlayerController::Server_ToggleReady_Implementation()
+{
+	if (ABRPlayerState* PS = GetPlayerState<ABRPlayerState>())
+	{
+		PS->bReady = !PS->bReady;
+		PS->ForceNetUpdate();
+	}
+}
+
+void ABRPlayerController::SpectateNext()
+{
+	const APVVCharacter* MyBody = Cast<APVVCharacter>(GetPawn());
+	if (!MyBody || MyBody->GetCondition() != EPVVCondition::Detained)
+	{
+		return;
+	}
+	TArray<APVVCharacter*> People;
+	for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
+	{
+		if (*It != MyBody && It->GetPVVPlayerState() && It->GetCondition() != EPVVCondition::Detained)
+		{
+			People.Add(*It);
+		}
+	}
+	if (People.Num() == 0)
+	{
+		SpectateTarget = nullptr;
+		SetViewTargetWithBlend(GetPawn(), 0.3f);
+		return;
+	}
+	SpectateIndex = (SpectateIndex + 1) % People.Num();
+	SpectateTarget = People[SpectateIndex];
+	SetViewTargetWithBlend(People[SpectateIndex], 0.4f);
+	LocalMessage = FText::FromString(FString::Printf(TEXT("Watching %s  (N = next)"), *People[SpectateIndex]->GetPlayerDisplayName()));
+	LocalMessageTime = GetWorld()->GetTimeSeconds();
+}
+
+void ABRPlayerController::SetHostSettings(const FBRHostSettings& Settings)
+{
+	if (GetNetMode() == NM_Client)
+	{
+		return; // only the host
+	}
+	if (UBRGameInstance* GI = GetGameInstance<UBRGameInstance>())
+	{
+		GI->Host = Settings;
+		GI->Host.bSet = true;
+		GI->SaveHost();
+	}
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->ApplyHostSettings(Settings);
 	}
 }

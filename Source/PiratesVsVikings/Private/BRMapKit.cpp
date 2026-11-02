@@ -148,6 +148,33 @@ namespace BRMap
 		return Arena && Location.X > Arena->GetSafeX();
 	}
 
+	FVector GetSafeZoneGoal(const UWorld* World, const FVector& From)
+	{
+		FVector Goal = From + FVector(5000.f, 0.f, 0.f);
+		if (!World)
+		{
+			return Goal;
+		}
+		float Best = MAX_flt;
+		for (TActorIterator<ABRSafeZone> It(World); It; ++It)
+		{
+			const float D = FVector::DistSquared(It->GetActorLocation(), From);
+			if (D < Best)
+			{
+				Best = D;
+				Goal = It->GetActorLocation();
+			}
+		}
+		if (Best == MAX_flt)
+		{
+			if (const ABRDesertArena* Arena = BuiltInMap(World))
+			{
+				Goal = FVector(Arena->GetSafeX() + 1500.f, From.Y, From.Z);
+			}
+		}
+		return Goal;
+	}
+
 	bool IsCustomMap(const UWorld* World)
 	{
 		// Any Map Kit piece or a Player Start you placed yourself = it's your map.

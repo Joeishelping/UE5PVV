@@ -15,6 +15,7 @@ void ABRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPlayerState, AssignedJob);
 	DOREPLIFETIME(ABRPlayerState, JobReadyAt);
 	DOREPLIFETIME(ABRPlayerState, Points);
+	DOREPLIFETIME(ABRPlayerState, bReady);
 	DOREPLIFETIME(ABRPlayerState, StatCrossings);
 	DOREPLIFETIME(ABRPlayerState, StatSmuggled);
 	DOREPLIFETIME(ABRPlayerState, StatContraband);
