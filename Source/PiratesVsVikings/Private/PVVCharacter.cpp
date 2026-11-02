@@ -883,7 +883,7 @@ void APVVCharacter::UpdateStatusLabel()
 		return;
 	}
 
-	FString Label = UEnum::GetDisplayValueAsText(Faction).ToString().ToUpper();
+	FString Label = PVVFactionName(Faction).ToString().ToUpper();
 	switch (Condition)
 	{
 	case EPVVCondition::KnockedDown: Label += TEXT("\n(knocked down)"); break;

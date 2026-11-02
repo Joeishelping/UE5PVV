@@ -142,7 +142,7 @@ void APVVGameMode::RequestFaction(APlayerController* PC, EPVVFaction Faction)
 	PS->SetFaction(Faction);
 	RestartPlayer(PC);
 
-	const FText FactionName = UEnum::GetDisplayValueAsText(Faction);
+	const FText FactionName = PVVFactionName(Faction);
 	Announce(FText::Format(LOCTEXT("Joined", "{0} joined the {1}."), FText::FromString(PS->GetPlayerName()), FactionName));
 }
 
@@ -337,7 +337,7 @@ void APVVGameMode::EndMatch(EPVVFaction Winner)
 
 	Announce(Winner == EPVVFaction::None
 		? LOCTEXT("Draw", "Time! It's a draw.")
-		: FText::Format(LOCTEXT("Win", "The {0} win!"), UEnum::GetDisplayValueAsText(Winner)));
+		: FText::Format(LOCTEXT("Win", "The {0} win!"), PVVFactionName(Winner)));
 
 	GetWorldTimerManager().SetTimer(RestartTimer, this, &APVVGameMode::RestartMatch, RestartDelaySeconds, false);
 }
