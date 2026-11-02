@@ -21,6 +21,10 @@ void ABRPlayerController::BeginPlay()
 		return;
 	}
 	UBRGameInstance* GI = GetGameInstance<UBRGameInstance>();
+	if (GetNetMode() != NM_Standalone)
+	{
+		ToggleSpeaking(bMicOn); // open mic for proximity voice chat
+	}
 	// Wait a moment so the automatic team balancing has run, then switch to the chosen side + send your look.
 	GetWorldTimerManager().SetTimer(PreferredTeamTimer, this, &ABRPlayerController::ApplyPreferredTeam, 1.f, false);
 	if (GI && !GI->bMenuDone && GetNetMode() == NM_Standalone)
@@ -76,12 +80,21 @@ void ABRPlayerController::Server_SetLook_Implementation(const FBRLook& NewLook)
 	}
 }
 
+void ABRPlayerController::ToggleMic()
+{
+	bMicOn = !bMicOn;
+	ToggleSpeaking(bMicOn);
+	LocalMessage = bMicOn ? NSLOCTEXT("BR", "MicOn", "Mic ON (people near you can hear you) - K to mute") : NSLOCTEXT("BR", "MicOff", "Mic MUTED - K to unmute");
+	LocalMessageTime = GetWorld()->GetTimeSeconds();
+}
+
 void ABRPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 	if (InputComponent)
 	{
 		InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ABRPlayerController::ToggleMenu);
+		InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ABRPlayerController::ToggleMic);
 	}
 }
 

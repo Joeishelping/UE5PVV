@@ -62,6 +62,7 @@ public:
 
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void Landed(const FHitResult& Hit) override;
+	virtual void OnRep_PlayerState() override;
 
 	/** Server: fly through the air (catapult / cannon). Lands with a comedy tumble; zip-ties come off on landing. */
 	void StartFlight(const FVector& Velocity);
@@ -221,6 +222,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> SlapSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> TackleSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> ThrowSound;
+	/** Proximity voice: how far away (cm) you can still hear this player. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Voice") float VoiceRange = 2500.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Voice") bool bProximityVoice = true;
 	/** Screen shake when you get hit / knocked down / land a big flight (0 = off). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ScreenShake = 1.f;
 
@@ -331,6 +335,9 @@ private:
 	FVector CameraBaseLocation = FVector::ZeroVector;
 	void AddShake(float Amount) { ShakeAmount = FMath::Clamp(ShakeAmount + Amount, 0.f, 1.5f); }
 	void TickShake(float DeltaSeconds);
+	UPROPERTY(Transient) TObjectPtr<class UVOIPTalker> VoiceTalker;
+	UPROPERTY(Transient) TObjectPtr<class USoundAttenuation> VoiceAttenuation;
+	void SetupProximityVoice();
 	float LastTrumpetTime = -100.f;
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
 	bool bWandering = false;

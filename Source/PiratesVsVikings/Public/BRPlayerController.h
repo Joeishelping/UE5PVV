@@ -20,6 +20,9 @@ public:
 	void ShowMenu();
 	void HideMenu();
 	void ToggleMenu();
+	/** Proximity voice: your mic is open; K mutes / unmutes it. */
+	void ToggleMic();
+	bool bMicOn = true;
 	bool IsMenuOpen() const { return Menu != nullptr; }
 
 	/** Short message in the middle of this player's screen. */

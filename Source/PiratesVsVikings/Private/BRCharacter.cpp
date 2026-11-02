@@ -34,6 +34,8 @@
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/OverlapResult.h"
+#include "Net/VoiceConfig.h"
+#include "Sound/SoundAttenuation.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/PhysicalAnimationComponent.h"
 #include "Animation/AnimSequenceBase.h"
@@ -563,6 +565,7 @@ void ABRCharacter::BeginPlay()
 	DefaultSocketOffset = CameraBoom->SocketOffset;
 	DefaultFOV = FollowCamera->FieldOfView;
 	CameraBaseLocation = FollowCamera->GetRelativeLocation();
+	SetupProximityVoice();
 	EnableWobble();
 	if (GetMesh())
 	{
@@ -1539,6 +1542,39 @@ void ABRCharacter::TickWobble()
 		const float Woozy = 1.f + (Hunger < WeakHunger ? 1.5f : 0.f) + (1.f - GetBalanceFraction()) * 2.f;
 		const FVector Shove = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f) * SwayStrength * Woozy;
 		GetMesh()->AddImpulseToAllBodiesBelow(Shove, TEXT("spine_02"), true, true);
+	}
+}
+
+void ABRCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	SetupProximityVoice();
+}
+
+void ABRCharacter::SetupProximityVoice()
+{
+	// Other players' voices come out of their character and fade with distance.
+	APlayerState* PS = GetPlayerState();
+	if (!bProximityVoice || !PS || IsLocallyControlled() || GetNetMode() == NM_DedicatedServer || bIsNPC)
+	{
+		return;
+	}
+	if (!VoiceAttenuation)
+	{
+		VoiceAttenuation = NewObject<USoundAttenuation>(this);
+		VoiceAttenuation->Attenuation.bAttenuate = true;
+		VoiceAttenuation->Attenuation.bSpatialize = true;
+		VoiceAttenuation->Attenuation.AttenuationShapeExtents = FVector(300.f, 0.f, 0.f);
+		VoiceAttenuation->Attenuation.FalloffDistance = VoiceRange;
+	}
+	if (!VoiceTalker)
+	{
+		VoiceTalker = UVOIPTalker::CreateTalkerForPlayer(PS);
+	}
+	if (VoiceTalker)
+	{
+		VoiceTalker->Settings.AttenuationSettings = VoiceAttenuation;
+		VoiceTalker->Settings.ComponentToAttachTo = GetRootComponent();
 	}
 }
 
