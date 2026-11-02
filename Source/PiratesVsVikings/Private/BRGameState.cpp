@@ -13,6 +13,8 @@ void ABRGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRGameState, Weather);
 	DOREPLIFETIME(ABRGameState, RunnersSafe);
 	DOREPLIFETIME(ABRGameState, RunnersNeeded);
+	DOREPLIFETIME(ABRGameState, RunnerScore);
+	DOREPLIFETIME(ABRGameState, WardenScore);
 }
 
 void ABRGameState::Multicast_NoisePing_Implementation(FVector_NetQuantize Location)
@@ -23,5 +25,16 @@ void ABRGameState::Multicast_NoisePing_Implementation(FVector_NetQuantize Locati
 	{
 		NoisePings.RemoveAt(0);
 		NoisePingTimes.RemoveAt(0);
+	}
+}
+
+void ABRGameState::Multicast_Feed_Implementation(const FString& Line)
+{
+	FeedLines.Add(Line);
+	FeedTimes.Add(GetWorld()->GetTimeSeconds());
+	if (FeedLines.Num() > 6)
+	{
+		FeedLines.RemoveAt(0);
+		FeedTimes.RemoveAt(0);
 	}
 }

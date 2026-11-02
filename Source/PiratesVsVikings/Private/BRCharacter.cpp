@@ -439,6 +439,70 @@ void ABRCharacter::StartWandering(const FVector& Home, float Radius)
 	GetCharacterMovement()->MaxWalkSpeed = WanderSpeed;
 }
 
+void ABRCharacter::StartFollowing(ABRCharacter* NewLeader, int32 Pay)
+{
+	Leader = NewLeader;
+	ClientPay = Pay;
+	bIllegal = true;
+	bWandering = false;
+	GetCharacterMovement()->bRunPhysicsWithNoController = true;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+}
+
+void ABRCharacter::TickFollow(float DeltaSeconds)
+{
+	if (!bIsNPC || (!Leader.IsValid() && ClientPay == 0))
+	{
+		return;
+	}
+	ABRCharacter* L = Leader.Get();
+	// Leader caught, gone or switched teams: the client gives up and hangs around here.
+	if (!L || L->GetCondition() == EPVVCondition::Detained || !L->IsRunner())
+	{
+		Leader = nullptr;
+		ClientPay = 0;
+		if (GetCurrentBoat())
+		{
+			GetCurrentBoat()->Unseat(this);
+		}
+		StartWandering(GetActorLocation(), 900.f);
+		return;
+	}
+	if (GetCondition() != EPVVCondition::Normal || GetCarrier())
+	{
+		return;
+	}
+	APVVBoat* LeaderRide = L->GetCurrentBoat();
+	APVVBoat* MyRide = GetCurrentBoat();
+	if (MyRide && MyRide != LeaderRide)
+	{
+		MyRide->Unseat(this); // leader got out: hop out too
+		return;
+	}
+	if (MyRide)
+	{
+		return;
+	}
+	const FVector ToLeader = (L->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	const float Dist = ToLeader.Size();
+	if (LeaderRide && Dist < 700.f)
+	{
+		LeaderRide->TryBoard(this); // jump in the truck / boat with them
+		return;
+	}
+	if (Dist > 3500.f && !LeaderRide)
+	{
+		// Leader went over the Wall, through a tunnel or flew: the client scrambles after them.
+		TeleportTo(L->GetActorLocation() - L->GetActorForwardVector() * 200.f + FVector(0.f, 0.f, 30.f), L->GetActorRotation());
+		return;
+	}
+	if (Dist > 250.f)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = Dist > 900.f ? 650.f : 420.f;
+		AddMovementInput(ToLeader.GetSafeNormal(), 1.f);
+	}
+}
+
 void ABRCharacter::TickWander(float DeltaSeconds)
 {
 	if (!bWandering || Controller || GetCurrentBoat() || GetCarrier() || GetCondition() != EPVVCondition::Normal)
@@ -604,6 +668,9 @@ void ABRCharacter::EnsureDefaultInput()
 	ScanAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrapAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrumpetAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	NextItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	PrevItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	DropAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 
 	UInputMappingContext* IMC = DefaultMappingContext;
 	PVVInput::Map(IMC, AimAction, EKeys::RightMouseButton);
@@ -623,8 +690,10 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, ScanAction, EKeys::Gamepad_DPad_Left);
 	PVVInput::Map(IMC, TrapAction, EKeys::B);
 	PVVInput::Map(IMC, TrapAction, EKeys::Gamepad_LeftShoulder);
-	PVVInput::Map(IMC, TrumpetAction, EKeys::G);
-	PVVInput::Map(IMC, TrumpetAction, EKeys::Gamepad_RightShoulder);
+	PVVInput::Map(IMC, NextItemAction, EKeys::MouseScrollDown);
+	PVVInput::Map(IMC, NextItemAction, EKeys::Gamepad_RightShoulder);
+	PVVInput::Map(IMC, PrevItemAction, EKeys::MouseScrollUp);
+	PVVInput::Map(IMC, DropAction, EKeys::G);
 	// Fire is the existing Attack action (left mouse / gamepad X) while aiming; also right trigger.
 	PVVInput::Map(IMC, AttackAction, EKeys::Gamepad_RightTrigger);
 }
@@ -647,7 +716,9 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (ReloadAction) Input->BindAction(ReloadAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Reload);
 	if (CrouchAction) Input->BindAction(CrouchAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Crouch);
 	if (EatAction) Input->BindAction(EatAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Eat);
-	if (TrumpetAction) Input->BindAction(TrumpetAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Trumpet);
+	if (NextItemAction) Input->BindAction(NextItemAction, ETriggerEvent::Started, this, &ABRCharacter::Input_NextItem);
+	if (PrevItemAction) Input->BindAction(PrevItemAction, ETriggerEvent::Started, this, &ABRCharacter::Input_PrevItem);
+	if (DropAction) Input->BindAction(DropAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drop);
 	if (DroneAction) Input->BindAction(DroneAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drone);
 	if (WeaponModeAction) Input->BindAction(WeaponModeAction, ETriggerEvent::Started, this, &ABRCharacter::Input_WeaponMode);
 	if (ScanAction) Input->BindAction(ScanAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Scan);
@@ -666,8 +737,92 @@ void ABRCharacter::Input_Crouch()
 	}
 }
 
-void ABRCharacter::Input_Eat() { Server_Eat(); }
+void ABRCharacter::Input_Eat() { Server_UseItem(SelectedSlot); } // F = use the selected item
 void ABRCharacter::Input_Trumpet() { Server_PlayTrumpet(); }
+void ABRCharacter::Input_Drop() { Server_DropItem(SelectedSlot); }
+
+void ABRCharacter::Input_NextItem()
+{
+	const ABRPlayerState* PS = GetBRPlayerState();
+	const int32 Count = PS ? FMath::Max(1, PS->Inventory.Num()) : 1;
+	SelectedSlot = (SelectedSlot + 1) % Count;
+}
+
+void ABRCharacter::Input_PrevItem()
+{
+	const ABRPlayerState* PS = GetBRPlayerState();
+	const int32 Count = PS ? FMath::Max(1, PS->Inventory.Num()) : 1;
+	SelectedSlot = (SelectedSlot - 1 + Count) % Count;
+}
+
+void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	if (!PS || GetCondition() != EPVVCondition::Normal || GetCarrier())
+	{
+		return;
+	}
+	if (!PS->Inventory.IsValidIndex(Slot))
+	{
+		Slot = 0;
+	}
+	if (!PS->Inventory.IsValidIndex(Slot))
+	{
+		Notify(LOCTEXT("EmptyHands", "Your pockets are empty."));
+		return;
+	}
+	switch (PS->Inventory[Slot])
+	{
+	case EBRItem::Taco: Server_Eat_Implementation(); break;
+	case EBRItem::Trumpet: PlayTrumpet(); break;
+	case EBRItem::TacoPlatter: PlaceTacoPlatter(); break;
+	case EBRItem::Ladder: Notify(LOCTEXT("UseLadder", "Walk up to the Wall and press E to lean your ladder on it.")); break;
+	case EBRItem::WireCutters: Notify(LOCTEXT("UseCutters", "Walk up to the razor wire and hold E to cut it.")); break;
+	case EBRItem::GasCan: Notify(LOCTEXT("UseGas", "Walk up to the truck and press E to fill it up.")); break;
+	case EBRItem::Shovel: Notify(LOCTEXT("UseShovel", "Find a soft dirt mound and hold E to dig a tunnel.")); break;
+	case EBRItem::CannonSuit: Notify(LOCTEXT("UseSuit", "Climb into the Human Cannon (E) once the Line is open.")); break;
+	case EBRItem::Drugs:
+	case EBRItem::IllegalGun: Notify(LOCTEXT("UseContraband", "Contraband! Get it to the Safe Zone for $500. Don't get caught with it.")); break;
+	default: Notify(LOCTEXT("UseNothing", "You can't use that here.")); break;
+	}
+}
+
+void ABRCharacter::Server_DropItem_Implementation(int32 Slot)
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	if (!PS || GetCurrentBoat() || bInCannon)
+	{
+		return;
+	}
+	const int32 ChargesBefore = PS->WireCutterCharges;
+	EBRItem Dropped = EBRItem::None;
+	if (!PS->RemoveItemAt(PS->Inventory.IsValidIndex(Slot) ? Slot : 0, Dropped))
+	{
+		return;
+	}
+	const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 5.f);
+	const FTransform Where(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), Feet + GetActorForwardVector() * 90.f);
+	if (ABRItemPickup* Pickup = GetWorld()->SpawnActorDeferred<ABRItemPickup>(ABRItemPickup::StaticClass(), Where, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Pickup->Item = Dropped;
+		Pickup->Charges = Dropped == EBRItem::WireCutters ? FMath::Max(1, ChargesBefore - PS->WireCutterCharges) : 0;
+		Pickup->FinishSpawning(Where);
+	}
+}
+
+void ABRCharacter::PlaceTacoPlatter()
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	if (!PS || GetCurrentBoat() || !PS->RemoveItem(EBRItem::TacoPlatter))
+	{
+		return;
+	}
+	const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	GetWorld()->SpawnActor<ABRTacoPlatter>(ABRTacoPlatter::StaticClass(), Feet + GetActorForwardVector() * 150.f, FRotator::ZeroRotator, Params);
+	Notify(LOCTEXT("PlatterPlaced", "Taco platter served! Your crew can grab tacos here (E)."));
+}
 
 bool ABRCharacter::IsDancing() const
 {
@@ -691,6 +846,11 @@ void ABRCharacter::ForceDance(float Seconds)
 
 void ABRCharacter::Server_PlayTrumpet_Implementation()
 {
+	PlayTrumpet();
+}
+
+void ABRCharacter::PlayTrumpet()
+{
 	ABRPlayerState* PS = GetBRPlayerState();
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (!PS || !PS->HasItem(EBRItem::Trumpet) || GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || bInCannon)
@@ -712,6 +872,10 @@ void ABRCharacter::Server_PlayTrumpet_Implementation()
 		{
 			Other->ForceDance(DanceSeconds);
 			++Dancers;
+			if (ABRPlayerState* MyPS = GetBRPlayerState())
+			{
+				++MyPS->StatDances;
+			}
 		}
 	}
 	Spot(4.f); // a trumpet solo is not stealthy
@@ -1109,6 +1273,7 @@ void ABRCharacter::Server_Eat_Implementation()
 	ABRPlayerState* PS = GetBRPlayerState();
 	if (PS && Hunger < 95.f && PS->RemoveItem(EBRItem::Taco))
 	{
+		++PS->StatTacos;
 		Eat(TacoFood);
 		Multicast_Ate();
 		Notify(LOCTEXT("Ate", "Delicious. (+food)"));
@@ -1167,53 +1332,55 @@ void ABRCharacter::OnDroneFinished()
 void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector_NetQuantizeNormal Direction)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (!IsWarden() || Now - LastScanTime < 2.5f || FVector::Dist(Start, GetActorLocation()) > 900.f)
+	if (!IsWarden() || Now - LastScanTime < 1.5f || FVector::Dist(Start, GetActorLocation()) > 900.f)
 	{
+		return;
+	}
+	if (GetCurrentBoat())
+	{
+		Notify(LOCTEXT("ScanOnFoot", "Get out and walk up to people to scan them."));
 		return;
 	}
 	LastScanTime = Now;
 
-	FCollisionObjectQueryParams Objects;
-	Objects.AddObjectTypesToQuery(ECC_Pawn);
-	Objects.AddObjectTypesToQuery(ECC_Vehicle);
+	// One person at a time, up close (walk up to the truck window).
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRScan), false, this);
 	FHitResult Hit;
-	if (!GetWorld()->SweepSingleByObjectType(Hit, Start, Start + FVector(Direction) * 3000.f, FQuat::Identity, Objects, FCollisionShape::MakeSphere(50.f), Params))
+	const float Range = 450.f;
+	const FVector From = GetActorLocation() + FVector(0.f, 0.f, 40.f);
+	if (!GetWorld()->SweepSingleByObjectType(Hit, From, From + FVector(Direction) * Range, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(60.f), Params))
 	{
-		Notify(LOCTEXT("ScanNothing", "SCAN: nothing there."));
+		Notify(LOCTEXT("ScanNothing", "SCAN: nobody in range - walk right up to them."));
 		return;
 	}
-
-	if (const APVVBoat* Vehicle = Cast<APVVBoat>(Hit.GetActor()))
+	ABRCharacter* Target = Cast<ABRCharacter>(Hit.GetActor());
+	if (!Target)
 	{
-		int32 People = 0, Players = 0;
-		for (APVVCharacter* Occupant : Vehicle->GetOccupants())
-		{
-			if (!Occupant) continue;
-			++People;
-			const ABRCharacter* BRC = Cast<ABRCharacter>(Occupant);
-			if (BRC && !BRC->IsNPC() && BRC->IsRunner())
-			{
-				++Players;
-				const_cast<ABRCharacter*>(BRC)->Spot(6.f);
-			}
-		}
-		Notify(Players > 0
-			? FText::Format(LOCTEXT("ScanAnomaly", "SCAN: {0} aboard - {1} HEAT ANOMALY! (tagged)"), People, Players)
-			: FText::Format(LOCTEXT("ScanClean", "SCAN: {0} aboard - all regular citizens."), People));
+		Notify(LOCTEXT("ScanNothing2", "SCAN: nobody there."));
 		return;
 	}
-	if (ABRCharacter* Target = Cast<ABRCharacter>(Hit.GetActor()))
+	Target->LastScannedTime = Now;
+	Target->ScannedBy = this;
+	if (Target->IsWarden())
 	{
-		if (Target->IsRunner() && !Target->IsNPC())
-		{
-			Target->Spot(6.f);
-			Notify(LOCTEXT("ScanRunner", "SCAN: RUNNER! (tagged)"));
-		}
-		else
-		{
-			Notify(Target->IsNPC() ? LOCTEXT("ScanCitizen", "SCAN: regular citizen. Leave them alone.") : LOCTEXT("ScanWarden", "SCAN: that's a fellow Warden."));
-		}
+		Notify(LOCTEXT("ScanWarden", "SCAN: that's a fellow agent."));
+	}
+	else if (!Target->IsNPC())
+	{
+		Target->Spot(8.f);
+		Notify(LOCTEXT("ScanRunner", "SCAN: RUNNER! (tagged) - order them out / zip-tie them!"));
+	}
+	else if (Target->bIllegal)
+	{
+		Notify(LOCTEXT("ScanIllegal", "SCAN: NO PAPERS! Order them out of the truck and arrest them."));
+	}
+	else if (Target->bCarriesContraband)
+	{
+		Notify(LOCTEXT("ScanContraband", "SCAN: CONTRABAND! Order them out of the truck to seize it."));
+	}
+	else
+	{
+		Notify(LOCTEXT("ScanCitizen", "SCAN: papers in order. Regular citizen."));
 	}
 }
 
@@ -1424,6 +1591,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority())
 	{
 		TickWander(DeltaSeconds);
+		TickFollow(DeltaSeconds);
 	}
 	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown && !GetCurrentBoat() && !GetCarrier())
 	{

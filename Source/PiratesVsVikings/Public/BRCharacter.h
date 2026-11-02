@@ -45,6 +45,21 @@ public:
 	/** Server, after spawning an NPC: stroll around Home (village life). */
 	void StartWandering(const FVector& Home, float Radius);
 
+	// --- NPC secrets (server) -------------------------------------------------------------
+	/** No papers. Border Patrol score for catching them; Runners score for smuggling them through. */
+	bool bIllegal = false;
+	/** Carrying contraband (found by scanning). */
+	bool bCarriesContraband = false;
+	/** Smuggling client: follows this Runner. */
+	TWeakObjectPtr<ABRCharacter> Leader;
+	int32 ClientPay = 0;
+	/** Last time a Border Patrol scanner checked this person (server world time), and who. */
+	float LastScannedTime = -1000.f;
+	TWeakObjectPtr<ABRCharacter> ScannedBy;
+	/** Something Border Patrol must deal with: a Runner player, or an NPC with no papers / contraband. */
+	bool IsSuspect() const { return (!bIsNPC && IsRunner()) || bIllegal || bCarriesContraband; }
+	void StartFollowing(ABRCharacter* NewLeader, int32 Pay);
+
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void Landed(const FHitResult& Hit) override;
 
@@ -55,6 +70,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsInCannon() const { return bInCannon; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsFlying() const { return bFlying; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDancing() const;
+	/** Selected inventory slot (mouse wheel). */
+	int32 GetSelectedSlot() const { return SelectedSlot; }
 	/** Server: dance uncontrollably for a while (mariachi). */
 	void ForceDance(float Seconds);
 
@@ -174,8 +191,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> WeaponModeAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> ScanAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrapAction;
-	/** G: play the mariachi trumpet (Runners with a trumpet). */
+	/** (Unused - the trumpet is played with F when selected.) */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrumpetAction;
+	/** Mouse wheel: pick an inventory slot. G: drop it. F: use it. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> NextItemAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> PrevItemAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> DropAction;
 
 	// --- Mariachi trumpet ---------------------------------------------------------------
 	/** Border Patrol within this range (cm) can't stop dancing. */
@@ -353,6 +374,7 @@ private:
 	void PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectPtr<USkeletalMesh>>& Styles, int32 Index);
 	void ApplyFaceShape(const FBRLook& L);
 	void TickWander(float DeltaSeconds);
+	void TickFollow(float DeltaSeconds);
 	bool WantsStiffArms() const;
 	UFUNCTION() void OnRep_Slow();
 
@@ -363,7 +385,15 @@ private:
 	void Input_Crouch();
 	void Input_Eat();
 	void Input_Trumpet();
+	void Input_NextItem();
+	void Input_PrevItem();
+	void Input_Drop();
+	void PlayTrumpet();
+	void PlaceTacoPlatter();
+	int32 SelectedSlot = 0;
 	UFUNCTION(Server, Reliable) void Server_PlayTrumpet();
+	UFUNCTION(Server, Reliable) void Server_UseItem(int32 Slot);
+	UFUNCTION(Server, Reliable) void Server_DropItem(int32 Slot);
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_Trumpet();
 	void Input_Drone();
 	void Input_WeaponMode();

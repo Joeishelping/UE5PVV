@@ -423,6 +423,9 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Station(-10300.f, -4000.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS PUMP $25"), Shop);
 	Station(-11700.f, 1550.f, EBRStationKind::Job, EBRItem::None, 15, TEXT("Cook & sell tacos"), Job, 4.f, 2.f);
 	Station(-11700.f, 2050.f, EBRStationKind::BuyItem, EBRItem::Taco, 8, TEXT("TACO $8"), Shop);
+	Station(-11300.f, 2050.f, EBRStationKind::BuyItem, EBRItem::TacoPlatter, 40, TEXT("TACO PLATTER $40 (feeds 8)"), Shop);
+	Station(-13000.f, 1500.f, EBRStationKind::HireClient, EBRItem::None, 250, TEXT(""), FLinearColor(0.3f, 0.25f, 0.2f), 0.f, 10.f);
+	Station(-14600.f, 4900.f, EBRStationKind::BuyItem, EBRItem::Drugs, 150, TEXT("??? PACKAGE $150"), Shady);
 	Station(-14600.f, 5600.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 150, TEXT("??? $150"), Shady, 0.f, 0.f, true);
 	if (ABRStation* Marina = Station(-6400.f, -6300.f, EBRStationKind::BuyBoat, EBRItem::None, 120, TEXT("BOATS $120"), FLinearColor(0.3f, 0.5f, 0.9f)))
 	{

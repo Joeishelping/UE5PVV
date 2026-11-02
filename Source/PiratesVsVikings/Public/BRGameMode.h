@@ -37,6 +37,19 @@ public:
 	void OnVehicleSearched(APVVCharacter* Warden, int32 RunnersFound);
 	void ChangeApproval(float Delta);
 
+	// --- Points race ----------------------------------------------------------------------
+	void AwardPoints(APVVCharacter* Who, int32 Amount);
+	/** Kill-feed line on everyone's screen. */
+	void Feed(const FString& Line);
+	/** Server: a Runner takes on a smuggling client (an NPC who follows them; paid on arrival in the Safe Zone). */
+	void HireClient(class ABRCharacter* Runner, const FVector& At, int32 Pay);
+	/** Server: Border Patrol seized contraband. */
+	void OnContrabandSeized(APVVCharacter* Warden, int32 Count);
+	/** Server: every passenger of a truck at the checkpoint was scanned and clean. */
+	void OnTruckCleared(APVVCharacter* Warden);
+	/** Server: a truck waited too long at the checkpoint and pushed through. */
+	void OnTruckForcedThrough();
+
 	/** Server: fling a Runner back across the border with this catapult (Warden = who loaded them, or null for the pen). */
 	void CatapultRunner(APVVCharacter* Prisoner, class ABRCatapult* Catapult, APVVCharacter* Warden);
 
@@ -87,6 +100,27 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") TSubclassOf<APawn> NPCPassengerClass;
 
+	// --- Points race: points per thing (team with more points at the end wins) -----------
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerCrossing = 3;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerClient = 2;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerContraband = 2;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerCatch = 2;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerIllegalNPC = 1;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerSeizure = 1;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerClearedTruck = 1;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerWrongfulArrest = -1;
+	/** Money a Runner gets for reaching the Safe Zone (they're then sent back to Mexico to go again). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 CrossingPay = 150;
+	/** Money per contraband item (drugs, guns) carried into the Safe Zone. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 ContrabandPay = 500;
+	/** Most smuggling clients one Runner can lead at once. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 MaxClientsPerRunner = 3;
+	/** Chance an NPC in a truck has no papers / carries contraband (0..1). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") float IllegalNPCChance = 0.15f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") float ContrabandNPCChance = 0.1f;
+	/** Unemployed share of Runners (they have to rummage through trash). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") float UnemployedChance = 0.25f;
+
 	/** Townsfolk strolling around the Runner village. 0 = none. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") int32 VillagerCount = 12;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") float VillagerWanderRadius = 1100.f;
@@ -112,6 +146,8 @@ private:
 	void RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner);
 	void SpawnNPCTruck();
 	void SpawnVillagers();
+	void AssignJob(class ABRPlayerState* PS);
+	void TickClients();
 	bool bWarnedNoRoad = false;
 	UClass* GetNPCClass() const;
 	class ABRCharacter* SpawnNPC(const FTransform& Where);

@@ -47,6 +47,8 @@ namespace BR
 		case EBRItem::CannonSuit:  return TEXT("Cannonball Suit");
 		case EBRItem::Shovel:      return TEXT("Shovel");
 		case EBRItem::Trumpet:     return TEXT("Mariachi Trumpet");
+		case EBRItem::TacoPlatter: return TEXT("Taco Platter");
+		case EBRItem::Drugs:       return TEXT("Drug Package");
 		default:                   return TEXT("");
 		}
 	}

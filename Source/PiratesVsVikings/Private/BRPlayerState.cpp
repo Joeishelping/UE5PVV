@@ -12,6 +12,22 @@ void ABRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPlayerState, bReachedSafety);
 	DOREPLIFETIME(ABRPlayerState, WireCutterCharges);
 	DOREPLIFETIME(ABRPlayerState, SentenceSeconds);
+	DOREPLIFETIME(ABRPlayerState, AssignedJob);
+	DOREPLIFETIME(ABRPlayerState, JobReadyAt);
+	DOREPLIFETIME(ABRPlayerState, Points);
+	DOREPLIFETIME(ABRPlayerState, StatCrossings);
+	DOREPLIFETIME(ABRPlayerState, StatSmuggled);
+	DOREPLIFETIME(ABRPlayerState, StatContraband);
+	DOREPLIFETIME(ABRPlayerState, StatCatches);
+	DOREPLIFETIME(ABRPlayerState, StatKnockdowns);
+	DOREPLIFETIME(ABRPlayerState, StatTackles);
+	DOREPLIFETIME(ABRPlayerState, StatThrows);
+	DOREPLIFETIME(ABRPlayerState, StatCatapulted);
+	DOREPLIFETIME(ABRPlayerState, StatCannonShots);
+	DOREPLIFETIME(ABRPlayerState, StatTacos);
+	DOREPLIFETIME(ABRPlayerState, StatWrongful);
+	DOREPLIFETIME(ABRPlayerState, StatDances);
+	DOREPLIFETIME(ABRPlayerState, StatClearedTrucks);
 }
 
 bool ABRPlayerState::AddItem(EBRItem Item)
@@ -36,6 +52,21 @@ bool ABRPlayerState::RemoveItem(EBRItem Item)
 		return false;
 	}
 	Inventory.RemoveAt(Index);
+	return true;
+}
+
+bool ABRPlayerState::RemoveItemAt(int32 Index, EBRItem& OutItem)
+{
+	if (!HasAuthority() || !Inventory.IsValidIndex(Index))
+	{
+		return false;
+	}
+	OutItem = Inventory[Index];
+	Inventory.RemoveAt(Index);
+	if (OutItem == EBRItem::WireCutters && !HasItem(EBRItem::WireCutters))
+	{
+		WireCutterCharges = 0;
+	}
 	return true;
 }
 

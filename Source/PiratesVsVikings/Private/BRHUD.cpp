@@ -74,8 +74,9 @@ void ABRHUD::DrawHUD()
 	switch (GS->Phase)
 	{
 	case EBRPhase::Prep: PhaseText = FString::Printf(TEXT("PREP  -  Line opens in %s"), *Clock(GS->PhaseSecondsLeft)); break;
-	case EBRPhase::Invasion: PhaseText = FString::Printf(TEXT("INVASION  -  %s left   |   Safe: %d / %d"), *Clock(GS->PhaseSecondsLeft), GS->RunnersSafe, GS->RunnersNeeded); break;
-	default: PhaseText = GS->Winner == BR::Runners ? TEXT("RUNNERS WIN!") : TEXT("WARDENS WIN!"); break;
+	case EBRPhase::Invasion: PhaseText = FString::Printf(TEXT("INVASION  -  %s left   |   %s %d  -  %d %s"), *Clock(GS->PhaseSecondsLeft),
+		*BR::RunnerName().ToUpper(), GS->RunnerScore, GS->WardenScore, *BR::WardenName().ToUpper()); break;
+	default: PhaseText = FString::Printf(TEXT("FINAL   %s %d  -  %d %s"), *BR::RunnerName().ToUpper(), GS->RunnerScore, GS->WardenScore, *BR::WardenName().ToUpper()); break;
 	}
 	Centered(PhaseText, 10.f, GS->Phase == EBRPhase::Invasion ? Red : White, Big, 1.4f);
 	const TCHAR* WeatherText = GS->Weather == EBRWeather::Rain ? TEXT("Rain") : GS->Weather == EBRWeather::Sandstorm ? TEXT("SANDSTORM") : TEXT("Clear");
@@ -85,7 +86,62 @@ void ABRHUD::DrawHUD()
 
 	if (GS->Phase == EBRPhase::Ended)
 	{
-		Centered(GS->Winner == BR::Runners ? TEXT("RUNNERS WIN!") : TEXT("WARDENS WIN!"), SY * 0.3f, GS->Winner == BR::Runners ? RunnerCol : WardenCol, Big, 4.f);
+		const FString WinText = GS->Winner == BR::Runners ? BR::RunnerName().ToUpper() + TEXT(" WIN!")
+			: (GS->Winner == BR::Wardens ? BR::WardenName().ToUpper() + TEXT(" WIN!") : FString(TEXT("IT'S A DRAW!")));
+		Centered(WinText, SY * 0.2f, GS->Winner == BR::Runners ? RunnerCol : WardenCol, Big, 4.f);
+
+		// --- Award screen
+		struct FAward { const TCHAR* Title; int32 ABRPlayerState::* Stat; const TCHAR* Unit; };
+		static const FAward Awards[] = {
+			{ TEXT("MVP"), &ABRPlayerState::Points, TEXT("points") },
+			{ TEXT("Border Hopper"), &ABRPlayerState::StatCrossings, TEXT("crossings") },
+			{ TEXT("Coyote of the Year"), &ABRPlayerState::StatSmuggled, TEXT("clients smuggled") },
+			{ TEXT("Narco Legend"), &ABRPlayerState::StatContraband, TEXT("contraband delivered") },
+			{ TEXT("Top Cop"), &ABRPlayerState::StatCatches, TEXT("catches") },
+			{ TEXT("Paper Pusher"), &ABRPlayerState::StatClearedTrucks, TEXT("trucks cleared") },
+			{ TEXT("Wrongful Arrest King"), &ABRPlayerState::StatWrongful, TEXT("wrongful arrests") },
+			{ TEXT("Most Catapulted"), &ABRPlayerState::StatCatapulted, TEXT("flights home") },
+			{ TEXT("Human Cannonball"), &ABRPlayerState::StatCannonShots, TEXT("cannon shots") },
+			{ TEXT("Body Slammer"), &ABRPlayerState::StatKnockdowns, TEXT("knockdowns") },
+			{ TEXT("Linebacker"), &ABRPlayerState::StatTackles, TEXT("tackles") },
+			{ TEXT("Yeet Master"), &ABRPlayerState::StatThrows, TEXT("throws") },
+			{ TEXT("Mariachi Menace"), &ABRPlayerState::StatDances, TEXT("people made to dance") },
+			{ TEXT("Taco Addict"), &ABRPlayerState::StatTacos, TEXT("tacos") },
+		};
+		float AwardY = SY * 0.2f + 90.f;
+		for (const FAward& Award : Awards)
+		{
+			const ABRPlayerState* Best = nullptr;
+			for (APlayerState* Each : GS->PlayerArray)
+			{
+				const ABRPlayerState* BPS = Cast<ABRPlayerState>(Each);
+				if (BPS && BPS->*Award.Stat > 0 && (!Best || BPS->*Award.Stat > Best->*Award.Stat))
+				{
+					Best = BPS;
+				}
+			}
+			if (Best)
+			{
+				Centered(FString::Printf(TEXT("%s:  %s  (%d %s)"), Award.Title, *Best->GetPlayerName(), Best->*Award.Stat, Award.Unit), AwardY, Yellow, Big, 1.3f);
+				AwardY += 32.f;
+			}
+		}
+	}
+
+	// --- Kill feed (top right)
+	{
+		float KY = 90.f;
+		for (int32 i = 0; i < GS->FeedLines.Num(); ++i)
+		{
+			if (Now - GS->FeedTimes[i] < 7.f)
+			{
+				float W = 0.f, H = 0.f;
+				GetTextSize(GS->FeedLines[i], W, H, Small, 1.2f);
+				DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), SX - W - 30.f, KY - 2.f, W + 16.f, H + 4.f);
+				DrawText(GS->FeedLines[i], White, SX - W - 22.f, KY, Small, 1.2f);
+				KY += H + 8.f;
+			}
+		}
 	}
 
 	// --- Announcements
@@ -190,6 +246,8 @@ void ABRHUD::DrawHUD()
 	if (!bWarden)
 	{
 		DrawText(FString::Printf(TEXT("$%d"), PS->Money), Green, 20.f, SY - 118.f, Big, 1.3f);
+		const FString JobText = PS->AssignedJob.IsEmpty() ? FString() : (PS->AssignedJob == TEXT("-") ? FString(TEXT("JOB: none - rummage for scrap")) : TEXT("JOB: ") + PS->AssignedJob);
+		DrawText(JobText, FLinearColor(0.8f, 0.8f, 0.8f), 560.f, SY - 135.f, Small, 1.1f);
 		DrawText(TEXT("FOOD"), White, 120.f, SY - 112.f, Small);
 		Bar(170.f, SY - 114.f, 180.f, 14.f, Me->GetHunger() / 100.f, Me->GetHunger() > 25.f ? FLinearColor(0.9f, 0.6f, 0.2f) : Red);
 		DrawText(TEXT("SEEN"), White, 370.f, SY - 112.f, Small);
@@ -199,6 +257,11 @@ void ABRHUD::DrawHUD()
 		for (int32 i = 0; i < ABRPlayerState::MaxSlots; ++i)
 		{
 			const float X = 20.f + i * 130.f;
+			const bool bSelected = i == Me->GetSelectedSlot() && PS->Inventory.IsValidIndex(i);
+			if (bSelected)
+			{
+				DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.9f), X - 3.f, SY - 95.f, 130.f, 32.f);
+			}
 			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X, SY - 92.f, 124.f, 26.f);
 			if (PS->Inventory.IsValidIndex(i))
 			{
@@ -254,7 +317,7 @@ void ABRHUD::DrawHUD()
 
 	DrawText(bWarden
 		? TEXT("WASD move | Shift sprint | C crouch | LMB punch | hold RMB aim + LMB shoot | R reload | X taser/gun | V scan | B trap | Q drone | E interact")
-		: TEXT("WASD move | Shift sprint | C crouch | LMB punch | hold RMB aim + LMB shoot (if armed) | R reload | F eat | E interact"),
+		: TEXT("WASD move | Shift sprint | C crouch | LMB punch | RMB aim + LMB shoot | Mouse wheel pick item | F use item | G drop | E interact"),
 		FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 40.f, Small, 1.1f);
 
 	// --- Status

@@ -236,19 +236,57 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 	}
 	if (WantsSearch(Interactor))
 	{
-		int32 PlayersFound = 0;
-		for (const APVVCharacter* Occupant : Occupants)
+		// Pull out the suspects: Runners, people with no papers, people with contraband.
+		const ABRTruck* AsTruck = Cast<ABRTruck>(this);
+		const bool bNPCTruck = AsTruck && AsTruck->IsNPCTruck();
+		int32 Found = 0;
+		int32 Seized = 0;
+		TArray<APVVCharacter*> Out;
+		for (APVVCharacter* Occupant : Occupants)
 		{
-			const ABRCharacter* BRC = Cast<ABRCharacter>(Occupant);
-			if (BRC && !BRC->IsNPC() && BRC->IsRunner())
+			ABRCharacter* BRC = Cast<ABRCharacter>(Occupant);
+			if (!BRC)
 			{
-				++PlayersFound;
+				continue;
+			}
+			if (BRC->bCarriesContraband)
+			{
+				BRC->bCarriesContraband = false;
+				++Seized;
+				if (!BRC->bIllegal)
+				{
+					continue; // contraband taken, papers fine: they can stay
+				}
+			}
+			if (BRC->IsSuspect())
+			{
+				Out.Add(BRC);
+				++Found;
 			}
 		}
-		EjectAll();
+		if (!bNPCTruck)
+		{
+			EjectAll(); // a Runner-owned truck: everybody out
+		}
+		else
+		{
+			for (APVVCharacter* Suspect : Out)
+			{
+				Unseat(Suspect);
+				Suspect->LaunchCharacter(FVector(FMath::FRandRange(-300.f, 300.f), FMath::FRandRange(-300.f, 300.f), 500.f), true, true);
+				if (ABRCharacter* NPC = Cast<ABRCharacter>(Suspect); NPC && NPC->IsNPC())
+				{
+					NPC->StartWandering(NPC->GetActorLocation(), 1500.f); // run for it
+				}
+			}
+		}
 		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 		{
-			GM->OnVehicleSearched(Interactor, PlayersFound);
+			if (Seized > 0)
+			{
+				GM->OnContrabandSeized(Interactor, Seized);
+			}
+			GM->OnVehicleSearched(Interactor, Found + Seized);
 		}
 		return;
 	}
@@ -538,6 +576,20 @@ void ABRTruck::Tick(float DeltaSeconds)
 	if (HasAuthority() && bNPCDriven)
 	{
 		DriveNPC(DeltaSeconds);
+		// Driver got dragged out and nobody's driving: the truck gets towed away after a while.
+		const float Now = GetWorld()->GetTimeSeconds();
+		if (GetDriver())
+		{
+			NoDriverSince = -1.f;
+		}
+		else if (NoDriverSince < 0.f)
+		{
+			NoDriverSince = Now;
+		}
+		else if (Now - NoDriverSince > 40.f)
+		{
+			Destroy();
+		}
 	}
 }
 
@@ -564,13 +616,50 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 			CheckpointArrivalTime = Now;
 		}
 		ABRCheckpointGate* CheckGate = Cast<ABRCheckpointGate>(Gate.Get());
-		if (!CheckGate || CheckGate->IsOpen())
+		// Border Patrol must walk up and scan EVERY person aboard. Only a clean truck goes through.
+		bool bAllScanned = true;
+		bool bAnySuspect = false;
+		ABRCharacter* Inspector = nullptr;
+		for (APVVCharacter* Occupant : Occupants)
 		{
-			++RouteIndex;
+			if (ABRCharacter* BRC = Cast<ABRCharacter>(Occupant))
+			{
+				if (BRC->LastScannedTime < CheckpointArrivalTime)
+				{
+					bAllScanned = false;
+				}
+				else if (!Inspector)
+				{
+					Inspector = BRC->ScannedBy.Get();
+				}
+				bAnySuspect |= BRC->IsSuspect();
+			}
 		}
-		else if (Now - CheckpointArrivalTime > 25.f)
+		const bool bCleared = bAllScanned && !bAnySuspect;
+		const bool bFedUp = Now - CheckpointArrivalTime > MaxCheckpointWait;
+		if (!bCheckpointDone && (bCleared || bFedUp || !CheckGate))
 		{
-			CheckGate->OpenFor(8.f); // nobody came to check - the gate waves them through
+			bCheckpointDone = true;
+			if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+			{
+				if (bCleared && CheckGate)
+				{
+					GM->OnTruckCleared(Inspector);
+				}
+				else if (bFedUp)
+				{
+					GM->OnTruckForcedThrough();
+				}
+			}
+		}
+		if (bCheckpointDone)
+		{
+			if (CheckGate && !CheckGate->IsOpen())
+			{
+				CheckGate->OpenFor(8.f);
+				return; // wait for the barrier to lift
+			}
+			++RouteIndex;
 		}
 		return;
 	}

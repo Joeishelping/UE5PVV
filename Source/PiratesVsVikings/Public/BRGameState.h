@@ -36,6 +36,21 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 RunnersNeeded = 1;
 
+	/** Points race: the team with more points when the Invasion timer runs out wins. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 RunnerScore = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 WardenScore = 0;
+
+	/** Kill-feed line in the top-right corner of everyone's screen ("Jorge got YEETED by Dave"). */
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_Feed(const FString& Line);
+
+	// Local (HUD) copy of the kill feed.
+	TArray<FString> FeedLines;
+	TArray<float> FeedTimes;
+
 	static constexpr float DroneApproval = 60.f;
 	static constexpr float LethalApproval = 30.f;
 

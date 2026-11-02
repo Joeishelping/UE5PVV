@@ -32,7 +32,9 @@ enum class EBRItem : uint8
 	CarKey			UMETA(DisplayName = "Car Key"),
 	CannonSuit		UMETA(DisplayName = "Cannonball Suit"),
 	Shovel			UMETA(DisplayName = "Shovel"),
-	Trumpet			UMETA(DisplayName = "Mariachi Trumpet")
+	Trumpet			UMETA(DisplayName = "Mariachi Trumpet"),
+	TacoPlatter		UMETA(DisplayName = "Taco Platter"),
+	Drugs			UMETA(DisplayName = "Drug Package")
 };
 
 UENUM(BlueprintType)
@@ -50,7 +52,8 @@ enum class EBRStationKind : uint8
 	SellItem,	// give Item, get Price
 	BuyBoat,	// pay Price, a boat appears at BoatSpawn
 	Job,		// hold to work, get Price (and Item if set)
-	Bet			// bet Price (0 = ALL IN) on a rooster at the cockfight pit
+	Bet,		// bet Price (0 = ALL IN) on a rooster at the cockfight pit
+	HireClient	// a smuggling client pays you to get them across: they follow you (paid on arrival)
 };
 
 UENUM(BlueprintType)
@@ -74,7 +77,8 @@ namespace BR
 	inline bool IsOriginalCloth(float Slider) { return Slider < 0.05f; }
 	/** Slider 0..1 -> natural hair colours, then dyed ones. Below 0.05 = keep the hair's own colour. */
 	PIRATESVSVIKINGS_API FLinearColor HairColor(float Slider);
-	inline bool IsIllegal(EBRItem Item) { return Item == EBRItem::IllegalGun; }
+	/** Contraband: worth big money if you get it to the Safe Zone; confiscated if you're caught. */
+	inline bool IsIllegal(EBRItem Item) { return Item == EBRItem::IllegalGun || Item == EBRItem::Drugs; }
 }
 
 /** Character customization (menu sliders). Same options for every player on both teams. */

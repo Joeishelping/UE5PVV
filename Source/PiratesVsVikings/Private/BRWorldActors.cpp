@@ -195,9 +195,11 @@ void ABRStation::BeginPlay()
 		case EBRStationKind::Job: Text = Price > 0 ? FString::Printf(TEXT("WORK HERE ($%d)"), Price) : FString(TEXT("Dig through junk")); break;
 		case EBRStationKind::BuyBoat: Text = FString::Printf(TEXT("BOATS $%d"), Price); break;
 		case EBRStationKind::Bet: Text = FString::Printf(TEXT("%s %s"), BetSide == 0 ? TEXT("RED") : TEXT("BLUE"), Price > 0 ? *FString::Printf(TEXT("$%d"), Price) : TEXT("ALL IN")); break;
+		case EBRStationKind::HireClient: Text = FString::Printf(TEXT("COYOTE: SMUGGLE A CLIENT (+$%d on arrival)"), Price); break;
 		default: break;
 		}
 	}
+	SignText = Text;
 	Label->SetText(FText::FromString(Text));
 	Label->SetHiddenInGame(!bShowSign);
 	Counter->SetHiddenInGame(!bShowCounter);
@@ -235,9 +237,44 @@ bool ABRStation::CanInteract_Implementation(APVVCharacter* Interactor) const
 	return true;
 }
 
+namespace
+{
+	/** Why this Runner can't work this job right now (empty = they can). */
+	FText JobRefusal(const ABRStation* Station, const APVVCharacter* Interactor)
+	{
+		const ABRPlayerState* PS = BRState(Interactor);
+		const ABRGameState* GS = BRGame(Station);
+		if (!PS || !GS || Station->Kind != EBRStationKind::Job)
+		{
+			return FText::GetEmpty();
+		}
+		if (Station->IsAssignableJob())
+		{
+			if (PS->AssignedJob == TEXT("-"))
+			{
+				return LOCTEXT("Unemployed", "You're unemployed. Rummage through trash for scrap to sell.");
+			}
+			if (!PS->AssignedJob.IsEmpty() && PS->AssignedJob != Station->SignText)
+			{
+				return FText::Format(LOCTEXT("NotYourJob", "Not your job. You work at: {0}"), FText::FromString(PS->AssignedJob));
+			}
+		}
+		const float Wait = PS->JobReadyAt - GS->GetServerWorldTimeSeconds();
+		if (Wait > 0.f)
+		{
+			return FText::Format(LOCTEXT("OnBreak", "On break - next shift in {0} s"), FMath::CeilToInt(Wait));
+		}
+		return FText::GetEmpty();
+	}
+}
+
 float ABRStation::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
-	return Kind == EBRStationKind::Job ? WorkSeconds : 0.f;
+	if (Kind == EBRStationKind::Job)
+	{
+		return JobRefusal(this, Interactor).IsEmpty() ? WorkSeconds : 0.f;
+	}
+	return Kind == EBRStationKind::HireClient ? 1.f : 0.f;
 }
 
 FText ABRStation::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
@@ -252,7 +289,16 @@ FText ABRStation::GetInteractPrompt_Implementation(APVVCharacter* Interactor) co
 	case EBRStationKind::Bet:
 		return Price <= 0 ? FText::Format(LOCTEXT("AllIn", "Go ALL IN on the {0} rooster (pays x2.5)"), SideText)
 			: FText::Format(LOCTEXT("Bet", "Bet ${0} on the {1} rooster (pays x2)"), Price, SideText);
-	default: return FText::Format(LOCTEXT("Job", "{0} (hold) +${1}"), FText::FromString(Title), Price);
+	case EBRStationKind::HireClient: return FText::Format(LOCTEXT("Hire", "Take a smuggling client (paid ${0} when you get them to the Safe Zone)"), Price);
+	default:
+	{
+		const FText Refusal = JobRefusal(this, Interactor);
+		if (!Refusal.IsEmpty())
+		{
+			return Refusal;
+		}
+		return FText::Format(LOCTEXT("Job", "{0} (hold) +${1}"), FText::FromString(SignText), Price);
+	}
 	}
 }
 
@@ -328,12 +374,30 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		break;
 
 	case EBRStationKind::Job:
+	{
+		const FText Refusal = JobRefusal(this, Interactor);
+		if (!Refusal.IsEmpty())
+		{
+			Tell(Interactor, Refusal);
+			return;
+		}
 		PS->AddMoney(Price);
 		if (Item != EBRItem::None && !PS->AddItem(Item))
 		{
 			Tell(Interactor, LOCTEXT("JobFull", "Pockets full - you only got paid."));
 		}
 		NextUseServerTime = GS->GetServerWorldTimeSeconds() + CooldownSeconds;
+		// Each Runner gets a break between shifts, so you can't farm one job forever.
+		PS->JobReadyAt = GS->GetServerWorldTimeSeconds() + FMath::Max(CooldownSeconds, Price > 0 ? 20.f : 6.f);
+		break;
+	}
+
+	case EBRStationKind::HireClient:
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->HireClient(Cast<ABRCharacter>(Interactor), GetActorLocation() + GetActorForwardVector() * 150.f, Price);
+		}
+		NextUseServerTime = GS->GetServerWorldTimeSeconds() + FMath::Max(CooldownSeconds, 5.f);
 		break;
 	}
 }
@@ -1448,6 +1512,162 @@ void ABRCannon::Tick(float DeltaSeconds)
 			Text = TEXT("LOADED!");
 		}
 		Sign->SetText(FText::FromString(Text));
+	}
+}
+
+// ===========================================================================================
+// Item pickup (dropped items)
+
+ABRItemPickup::ABRItemPickup()
+{
+	AddMesh(TEXT("Box"), CubeMesh, FVector(0.f, 0.f, 18.f), FVector(36.f, 36.f, 36.f), FLinearColor(0.85f, 0.7f, 0.3f), FRotator(0.f, 25.f, 0.f), false);
+	Tag = AddLabel(TEXT("Tag"), FVector(0.f, 0.f, 70.f), 22.f, FColor::White);
+	InitialLifeSpan = 300.f; // litter disappears after 5 minutes
+}
+
+void ABRItemPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRItemPickup, Item);
+	DOREPLIFETIME(ABRItemPickup, Charges);
+}
+
+void ABRItemPickup::BeginPlay()
+{
+	ComponentColors.Add(TEXT("Box"), BR::IsIllegal(Item) ? FLinearColor(0.7f, 0.1f, 0.1f) : FLinearColor(0.85f, 0.7f, 0.3f));
+	Super::BeginPlay();
+	if (Tag)
+	{
+		Tag->SetText(FText::FromString(BR::ItemName(Item)));
+		Tag->SetTextRenderColor(BR::IsIllegal(Item) ? FColor(255, 80, 80) : FColor::White);
+	}
+}
+
+bool ABRItemPickup::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	if (IsFreeWarden(Interactor))
+	{
+		return BR::IsIllegal(Item); // confiscate
+	}
+	const ABRPlayerState* PS = BRState(Interactor);
+	return IsFreeRunner(Interactor) && PS && PS->HasFreeSlot();
+}
+
+FText ABRItemPickup::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	if (Interactor && Interactor->GetFaction() == BR::Wardens)
+	{
+		return FText::Format(LOCTEXT("Confiscate", "Confiscate the {0}"), FText::FromString(BR::ItemName(Item)));
+	}
+	return FText::Format(LOCTEXT("PickUp", "Pick up {0}"), FText::FromString(BR::ItemName(Item)));
+}
+
+void ABRItemPickup::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!HasAuthority() || !Interactor || IsActorBeingDestroyed())
+	{
+		return;
+	}
+	if (Interactor->GetFaction() == BR::Wardens)
+	{
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->OnContrabandSeized(Interactor, 1);
+		}
+		Destroy();
+		return;
+	}
+	ABRPlayerState* PS = BRState(Interactor);
+	if (PS && PS->AddItem(Item))
+	{
+		if (Item == EBRItem::WireCutters)
+		{
+			PS->WireCutterCharges += FMath::Max(1, Charges);
+		}
+		Destroy();
+	}
+}
+
+// ===========================================================================================
+// Taco platter
+
+ABRTacoPlatter::ABRTacoPlatter()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.25f;
+	AddMesh(TEXT("Table"), CylinderMesh, FVector(0.f, 0.f, 35.f), FVector(110.f, 110.f, 70.f), FLinearColor(0.55f, 0.35f, 0.18f));
+	AddMesh(TEXT("Plate"), CylinderMesh, FVector(0.f, 0.f, 73.f), FVector(95.f, 95.f, 4.f), FLinearColor(0.95f, 0.95f, 0.9f), FRotator::ZeroRotator, false);
+	for (int32 i = 0; i < 8; ++i)
+	{
+		const float A = i * (2.f * UE_PI / 8.f);
+		const FString Name = FString::Printf(TEXT("Taco%d"), i);
+		AddMesh(*Name, SphereMesh, FVector(FMath::Cos(A) * 30.f, FMath::Sin(A) * 30.f, 82.f), FVector(26.f, 12.f, 16.f), FLinearColor(0.95f, 0.75f, 0.3f),
+			FRotator(0.f, FMath::RadiansToDegrees(A), 0.f), false);
+	}
+	AddLabel(TEXT("Sign"), FVector(0.f, 0.f, 140.f), 30.f, FColor(255, 200, 80))->SetText(FText::FromString(TEXT("FREE TACOS")));
+}
+
+void ABRTacoPlatter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRTacoPlatter, Servings);
+}
+
+bool ABRTacoPlatter::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	return Servings > 0 && Interactor && Interactor->GetCondition() == EPVVCondition::Normal && !Interactor->GetCarrier();
+}
+
+FText ABRTacoPlatter::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return FText::Format(LOCTEXT("GrabTaco", "Grab a taco ({0} left)"), Servings);
+}
+
+void ABRTacoPlatter::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRCharacter* Eater = Cast<ABRCharacter>(Interactor);
+	if (!HasAuthority() || !Eater || Servings <= 0)
+	{
+		return;
+	}
+	ABRPlayerState* PS = BRState(Interactor);
+	if (Eater->GetHunger() < 85.f)
+	{
+		Eater->Eat(45.f);
+		if (PS)
+		{
+			++PS->StatTacos;
+		}
+		Tell(Interactor, LOCTEXT("PlatterAte", "Free taco. Delicious."));
+	}
+	else if (!PS || !PS->AddItem(EBRItem::Taco))
+	{
+		Tell(Interactor, LOCTEXT("PlatterFull", "You're full and your pockets are too."));
+		return;
+	}
+	if (--Servings <= 0)
+	{
+		Destroy();
+	}
+}
+
+void ABRTacoPlatter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (ShownServings == Servings)
+	{
+		return;
+	}
+	ShownServings = Servings;
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		const FString Name = Mesh->GetName();
+		if (Name.StartsWith(TEXT("Taco")))
+		{
+			Mesh->SetVisibility(FCString::Atoi(*Name.RightChop(4)) < Servings);
+		}
 	}
 }
 

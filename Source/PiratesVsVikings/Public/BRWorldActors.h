@@ -84,6 +84,11 @@ public:
 	/** Untick to hide the floating sign (if your building already has one). */
 	UPROPERTY(EditAnywhere, Category = "BR|Station") bool bShowSign = true;
 	FVector BoatSpawn = FVector::ZeroVector;
+	/** Jobs: anyone can work here (e.g. digging through trash). Off = only Runners assigned to this job. Jobs that pay $0 are always open. */
+	UPROPERTY(EditAnywhere, Category = "BR|Station") bool bAnyoneCanWork = false;
+	/** The sign text (worked out at BeginPlay). Job assignments use it as the job's name. */
+	FString SignText;
+	bool IsAssignableJob() const { return Kind == EBRStationKind::Job && Price > 0 && !bAnyoneCanWork; }
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Counter;
@@ -395,6 +400,54 @@ private:
 	bool IsPlugged() const;
 	void Fire();
 	void Unload();
+};
+
+// ===========================================================================================
+/** An item lying on the ground (dropped with G). Walk up and press E to pick it up. Border Patrol confiscate contraband. */
+UCLASS(meta = (DisplayName = "BR Item Pickup"))
+class PIRATESVSVIKINGS_API ABRItemPickup : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRItemPickup();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.3f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	/** What's lying here (you can also place these in your level as free loot). */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Pickup") EBRItem Item = EBRItem::Taco;
+	/** Wire cutter cuts left. */
+	UPROPERTY(Replicated) int32 Charges = 0;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Tag;
+};
+
+/** A taco platter someone put down: anyone can grab a taco (E) until it's empty. */
+UCLASS(meta = (DisplayName = "BR Taco Platter"))
+class PIRATESVSVIKINGS_API ABRTacoPlatter : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRTacoPlatter();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.5f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Tacos") int32 Servings = 8;
+
+private:
+	int32 ShownServings = -1;
 };
 
 // ===========================================================================================

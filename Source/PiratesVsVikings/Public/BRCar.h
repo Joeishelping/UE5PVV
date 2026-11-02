@@ -114,6 +114,8 @@ public:
 protected:
 	/** Steering wheel in front of the driver. Move it in your truck Blueprint so it lines up with your driving animation's hands. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Truck") TObjectPtr<USceneComponent> SteeringWheel;
+	/** NPC trucks: seconds they wait at the checkpoint for Border Patrol to scan everyone before pushing through (approval hit). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float MaxCheckpointWait = 120.f;
 	/** How far the wheel turns at full steer (degrees). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float SteeringWheelTurn = 120.f;
 
@@ -123,6 +125,8 @@ private:
 	int32 RouteIndex = 0;
 	int32 CheckpointIndex = INDEX_NONE;
 	float CheckpointArrivalTime = -1.f;
+	bool bCheckpointDone = false;
+	float NoDriverSince = -1.f;
 	TWeakObjectPtr<AActor> Gate;
 	TArray<TWeakObjectPtr<APVVCharacter>> SpawnedNPCs;
 

@@ -11,6 +11,7 @@
 #include "BRWorldActors.h"
 #include "PVVPlayerStart.h"
 #include "PVVLake.h"
+#include "PVVBoat.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
@@ -146,6 +147,7 @@ void ABRGameMode::TickBR()
 		Announce(LOCTEXT("OneMinute", "One minute until the Line opens!"));
 	}
 	TickRunners(GS);
+	TickClients();
 	if (GS->Phase == EBRPhase::Invasion)
 	{
 		NextNPCTruck -= 1.f;
@@ -174,24 +176,21 @@ void ABRGameMode::AdvancePhase()
 		GS->PhaseSecondsLeft = InvasionSeconds;
 		GS->RunnersNeeded = FMath::Max(1, FMath::DivideAndRoundUp(GS->CountPlayers(BR::Runners), 2));
 		NextNPCTruck = 3.f;
-		Announce(FText::Format(LOCTEXT("Invasion", "THE LINE IS OPEN! {1}: get {0} of you to the Safe Zone. {2}: catch, don't kill."), GS->RunnersNeeded,
+		Announce(FText::Format(LOCTEXT("Invasion", "THE LINE IS OPEN! {0}: cross, smuggle, score. {1}: catch, scan, score. Most points wins!"),
 			FText::FromString(BR::RunnerName()), FText::FromString(BR::WardenName())));
 	}
 	else if (GS->Phase == EBRPhase::Invasion)
 	{
 		GS->Phase = EBRPhase::Ended;
-		EndMatch(BR::Wardens);
+		const EPVVFaction Winner = GS->RunnerScore > GS->WardenScore ? BR::Runners : (GS->WardenScore > GS->RunnerScore ? BR::Wardens : EPVVFaction::None);
+		Announce(FText::Format(LOCTEXT("FinalScore", "TIME! {0} {1} - {2} {3}"), FText::FromString(BR::RunnerName()), GS->RunnerScore, GS->WardenScore, FText::FromString(BR::WardenName())));
+		EndMatch(Winner);
 	}
 }
 
 void ABRGameMode::CheckWinConditions()
 {
-	ABRGameState* GS = GetBRGameState();
-	if (GS && GS->Phase == EBRPhase::Invasion && GS->RunnersSafe >= GS->RunnersNeeded)
-	{
-		GS->Phase = EBRPhase::Ended;
-		EndMatch(BR::Runners);
-	}
+	// Points race: nothing ends the round early. The team with more points when the Invasion timer runs out wins.
 }
 
 void ABRGameMode::TickRunners(ABRGameState* GS)
@@ -204,6 +203,10 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 		if (!PS || C->GetFaction() != BR::Runners)
 		{
 			continue;
+		}
+		if (PS->AssignedJob.IsEmpty())
+		{
+			AssignJob(PS);
 		}
 
 		if (C->GetCondition() == EPVVCondition::Detained)
@@ -232,10 +235,28 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 		const bool bFree = C->GetCondition() == EPVVCondition::Normal && !C->GetCarrier();
 		if (!PS->bReachedSafety && bFree && BRMap::IsInSafeZone(GetWorld(), Where))
 		{
+			// Made it! Get paid (more for contraband), score, then get sent back to Mexico to go again.
 			PS->bReachedSafety = true;
 			++GS->RunnersSafe;
-			Announce(FText::Format(LOCTEXT("Safe", "{0} MADE IT to the Safe Zone! ({1}/{2})"), FText::FromString(NameOf(C)), GS->RunnersSafe, GS->RunnersNeeded));
-			CheckWinConditions();
+			++PS->StatCrossings;
+			int32 Contraband = 0;
+			for (const EBRItem Item : PS->Inventory)
+			{
+				Contraband += BR::IsIllegal(Item) ? 1 : 0;
+			}
+			PS->RemoveIllegalItems();
+			PS->StatContraband += Contraband;
+			const int32 Pay = CrossingPay + Contraband * ContrabandPay;
+			PS->AddMoney(Pay);
+			AwardPoints(C, PointsPerCrossing + Contraband * PointsPerContraband);
+			Announce(Contraband > 0
+				? FText::Format(LOCTEXT("SafeContraband", "{0} MADE IT with {1} contraband! +${2}"), FText::FromString(NameOf(C)), Contraband, Pay)
+				: FText::Format(LOCTEXT("Safe", "{0} MADE IT to the Safe Zone! +${1}"), FText::FromString(NameOf(C)), Pay));
+			if (ABRCharacter* BRC = Cast<ABRCharacter>(C))
+			{
+				BRC->Notify(LOCTEXT("SentBack", "You made it! Paid. Heading back to Mexico for another run..."));
+			}
+			SendHomeLater(C, 4.f);
 		}
 	}
 	for (APVVCharacter* C : ToLaunch)
@@ -274,6 +295,15 @@ void ABRGameMode::GiveCarKey()
 
 void ABRGameMode::NotifyDetained(APVVCharacter* Victim, APVVCharacter* Captor)
 {
+	if (const ABRCharacter* NPC = Cast<ABRCharacter>(Victim); NPC && NPC->IsNPC() && NPC->bIllegal)
+	{
+		ChangeApproval(GoodCatchBonus);
+		AwardPoints(Captor, PointsPerIllegalNPC);
+		Feed(FString::Printf(TEXT("%s caught someone with no papers"), *NameOf(Captor)));
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(Victim, [Victim]() { Victim->Destroy(); }), 15.f, false);
+		return;
+	}
 	if (const ABRCharacter* NPC = Cast<ABRCharacter>(Victim); NPC && NPC->IsNPC())
 	{
 		ChangeApproval(-WrongfulArrestPenalty);
@@ -291,13 +321,34 @@ void ABRGameMode::NotifyDetained(APVVCharacter* Victim, APVVCharacter* Captor)
 	}
 	PS->SentenceSeconds = SentenceSeconds + RepeatOffenderSeconds * FMath::Max(0, PS->TimesDetained - 1);
 
+	int32 Contraband = 0;
+	for (const EBRItem Item : PS->Inventory)
+	{
+		Contraband += BR::IsIllegal(Item) ? 1 : 0;
+	}
+	if (Contraband > 0)
+	{
+		PS->RemoveIllegalItems();
+		OnContrabandSeized(Captor, Contraband);
+	}
 	if (PS->bHasCrossedLine)
 	{
 		ChangeApproval(GoodCatchBonus);
+		AwardPoints(Captor, PointsPerCatch);
+		if (ABRPlayerState* CaptorPS = Captor ? Cast<ABRPlayerState>(Captor->GetPVVPlayerState()) : nullptr)
+		{
+			++CaptorPS->StatCatches;
+		}
+		Feed(FString::Printf(TEXT("%s locked up %s"), *NameOf(Captor), *NameOf(Victim)));
 	}
 	else
 	{
 		ChangeApproval(-WrongfulArrestPenalty);
+		AwardPoints(Captor, PointsPerWrongfulArrest);
+		if (ABRPlayerState* CaptorPS = Captor ? Cast<ABRPlayerState>(Captor->GetPVVPlayerState()) : nullptr)
+		{
+			++CaptorPS->StatWrongful;
+		}
 		Announce(FText::Format(LOCTEXT("Wrongful", "Wrongful arrest! {0} never crossed the Line. Approval -{1}"), FText::FromString(NameOf(Victim)), FMath::RoundToInt(WrongfulArrestPenalty)));
 	}
 	if (ABRCharacter* BRC = Cast<ABRCharacter>(Victim))
@@ -343,7 +394,18 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 		}
 	}
 
-	if (NPC && NPC->IsNPC())
+	if (NPC && NPC->IsNPC() && NPC->bIllegal)
+	{
+		ChangeApproval(GoodCatchBonus);
+		AwardPoints(Warden, PointsPerIllegalNPC);
+		if (ABRCharacter* Client = Cast<ABRCharacter>(Prisoner))
+		{
+			Client->Leader = nullptr; // their coyote lost them
+			Client->ClientPay = 0;
+			Client->StartWandering(Landing, 900.f);
+		}
+	}
+	else if (NPC && NPC->IsNPC())
 	{
 		ChangeApproval(-HarassmentPenalty);
 		Announce(FText::Format(LOCTEXT("TouristYeet", "{0} catapulted an innocent citizen! Approval -{1}"),
@@ -351,15 +413,35 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 	}
 	else
 	{
+		++PS->StatCatapulted;
+		int32 Contraband = 0;
+		for (const EBRItem Item : PS->Inventory)
+		{
+			Contraband += BR::IsIllegal(Item) ? 1 : 0;
+		}
+		if (Warden && Contraband > 0)
+		{
+			OnContrabandSeized(Warden, Contraband);
+		}
 		if (Warden)
 		{
 			if (PS->bHasCrossedLine)
 			{
 				ChangeApproval(GoodCatchBonus);
+				AwardPoints(Warden, PointsPerCatch);
+				if (ABRPlayerState* WPS = Cast<ABRPlayerState>(Warden->GetPVVPlayerState()))
+				{
+					++WPS->StatCatches;
+				}
 			}
 			else
 			{
 				ChangeApproval(-WrongfulArrestPenalty);
+				AwardPoints(Warden, PointsPerWrongfulArrest);
+				if (ABRPlayerState* WPS = Cast<ABRPlayerState>(Warden->GetPVVPlayerState()))
+				{
+					++WPS->StatWrongful;
+				}
 				Announce(FText::Format(LOCTEXT("WrongfulYeet", "{0} never even crossed the Line! Approval -{1}"),
 					FText::FromString(NameOf(Prisoner)), FMath::RoundToInt(WrongfulArrestPenalty)));
 			}
@@ -384,9 +466,8 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 		Prisoner->TeleportTo(Landing, Prisoner->GetActorRotation());
 		Prisoner->ClearRestraint();
 	}
-	Announce(Warden
-		? FText::Format(LOCTEXT("CatapultBy", "{1} sent {0} flying back across the border!"), FText::FromString(NameOf(Prisoner)), FText::FromString(NameOf(Warden)))
-		: FText::Format(LOCTEXT("Catapult", "{0} has been RETURNED TO SENDER via catapult!"), FText::FromString(NameOf(Prisoner))));
+	Feed(Warden ? FString::Printf(TEXT("%s YEETED %s back to Mexico"), *NameOf(Warden), *NameOf(Prisoner))
+		: FString::Printf(TEXT("%s was RETURNED TO SENDER"), *NameOf(Prisoner)));
 }
 
 void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter)
@@ -527,6 +608,8 @@ void ABRGameMode::SpawnNPCTruck()
 	{
 		if (ABRCharacter* NPC = SpawnNPC(FTransform(Spawn.GetLocation() + FVector(0.f, 0.f, 300.f + i * 220.f))))
 		{
+			NPC->bIllegal = FMath::FRand() < IllegalNPCChance;
+			NPC->bCarriesContraband = FMath::FRand() < ContrabandNPCChance;
 			Truck->AddNPC(NPC);
 		}
 	}
@@ -596,6 +679,140 @@ void ABRGameMode::SpawnVillagers()
 	}
 }
 
+void ABRGameMode::AwardPoints(APVVCharacter* Who, int32 Amount)
+{
+	ABRGameState* GS = GetBRGameState();
+	ABRPlayerState* PS = Who ? Cast<ABRPlayerState>(Who->GetPVVPlayerState()) : nullptr;
+	if (!GS || !PS || Amount == 0)
+	{
+		return;
+	}
+	PS->Points += Amount;
+	if (PS->GetFaction() == BR::Runners)
+	{
+		GS->RunnerScore = FMath::Max(0, GS->RunnerScore + Amount);
+	}
+	else if (PS->GetFaction() == BR::Wardens)
+	{
+		GS->WardenScore = FMath::Max(0, GS->WardenScore + Amount);
+	}
+}
+
+void ABRGameMode::Feed(const FString& Line)
+{
+	if (ABRGameState* GS = GetBRGameState())
+	{
+		GS->Multicast_Feed(Line);
+	}
+}
+
+void ABRGameMode::HireClient(ABRCharacter* Runner, const FVector& At, int32 Pay)
+{
+	if (!Runner || !Runner->IsRunner() || Runner->IsNPC())
+	{
+		return;
+	}
+	int32 Current = 0;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		Current += It->Leader.Get() == Runner ? 1 : 0;
+	}
+	if (Current >= MaxClientsPerRunner)
+	{
+		Runner->Notify(FText::Format(LOCTEXT("TooManyClients", "You can only lead {0} clients at once."), MaxClientsPerRunner));
+		return;
+	}
+	if (ABRCharacter* Client = SpawnNPC(FTransform(At + FVector(0.f, 0.f, 100.f))))
+	{
+		Client->StartFollowing(Runner, Pay > 0 ? Pay : 250);
+		Runner->Notify(FText::Format(LOCTEXT("ClientHired", "New client! They follow you. Get them to the Safe Zone for ${0}. ({1}/{2})"),
+			Client->ClientPay, Current + 1, MaxClientsPerRunner));
+	}
+}
+
+void ABRGameMode::TickClients()
+{
+	// Smuggling clients who reach the Safe Zone pay their Runner.
+	TArray<ABRCharacter*> Delivered;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* Client = *It;
+		if (Client->IsNPC() && Client->Leader.IsValid() && Client->GetCondition() == EPVVCondition::Normal && !Client->GetCarrier()
+			&& BRMap::IsInSafeZone(GetWorld(), Client->GetActorLocation()))
+		{
+			Delivered.Add(Client);
+		}
+	}
+	for (ABRCharacter* Client : Delivered)
+	{
+		ABRCharacter* Runner = Client->Leader.Get();
+		ABRPlayerState* PS = Runner ? Runner->GetBRPlayerState() : nullptr;
+		if (PS)
+		{
+			PS->AddMoney(Client->ClientPay);
+			++PS->StatSmuggled;
+			AwardPoints(Runner, PointsPerClient);
+			Runner->Notify(FText::Format(LOCTEXT("ClientPaid", "Client delivered! +${0}"), Client->ClientPay));
+			Feed(FString::Printf(TEXT("%s smuggled a client across (+$%d)"), *NameOf(Runner), Client->ClientPay));
+		}
+		if (Client->GetCurrentBoat())
+		{
+			Client->GetCurrentBoat()->Unseat(Client);
+		}
+		Client->Destroy();
+	}
+}
+
+void ABRGameMode::OnContrabandSeized(APVVCharacter* Warden, int32 Count)
+{
+	if (Count <= 0)
+	{
+		return;
+	}
+	AwardPoints(Warden, PointsPerSeizure * Count);
+	ChangeApproval(GoodCatchBonus);
+	Feed(FString::Printf(TEXT("%s seized %d contraband"), *NameOf(Warden), Count));
+}
+
+void ABRGameMode::OnTruckCleared(APVVCharacter* Warden)
+{
+	AwardPoints(Warden, PointsPerClearedTruck);
+	if (ABRPlayerState* PS = Warden ? Cast<ABRPlayerState>(Warden->GetPVVPlayerState()) : nullptr)
+	{
+		++PS->StatClearedTrucks;
+	}
+	Feed(FString::Printf(TEXT("%s cleared a truck at the checkpoint"), *NameOf(Warden)));
+}
+
+void ABRGameMode::OnTruckForcedThrough()
+{
+	ChangeApproval(-HarassmentPenalty);
+	Announce(LOCTEXT("TrafficJam", "Nobody checked the trucks! Traffic pushed through the checkpoint. Approval down."));
+}
+
+void ABRGameMode::AssignJob(ABRPlayerState* PS)
+{
+	TArray<FString> Jobs;
+	for (TActorIterator<ABRStation> It(GetWorld()); It; ++It)
+	{
+		if (It->IsAssignableJob() && !It->SignText.IsEmpty())
+		{
+			Jobs.AddUnique(It->SignText);
+		}
+	}
+	if (Jobs.Num() == 0 || !PS)
+	{
+		return; // no paid jobs on this map (yet)
+	}
+	PS->AssignedJob = FMath::FRand() < UnemployedChance ? FString(TEXT("-")) : Jobs[FMath::RandRange(0, Jobs.Num() - 1)];
+	if (ABRCharacter* BRC = Cast<ABRCharacter>(PS->GetPawn()))
+	{
+		BRC->Notify(PS->AssignedJob == TEXT("-")
+			? LOCTEXT("JobNone", "You're unemployed. Rummage through trash for scrap, sell it, hustle.")
+			: FText::Format(LOCTEXT("JobGot", "Your job in town: {0}"), FText::FromString(PS->AssignedJob)));
+	}
+}
+
 void ABRGameMode::RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner)
 {
 	APVVCharacter* C = Runner.Get();
@@ -606,9 +823,13 @@ void ABRGameMode::RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner)
 	}
 	if (C->GetFaction() == BR::Runners)
 	{
-		PS->RemoveIllegalItems();
+		if (!PS->bReachedSafety)
+		{
+			PS->RemoveIllegalItems();
+		}
 		PS->bHasCrossedLine = false;
 		PS->bIsAggressor = false;
+		PS->bReachedSafety = false;
 	}
 	RespawnCharacter(C);
 }

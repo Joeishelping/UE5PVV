@@ -40,6 +40,30 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 SentenceSeconds = 0;
 
+	/** Your job in town (Station sign text). "-" = unemployed: rummage through trash. Empty = not assigned yet. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	FString AssignedJob;
+
+	/** Server time when you can work your next shift. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	float JobReadyAt = 0.f;
+
+	// --- Points race + end-of-round awards ---------------------------------------------
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 Points = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatCrossings = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatSmuggled = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatContraband = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatCatches = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatKnockdowns = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatTackles = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatThrows = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatCatapulted = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatCannonShots = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatTacos = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatWrongful = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatDances = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatClearedTrucks = 0;
+
 	/** Customization picked in the menu (server copy; the character replicates it to everyone). */
 	FBRLook Look;
 	bool bHasLook = false;
@@ -50,6 +74,8 @@ public:
 	// Server only.
 	bool AddItem(EBRItem Item);
 	bool RemoveItem(EBRItem Item);
+	/** Removes the item in that inventory slot. */
+	bool RemoveItemAt(int32 Index, EBRItem& OutItem);
 	void RemoveIllegalItems();
 	void AddMoney(int32 Amount) { Money = FMath::Max(0, Money + Amount); }
 };
