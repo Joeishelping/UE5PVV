@@ -1,4 +1,8 @@
 #include "BRSettings.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/Texture.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "BRTypes.h"
 #include "PVVTypes.h"
 
@@ -37,6 +41,58 @@ USoundBase* UBRSettings::GetSound(EBRSfx Sfx) const
 	default: break;
 	}
 	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;
+}
+
+bool UBRSettings::ApplySurface(UStaticMeshComponent* Mesh, const FString& Kind, const FString& Piece) const
+{
+	if (!Mesh)
+	{
+		return false;
+	}
+	auto Has = [&Piece](const TCHAR* Word) { return Piece.Contains(Word); };
+	const FBRMapSurface* Surface = nullptr;
+	if (Kind == TEXT("Water") || Has(TEXT("Fountain_Water"))) Surface = &Water;
+	else if (Kind == TEXT("Wall")) Surface = &BorderWall;
+	else if (Kind == TEXT("Fence")) Surface = Has(TEXT("Panel")) ? &Fences : &Metal;
+	else if (Kind == TEXT("Station")) Surface = Has(TEXT("Counter")) ? &Wood : nullptr;
+	else if (Kind == TEXT("Ring")) Surface = Has(TEXT("Deck")) ? &RingCanvas : nullptr;
+	else if (Kind == TEXT("Tower")) Surface = Has(TEXT("Roof")) ? &Roofs : &Wood;
+	else if (Has(TEXT("Roof"))) Surface = &Roofs;
+	else if (Has(TEXT("Sand")) || Has(TEXT("Edge"))) Surface = &Ground;
+	else if (Has(TEXT("Road")) || Has(TEXT("Bridge_Deck"))) Surface = &Road;
+	else if (Has(TEXT("Rail")) || Has(TEXT("Pump")) || Has(TEXT("Cell")) || Has(TEXT("Junk")) || Piece == TEXT("Tower")) Surface = &Metal;
+	else if (Has(TEXT("Plaza")) || Has(TEXT("Fountain"))) Surface = &Plaza;
+	else if (Has(TEXT("_Body")) || Has(TEXT("Church_Tower")) || Has(TEXT("Coop_Box")) || Has(TEXT("ToolShop")) || Has(TEXT("Taco"))
+		|| Has(TEXT("BlackMarket")) || Has(TEXT("Marina")) || Has(TEXT("House")) || Has(TEXT("WardenHQ"))) Surface = &Buildings;
+	else if (Has(TEXT("Bench")) || Has(TEXT("Table")) || Has(TEXT("Stall")) || Has(TEXT("Door")) || Has(TEXT("Shutter"))) Surface = &Wood;
+	if (!Surface)
+	{
+		return false;
+	}
+	if (!Surface->Material.IsNull())
+	{
+		if (UMaterialInterface* Mat = Surface->Material.LoadSynchronous())
+		{
+			Mesh->SetMaterial(0, Mat);
+			Mesh->ComponentTags.AddUnique(TEXT("BRThemed"));
+			return true;
+		}
+	}
+	if (!Surface->Texture.IsNull() && !WorldTextureMaterial.IsNull())
+	{
+		UMaterialInterface* Base = WorldTextureMaterial.LoadSynchronous();
+		UTexture* Tex = Surface->Texture.LoadSynchronous();
+		if (Base && Tex)
+		{
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Base, Mesh);
+			MID->SetTextureParameterValue(TEXT("Texture"), Tex);
+			MID->SetScalarParameterValue(TEXT("TileSize"), FMath::Max(10.f, Surface->TileSize));
+			Mesh->SetMaterial(0, MID);
+			Mesh->ComponentTags.AddUnique(TEXT("BRThemed"));
+			return true;
+		}
+	}
+	return false;
 }
 
 FText PVVFactionName(EPVVFaction Faction)

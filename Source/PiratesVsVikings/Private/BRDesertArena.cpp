@@ -1,4 +1,5 @@
 #include "BRDesertArena.h"
+#include "BRSettings.h"
 #include "BRAudio.h"
 #include "BRCar.h"
 #include "BRDog.h"
@@ -208,11 +209,16 @@ void ABRDesertArena::BeginPlay()
 			RiverBed = nullptr;
 		}
 	}
+	const UBRSettings* Look = GetDefault<UBRSettings>();
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
 		if (const TObjectPtr<UMaterialInterface>* Material = BlockMaterials.Find(Mesh->GetFName()); Material && *Material)
 		{
 			Mesh->SetMaterial(0, *Material);
+		}
+		else if (Look->ApplySurface(Mesh, TEXT("Map"), Mesh->GetName()))
+		{
+			// your texture from Project Settings -> Border Run -> Test Map Look
 		}
 		else if (const FLinearColor* Color = BlockColors.Find(Mesh->GetFName()))
 		{

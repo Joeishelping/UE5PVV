@@ -1,4 +1,5 @@
 #include "BRWorldActors.h"
+#include "BRSettings.h"
 #include "BRCharacter.h"
 #include "BRDog.h"
 #include "BRGameMode.h"
@@ -128,10 +129,17 @@ void ABRGreyboxActor::Paint(UStaticMeshComponent* Mesh, const FLinearColor& Colo
 void ABRGreyboxActor::BeginPlay()
 {
 	Super::BeginPlay();
+	const TCHAR* Kind = IsA<ABRVillage>() ? TEXT("Village") : IsA<ABRWall>() ? TEXT("Wall") : IsA<ABRSpikeFence>() ? TEXT("Fence")
+		: IsA<ABRStation>() ? TEXT("Station") : IsA<ABRLuchaRing>() ? TEXT("Ring") : IsA<ABRWatchtower>() ? TEXT("Tower") : TEXT("Other");
+	const UBRSettings* Look = GetDefault<UBRSettings>();
 	TArray<UStaticMeshComponent*> Meshes;
 	GetComponents<UStaticMeshComponent>(Meshes);
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
+		if (Look->ApplySurface(Mesh, Kind, Mesh->GetName()))
+		{
+			continue; // your texture (Project Settings -> Border Run -> Test Map Look)
+		}
 		if (const FLinearColor* Color = ComponentColors.Find(Mesh->GetFName()))
 		{
 			Paint(Mesh, *Color);
@@ -2897,7 +2905,7 @@ void ABRVillage::BeginPlay()
 	GetComponents<UStaticMeshComponent>(Meshes);
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
-		if (const FLinearColor* Color = ColorOverrides.Find(Mesh->GetFName()))
+		if (const FLinearColor* Color = ColorOverrides.Find(Mesh->GetFName()); Color && !Mesh->ComponentTags.Contains(TEXT("BRThemed")))
 		{
 			Paint(Mesh, *Color);
 		}

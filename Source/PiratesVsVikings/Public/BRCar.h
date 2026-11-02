@@ -78,6 +78,8 @@ private:
 	UFUNCTION() void OnRadioFinished();
 	bool WantsRefuel(const APVVCharacter* Interactor) const;
 	bool WantsSearch(const APVVCharacter* Interactor) const;
+	/** A zip-tied passenger a Border Patrol agent standing next to the truck can take out. */
+	APVVCharacter* FindPrisonerToUnload(const APVVCharacter* Interactor) const;
 
 	void Input_RadioNext();
 	void Input_RadioPrev();

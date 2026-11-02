@@ -46,6 +46,8 @@ public:
 	void InitAsNPC(float SkinToneMin = 0.f, float SkinToneMax = 1.f);
 	/** Server, after spawning an NPC: stroll around Home (village life). */
 	void StartWandering(const FVector& Home, float Radius);
+	/** Server (NPCs): make a run for it, away from Border Patrol, for this many seconds. */
+	void StartFleeing(float Seconds);
 
 	// --- NPC secrets (server) -------------------------------------------------------------
 	/** No papers. Border Patrol score for catching them; Runners score for smuggling them through. */
@@ -395,6 +397,10 @@ protected:
 
 	// --- NPC villagers ----------------------------------------------------------------
 	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float WanderSpeed = 160.f;
+	/** How fast an NPC with no papers runs when ordered out of a truck. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float FleeSpeed = 480.f;
+	/** NPCs stay down this long when knocked down / tased (players get back up faster). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float NPCKnockdownSeconds = 14.f;
 
 private:
 	UPROPERTY(Replicated) bool bIsNPC = false;
@@ -449,6 +455,7 @@ private:
 	float LastTrumpetTime = -100.f;
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
 	bool bWandering = false;
+	float FleeUntil = -1.f;
 	FVector WanderHome = FVector::ZeroVector;
 	FVector WanderTarget = FVector::ZeroVector;
 	float WanderRadius = 1500.f;

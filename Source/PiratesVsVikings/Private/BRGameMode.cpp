@@ -682,7 +682,13 @@ void ABRGameMode::SpawnNPCTruck()
 			Truck->AddNPC(NPC);
 		}
 	}
-	if (Truck->GetStationCount() > 0)
+	// Only ONE NPC truck plays music at a time (the others are quiet).
+	bool bSomeoneBlasting = false;
+	for (TActorIterator<ABRTruck> It(GetWorld()); It; ++It)
+	{
+		bSomeoneBlasting |= (*It != Truck && It->IsNPCTruck() && It->IsRadioOn());
+	}
+	if (!bSomeoneBlasting && Truck->GetStationCount() > 0)
 	{
 		Truck->SetRadioStation(FMath::RandRange(0, Truck->GetStationCount() - 1));
 	}

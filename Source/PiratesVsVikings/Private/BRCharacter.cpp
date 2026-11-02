@@ -144,9 +144,19 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, LuchaName);
 }
 
+void ABRCharacter::StartFleeing(float Seconds)
+{
+	FleeUntil = GetWorld()->GetTimeSeconds() + Seconds;
+	if (!bWandering)
+	{
+		StartWandering(GetActorLocation(), 1500.f);
+	}
+}
+
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 {
 	bIsNPC = true;
+	KnockdownDuration = NPCKnockdownSeconds; // stay down long enough to be zip-tied
 	DefaultFaction = BR::Runners;
 	// Every NPC gets a random look so the crowd isn't all clones (and players can blend in).
 	// Ordinary-looking people: small face differences, natural dark/brown hair, plain clothes.
@@ -580,6 +590,29 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < FleeUntil)
+	{
+		// Running from Border Patrol: away from the nearest agent, zig-zagging a little.
+		FVector Away = FVector::ZeroVector;
+		float Closest = 3500.f;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			const float D = FVector::Dist2D(It->GetActorLocation(), GetActorLocation());
+			if (It->IsWarden() && !It->IsNPC() && D < Closest)
+			{
+				Closest = D;
+				Away = (GetActorLocation() - It->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			}
+		}
+		if (Away.IsNearlyZero())
+		{
+			Away = (GetActorLocation() - WanderHome) * FVector(1.f, 1.f, 0.f);
+		}
+		const FVector Wiggle = FVector::CrossProduct(Away.GetSafeNormal(), FVector::UpVector) * FMath::Sin(Now * 2.3f) * 0.4f;
+		GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
+		AddMovementInput((Away.GetSafeNormal() + Wiggle).GetSafeNormal(), 1.f);
+		return;
+	}
 	if (Now < WanderPauseUntil)
 	{
 		return; // standing around chatting

@@ -202,6 +202,63 @@ Pick your hat in **M → Customize → Hat**.
 
 ---
 
+## Part 9: Texture the test map (water, sand, buildings...)
+Everything on the test map can get a real texture from one settings page. Nothing to place by hand.
+
+### Step 1: Get some textures (5 min)
+**Starter Content (free, built in):** Content Browser → **+ Add** → **Add Feature or Content Pack** → **Content** tab → **Starter Content** → **Add to Project**. You get:
+- `StarterContent/Textures`: e.g. `T_Rock_Sandstone_D` (sand), `T_Concrete_Poured_D` (road), `T_Brick_Clay_Old_D` (buildings), `T_Wood_Pine_D` (wood), `T_Metal_Rust_D` (metal), `T_Cobble_Stone_Pebble_D` (plaza)
+- `StarterContent/Materials/M_Water_Lake` (water)
+
+**Fab (free, nicer):** **Window → Fab**. Search "sand", "asphalt", "stucco", "wood planks", "rusty metal" and filter **Free**, then **Add to project**. Use the texture whose name ends in `_D`, `_BaseColor` or `_Albedo`.
+
+### Step 2: Make ONE "world texture" material (5 min, only once)
+This makes a texture repeat every few metres instead of stretching one picture across a 300 m desert.
+1. Content Browser → right-click → **Material** → name it `M_WorldTexture` → double-click it.
+2. In the graph: right-click empty space → type **WorldAlignedTexture** → click it.
+3. Right-click → type **TextureObjectParameter** → click it. In Details on the left, set **Parameter Name** = `Texture` (exactly) and pick any texture as its default. Drag its output into the **TextureObject** pin of WorldAlignedTexture.
+4. Right-click → **ScalarParameter**. Set **Parameter Name** = `TileSize` and **Default Value** = `400`. Drag it into the **TextureSize** pin.
+5. Drag WorldAlignedTexture's **XYZ Texture** output into **Base Color** on the big node.
+6. Click **Save**.
+
+### Step 3: Fill in the slots (2 min)
+**Edit → Project Settings → (Game) Border Run → Test Map Look**:
+1. **World Texture Material** = `M_WorldTexture`.
+2. For each surface, open it and set either a **Texture** (it repeats; change **Tile Size** to make it bigger or smaller) or a finished **Material** (a Material always wins over a Texture):
+
+| Slot | What it covers | Try |
+|---|---|---|
+| **Ground** | desert sand and the map edges | T_Rock_Sandstone_D, Tile Size 600 |
+| **Road** | road and bridge deck | T_Concrete_Poured_D |
+| **Water** | the river and the fountain | **Material** = M_Water_Lake |
+| **Buildings** | houses, shops, church, HQ | T_Brick_Clay_Old_D or a stucco texture |
+| **Roofs** | village roofs | a tile or wood texture |
+| **Border Wall** | THE WALL | T_Concrete_Poured_D |
+| **Fences** | razor-wire panels | T_Metal_Rust_D |
+| **Wood** | counters, benches, stalls, doors, watchtowers | T_Wood_Pine_D |
+| **Metal** | rails, gas pumps, cells, junk | T_Metal_Rust_D |
+| **Plaza** | plaza floor and fountain stone | T_Cobble_Stone_Pebble_D |
+| **Ring Canvas** | the lucha ring floor | any cloth texture |
+
+3. Press **Play**. The textures go on when the round starts. Empty slots keep their old colours.
+
+> **Water looks stretched or too smooth?** Use the Texture route with a water picture instead, or get a free water material from Fab.
+
+---
+
+## Part 10: Border Patrol: hauling NPCs
+1. At the checkpoint, scan the passengers (**V**). Then hold **E** on the truck: **Order everyone OUT**.
+2. People with **no papers make a run for it**. Chase them, then **tase** them (X to switch to taser, right mouse to aim, left click to shoot) or punch them down.
+3. Knocked-down **NPCs stay down 14 seconds**, so there's time to zip-tie them: hold **E** on them, then tap **E** to pick them up.
+4. Walk to your Border Patrol truck and press **E** to load them in the back. Drive to the Holding Pen.
+5. Get out and press **E** on the truck: **Take them out**. Carry them to the **pen**, or to the **catapult** to fling them back.
+
+To tune: BP_Runner → **BR | NPC** → **NPC Knockdown Seconds** and **Flee Speed**.
+
+Only **one NPC truck plays music** at a time now.
+
+---
+
 ## If something's wrong
 | Problem | Fix |
 |---|---|

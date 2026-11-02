@@ -1,4 +1,5 @@
 #include "BRMapKit.h"
+#include "BRSettings.h"
 #include "BRDesertArena.h"
 #include "BRGameState.h"
 #include "BRPlayerState.h"
@@ -526,7 +527,7 @@ void ABRWallSegment::OnConstruction(const FTransform& Transform)
 void ABRWallSegment::BeginPlay()
 {
 	Super::BeginPlay();
-	if (!Material)
+	if (!Material && !GetDefault<UBRSettings>()->ApplySurface(WallMesh, TEXT("Wall"), TEXT("WallMesh")))
 	{
 		KitPaint(WallMesh, Color);
 	}

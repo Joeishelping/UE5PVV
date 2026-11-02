@@ -10,6 +10,24 @@
  * Edit -> Project Settings -> (left list, under Game) -> Border Run.
  * Saved into Config/DefaultGame.ini, so it ships with your packaged game.
  */
+class UStaticMeshComponent;
+class UMaterialInterface;
+class UTexture;
+
+/** How one kind of surface on the test map looks. Give it a Material, OR a Texture (needs World Texture Material below). */
+USTRUCT(BlueprintType)
+struct FBRMapSurface
+{
+	GENERATED_BODY()
+
+	/** A finished material (e.g. from Fab or Starter Content). Wins over Texture. */
+	UPROPERTY(EditAnywhere, Category = "Surface") TSoftObjectPtr<UMaterialInterface> Material;
+	/** Just a picture (sand, asphalt, adobe...): it gets repeated across the surface so it never looks stretched. */
+	UPROPERTY(EditAnywhere, Category = "Surface") TSoftObjectPtr<UTexture> Texture;
+	/** How big one copy of the texture is, in cm (400 = 4 metres). */
+	UPROPERTY(EditAnywhere, Category = "Surface") float TileSize = 400.f;
+};
+
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Border Run"))
 class PIRATESVSVIKINGS_API UBRSettings : public UDeveloperSettings
 {
@@ -78,4 +96,32 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> RequisitionSound;
 
 	USoundBase* GetSound(EBRSfx Sfx) const;
+
+	// --- Test map materials (Project Settings -> Border Run -> Test Map Look) ---------------------
+	/** Your one "world texture" material (see the guide): it has a Texture Object parameter "Texture" and a scalar "TileSize". */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") TSoftObjectPtr<UMaterialInterface> WorldTextureMaterial;
+	/** Desert sand / dirt. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Ground;
+	/** The road and the bridge deck. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Road;
+	/** The river (and the fountain). Tip: Starter Content's M_Water_Lake works here. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Water;
+	/** House, shop, church and HQ walls. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Buildings;
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Roofs;
+	/** THE WALL (and Map Kit wall segments without their own material). */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface BorderWall;
+	/** Razor-wire fence panels. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Fences;
+	/** Counters, benches, stalls, doors, watchtowers. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Wood;
+	/** Bridge rails, gas pumps, holding cells, junk. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Metal;
+	/** The town plaza floor and fountain stone. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface Plaza;
+	/** The lucha ring's canvas. */
+	UPROPERTY(Config, EditAnywhere, Category = "Test Map Look") FBRMapSurface RingCanvas;
+
+	/** Put the right surface on one piece of the test map. Kind = "Map", "Village", "Wall", "Fence", "Station", "Ring", "Tower", "Water". True if it did. */
+	bool ApplySurface(UStaticMeshComponent* Mesh, const FString& Kind, const FString& Piece) const;
 };

@@ -184,8 +184,29 @@ bool ABRCar::WantsSearch(const APVVCharacter* Interactor) const
 	return false;
 }
 
+APVVCharacter* ABRCar::FindPrisonerToUnload(const APVVCharacter* Interactor) const
+{
+	if (!Interactor || Interactor->GetFaction() != BR::Wardens || Interactor->GetCurrentBoat() || Interactor->GetCarriedCharacter()
+		|| Interactor->GetCondition() != EPVVCondition::Normal)
+	{
+		return nullptr;
+	}
+	for (APVVCharacter* Occupant : Occupants)
+	{
+		if (Occupant && Occupant->GetCondition() == EPVVCondition::Restrained)
+		{
+			return Occupant;
+		}
+	}
+	return nullptr;
+}
+
 bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
+	if (FindPrisonerToUnload(Interactor))
+	{
+		return true;
+	}
 	if (WantsSearch(Interactor))
 	{
 		return true;
@@ -199,6 +220,7 @@ bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 
 float ABRCar::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
+	if (FindPrisonerToUnload(Interactor)) return 0.6f;
 	if (WantsSearch(Interactor)) return 2.5f;
 	if (WantsRefuel(Interactor)) return 2.f;
 	return 0.f;
@@ -206,6 +228,10 @@ float ABRCar::GetInteractDuration_Implementation(APVVCharacter* Interactor) cons
 
 FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
+	if (const APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))
+	{
+		return FText::Format(LOCTEXT("Unload", "Take {0} out (carry them to the pen or the catapult)"), FText::FromString(Prisoner->GetPlayerDisplayName()));
+	}
 	if (WantsSearch(Interactor))
 	{
 		return LOCTEXT("Search", "Order everyone OUT of the truck (hold)");
@@ -232,6 +258,11 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 {
 	if (!HasAuthority() || !Interactor)
 	{
+		return;
+	}
+	if (APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))
+	{
+		Interactor->StartCarrying(Prisoner); // pulls them out of the seat onto your shoulder
 		return;
 	}
 	if (WantsSearch(Interactor))
@@ -276,7 +307,11 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 				Suspect->LaunchCharacter(FVector(FMath::FRandRange(-300.f, 300.f), FMath::FRandRange(-300.f, 300.f), 500.f), true, true);
 				if (ABRCharacter* NPC = Cast<ABRCharacter>(Suspect); NPC && NPC->IsNPC())
 				{
-					NPC->StartWandering(NPC->GetActorLocation(), 1500.f); // run for it
+					NPC->StartWandering(NPC->GetActorLocation(), 1500.f);
+					if (NPC->bIllegal)
+					{
+						NPC->StartFleeing(30.f); // no papers: RUN! (tase them, zip-tie them, haul them off)
+					}
 				}
 			}
 		}

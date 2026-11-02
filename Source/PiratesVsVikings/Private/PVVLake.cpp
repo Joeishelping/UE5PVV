@@ -1,4 +1,5 @@
 #include "PVVLake.h"
+#include "BRSettings.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -43,7 +44,11 @@ void APVVLake::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Tint the engine basic-shape material so the placeholder reads as water.
+	// Your water material (Project Settings -> Border Run -> Test Map Look -> Water), or a tinted placeholder.
+	if (GetDefault<UBRSettings>()->ApplySurface(Surface, TEXT("Water"), TEXT("Surface")))
+	{
+		return;
+	}
 	if (UMaterialInstanceDynamic* MID = Surface->CreateDynamicMaterialInstance(0))
 	{
 		MID->SetVectorParameterValue(TEXT("Color"), WaterColor);
