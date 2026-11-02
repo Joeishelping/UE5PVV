@@ -56,4 +56,6 @@ private:
 	TSharedPtr<FOnlineSessionSearch> Search;
 	FDelegateHandle CreateHandle, DestroyHandle, FindHandle, JoinHandle, InviteHandle;
 	bool bHostAfterDestroy = false;
+	/** Invite accepted while we still had our own session: join this once that session is gone. */
+	TOptional<FOnlineSessionSearchResult> PendingInvite;
 };

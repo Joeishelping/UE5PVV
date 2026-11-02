@@ -133,6 +133,17 @@ void UBRGameInstance::OnCreateSessionComplete(FName SessionName, bool bWasSucces
 
 void UBRGameInstance::OnDestroySessionComplete(FName SessionName, bool bWasSuccessful)
 {
+	if (PendingInvite.IsSet())
+	{
+		const FOnlineSessionSearchResult InviteToJoin = PendingInvite.GetValue();
+		PendingInvite.Reset();
+		if (IOnlineSessionPtr Sessions = GetSessions())
+		{
+			Status(TEXT("Invite accepted - joining..."));
+			Sessions->JoinSession(0, NAME_GameSession, InviteToJoin);
+		}
+		return;
+	}
 	if (bHostAfterDestroy)
 	{
 		bHostAfterDestroy = false;
@@ -221,7 +232,12 @@ void UBRGameInstance::OnInviteAccepted(const bool bWasSuccessful, const int32 Co
 	}
 	if (Sessions->GetNamedSession(NAME_GameSession))
 	{
+		// We were hosting our own game: close it first, then join (in OnDestroySessionComplete).
+		Status(TEXT("Invite accepted - closing your own game first..."));
+		PendingInvite = InviteResult;
+		bHostAfterDestroy = false;
 		Sessions->DestroySession(NAME_GameSession);
+		return;
 	}
 	Status(TEXT("Invite accepted - joining..."));
 	Sessions->JoinSession(ControllerId, NAME_GameSession, InviteResult);
@@ -233,7 +249,7 @@ void UBRGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCom
 	FString Address;
 	if (Result != EOnJoinSessionCompleteResult::Success || !Sessions || !Sessions->GetResolvedConnectString(SessionName, Address))
 	{
-		Status(TEXT("Couldn't join that game (full, closed, or a different version?)."));
+		Status(FString::Printf(TEXT("Couldn't join that game (error %d). Is the host still in the game? Same version?"), (int32)Result));
 		return;
 	}
 	if (APlayerController* PC = GetFirstLocalPlayerController())
