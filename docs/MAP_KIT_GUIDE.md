@@ -88,6 +88,11 @@ Day/night, weather and ambient music are added to your map automatically.
 | **BR Pinata** | Put it in the plaza. Runners whack it (E) and the 10th whack wins cash or a random item. It comes back after 2.5 minutes. |
 | **Mariachi Trumpet** | Sell it at a Station (Item = Mariachi Trumpet). A Runner who owns one presses **G** near Border Patrol and they dance for 4 seconds. Put your music in **BP_Runner → BR Mariachi → Trumpet Sound** and a dance animation in **BR Animations → Dance Anim**. |
 
+| **BR Watchtower** | Border Patrol side. Rotate the arrow to where the spotlight should sweep. Agents climb it with E and aim the light with their view. |
+| **BR Chicken** | Put a few in a yard. They wander, flee, and can be grabbed and thrown. |
+| **BR Station, Kind = Warden Supply** | A Border Patrol shop paid from the government budget. Pick **Warden Gear** (Extra Traps, Hard Hat, Drone Recharge, Patrol Dog), or set Gear = None and pick an **Item**. |
+| **BR Station, Item = Poncho** | Sells the poncho disguise (try Price 200). |
+
 ## Step 4: Test checklist
 1. Play → you spawn at your team's Player Start.
 2. During Prep, try to walk across the Border Line. You should be blocked.
