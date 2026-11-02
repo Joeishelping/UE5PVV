@@ -182,12 +182,14 @@ void ABRCharacter::OnRep_InCannon()
 	SetActorEnableCollision(!bInCannon);
 	if (bInCannon)
 	{
+		DisableWobble(); // no wobbly physics while stuffed inside the barrel
 		GetCharacterMovement()->StopMovementImmediately();
 		GetCharacterMovement()->DisableMovement();
 	}
 	else
 	{
 		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		EnableWobble();
 	}
 }
 
@@ -1186,7 +1188,7 @@ void ABRCharacter::EnableWobble()
 	{
 		return;
 	}
-	if (GetCurrentBoat() || GetCarrier())
+	if (GetCurrentBoat() || GetCarrier() || bInCannon)
 	{
 		return; // switched on again when you get out
 	}
@@ -1295,7 +1297,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		return;
 	}
 	// Riding in a vehicle or being carried: no wobbly physics (it crashes the engine on moving, attached bodies).
-	if (GetCurrentBoat() || GetCarrier())
+	if (GetCurrentBoat() || GetCarrier() || bInCannon)
 	{
 		DisableWobble();
 		return;
