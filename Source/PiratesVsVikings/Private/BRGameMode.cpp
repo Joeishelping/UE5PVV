@@ -1,4 +1,5 @@
 #include "BRGameMode.h"
+#include "BRBotController.h"
 #include "BRCar.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
@@ -151,6 +152,7 @@ void ABRGameMode::TickBR()
 	}
 	TickRunners(GS);
 	TickClients();
+	TickBots();
 	if (GS->Phase == EBRPhase::Invasion)
 	{
 		TickBounty(GS);
@@ -816,6 +818,115 @@ void ABRGameMode::OnTruckCleared(APVVCharacter* Warden)
 	}
 	AddBudget(BudgetPerClearedTruck);
 	Feed(FString::Printf(TEXT("%s cleared a truck at the checkpoint (budget +$%d)"), *NameOf(Warden), BudgetPerClearedTruck));
+}
+
+void ABRGameMode::AddBot(EPVVFaction Team)
+{
+	ABRGameState* GS = GetBRGameState();
+	if (!GS)
+	{
+		return;
+	}
+	if (Team == EPVVFaction::None)
+	{
+		Team = GS->CountPlayers(BR::Wardens) * 2 < GS->CountPlayers(BR::Runners) ? BR::Wardens : BR::Runners;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ABRBotController* Bot = GetWorld()->SpawnActor<ABRBotController>(ABRBotController::StaticClass(), FTransform::Identity, Params);
+	ABRPlayerState* PS = Bot ? Bot->GetPlayerState<ABRPlayerState>() : nullptr;
+	if (!PS)
+	{
+		if (Bot)
+		{
+			Bot->Destroy();
+		}
+		return;
+	}
+	static const TCHAR* RunnerNames[] = { TEXT("Pancho"), TEXT("Lupe"), TEXT("Chuy"), TEXT("Memo"), TEXT("Rosa"), TEXT("Nacho"), TEXT("Paco"), TEXT("Beto") };
+	static const TCHAR* WardenNames[] = { TEXT("Officer Dale"), TEXT("Officer Randy"), TEXT("Officer Earl"), TEXT("Officer Becky"), TEXT("Officer Hank"), TEXT("Officer Tammy") };
+	const int32 Index = BotNameIndex++;
+	const FString Name = Team == BR::Wardens
+		? WardenNames[Index % static_cast<int32>(UE_ARRAY_COUNT(WardenNames))]
+		: RunnerNames[Index % static_cast<int32>(UE_ARRAY_COUNT(RunnerNames))];
+	PS->SetPlayerName(FString::Printf(TEXT("[BOT] %s"), *Name));
+	PS->SetIsABot(true);
+	PS->SetFaction(Team);
+	// Random look from the full range (same options as people get).
+	PS->Look.SkinTone = FMath::FRand();
+	PS->Look.ShirtColor = FMath::FRand();
+	PS->Look.PantsColor = FMath::FRand();
+	PS->Look.bHat = true;
+	PS->Look.HeadSize = FMath::FRandRange(.4f, .6f);
+	PS->Look.NoseSize = FMath::FRandRange(.35f, .65f);
+	PS->Look.LipSize = FMath::FRandRange(.4f, .6f);
+	PS->Look.EarSize = FMath::FRandRange(.4f, .6f);
+	PS->Look.HairStyle = FMath::RandRange(0, 8);
+	PS->Look.HairColor = FMath::RandBool() ? 0.f : FMath::FRandRange(.05f, .35f);
+	PS->Look.FacialHair = FMath::RandRange(0, 4);
+	PS->bHasLook = true;
+	RestartPlayer(Bot);
+	Feed(FString::Printf(TEXT("%s joined the %s"), *PS->GetPlayerName(), *(Team == BR::Wardens ? BR::WardenName() : BR::RunnerName())));
+}
+
+void ABRGameMode::RemoveBots()
+{
+	TArray<ABRBotController*> Bots;
+	for (TActorIterator<ABRBotController> It(GetWorld()); It; ++It)
+	{
+		Bots.Add(*It);
+	}
+	for (ABRBotController* Bot : Bots)
+	{
+		if (APawn* P = Bot->GetPawn())
+		{
+			Bot->UnPossess();
+			P->Destroy();
+		}
+		Bot->Destroy();
+	}
+}
+
+void ABRGameMode::TickBots()
+{
+	BotClock += 1.f;
+	if (!bFillWithBots || BotClock < 5.f)
+	{
+		return;
+	}
+	BotClock = 0.f;
+	ABRGameState* GS = GetBRGameState();
+	if (!GS)
+	{
+		return;
+	}
+	for (const EPVVFaction Team : { BR::Runners, BR::Wardens })
+	{
+		const int32 Want = Team == BR::Runners ? FillRunnersTo : FillWardensTo;
+		const int32 Have = GS->CountPlayers(Team);
+		if (Have < Want)
+		{
+			AddBot(Team); // one at a time
+		}
+		else if (Have > Want)
+		{
+			// Too many: a bot on this team makes room for the people.
+			for (TActorIterator<ABRBotController> It(GetWorld()); It; ++It)
+			{
+				const ABRPlayerState* PS = It->GetPlayerState<ABRPlayerState>();
+				if (PS && PS->GetFaction() == Team)
+				{
+					if (APawn* P = It->GetPawn())
+					{
+						It->UnPossess();
+						P->Destroy();
+					}
+					It->Destroy();
+					break;
+				}
+			}
+		}
+	}
 }
 
 bool ABRGameMode::SpendBudget(int32 Amount)

@@ -1056,6 +1056,26 @@ void APVVCharacter::Server_InteractStart_Implementation()
 	HoldProgress = 0.f;
 }
 
+bool APVVCharacter::BotInteractWith(AActor* Target)
+{
+	if (!HasAuthority() || !Target || Condition != EPVVCondition::Normal || CarriedBy || HoldTarget || !Target->Implements<UPVVInteractable>()
+		|| !IPVVInteractable::Execute_CanInteract(Target, this))
+	{
+		return false;
+	}
+	const float Duration = IPVVInteractable::Execute_GetInteractDuration(Target, this);
+	if (Duration <= 0.f)
+	{
+		IPVVInteractable::Execute_OnInteract(Target, this);
+		return true;
+	}
+	HoldTarget = Target;
+	HoldDuration = Duration;
+	HoldElapsed = 0.f;
+	HoldProgress = 0.f;
+	return true;
+}
+
 void APVVCharacter::Server_InteractStop_Implementation()
 {
 	CancelHold();

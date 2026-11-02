@@ -1710,7 +1710,7 @@ void ABRCharacter::SetupProximityVoice()
 {
 	// Other players' voices come out of their character and fade with distance.
 	APlayerState* PS = GetPlayerState();
-	if (!bProximityVoice || !PS || IsLocallyControlled() || GetNetMode() == NM_DedicatedServer || bIsNPC)
+	if (!bProximityVoice || !PS || PS->IsABot() || IsLocallyControlled() || GetNetMode() == NM_DedicatedServer || bIsNPC)
 	{
 		return;
 	}

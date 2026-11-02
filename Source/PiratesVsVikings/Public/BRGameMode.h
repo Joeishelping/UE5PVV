@@ -51,6 +51,15 @@ public:
 	/** Server: a truck waited too long at the checkpoint and pushed through. */
 	void OnTruckForcedThrough();
 
+	// --- Bots ------------------------------------------------------------------------------
+	/** Server: add a computer player to this team (None = whichever team is smaller). */
+	void AddBot(EPVVFaction Team);
+	void RemoveBots();
+	/** Keep each team topped up with bots (they leave again as people join). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Bots") bool bFillWithBots = false;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Bots") int32 FillRunnersTo = 4;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Bots") int32 FillWardensTo = 2;
+
 	// --- Government budget + bounty ---------------------------------------------------------
 	/** Server: take money from Border Patrol's budget. False (and nothing taken) if there isn't enough. */
 	bool SpendBudget(int32 Amount);
@@ -155,6 +164,9 @@ protected:
 
 private:
 	float BountyClock = 0.f;
+	float BotClock = 0.f;
+	int32 BotNameIndex = 0;
+	void TickBots();
 	void TickBounty(class ABRGameState* GS);
 	UPROPERTY() TObjectPtr<ABRDesertArena> Arena;
 

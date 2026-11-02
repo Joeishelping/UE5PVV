@@ -118,6 +118,15 @@ public:
 
 	void ResetForRespawn(const FTransform& SpawnTransform);
 
+	// --- Bot controls (server only: computer players press the same "buttons" as people) -----
+	void BotAttack() { Server_Attack_Implementation(); }
+	/** Start interacting with this thing (hold-to-use things keep going until done or BotStopInteract). */
+	bool BotInteractWith(AActor* Target);
+	void BotStopInteract() { CancelHold(); }
+	void BotStruggle() { Server_Struggle_Implementation(); }
+	void BotSetSprinting(bool bSprint) { if (bSprint != bIsSprinting) { Server_SetSprinting_Implementation(bSprint); } }
+	bool IsBusyInteracting() const { return HoldTarget != nullptr; }
+
 protected:
 	// --- Components ------------------------------------------------------------------------
 

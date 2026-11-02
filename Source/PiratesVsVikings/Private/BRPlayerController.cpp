@@ -262,3 +262,36 @@ void ABRPlayerController::PawnLeavingGame()
 	}
 	Super::PawnLeavingGame();
 }
+
+void ABRPlayerController::AddBots(int32 Count) { Server_AddBots(FMath::Clamp(Count, 1, 12), 0); }
+
+void ABRPlayerController::AddBot(const FString& Team)
+{
+	const bool bWarden = Team.Contains(TEXT("ward"), ESearchCase::IgnoreCase) || Team.Contains(TEXT("patrol"), ESearchCase::IgnoreCase)
+		|| Team.Contains(TEXT("bp"), ESearchCase::IgnoreCase) || Team.Contains(TEXT("cop"), ESearchCase::IgnoreCase);
+	Server_AddBots(1, bWarden ? 2 : 1);
+}
+
+void ABRPlayerController::RemoveBots() { Server_RemoveBots(); }
+
+void ABRPlayerController::Server_AddBots_Implementation(int32 Count, uint8 Team)
+{
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	if (!GM || !IsLocalController())
+	{
+		return; // only the host can add bots
+	}
+	const EPVVFaction Faction = Team == 1 ? BR::Runners : (Team == 2 ? BR::Wardens : EPVVFaction::None);
+	for (int32 i = 0; i < FMath::Clamp(Count, 1, 12); ++i)
+	{
+		GM->AddBot(Faction);
+	}
+}
+
+void ABRPlayerController::Server_RemoveBots_Implementation()
+{
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>(); GM && IsLocalController())
+	{
+		GM->RemoveBots();
+	}
+}

@@ -60,6 +60,13 @@ public:
 	/** 0 = clear, 1 = rain, 2 = sandstorm. */
 	UFUNCTION(Exec) void SetWeather(int32 Weather);
 
+	// --- Bots (host only) --------------------------------------------------------------------
+	/** Add computer players to the smaller team, e.g. "AddBots 3". */
+	UFUNCTION(Exec) void AddBots(int32 Count);
+	/** "AddBot Runners" or "AddBot Wardens". */
+	UFUNCTION(Exec) void AddBot(const FString& Team);
+	UFUNCTION(Exec) void RemoveBots();
+
 	virtual void PawnLeavingGame() override;
 
 	/** Send your customization to the server (menu sliders call this). */
@@ -77,4 +84,6 @@ protected:
 	UFUNCTION(Server, Reliable) void Server_GiveMoney(int32 Amount);
 	UFUNCTION(Server, Reliable) void Server_SetTime(float Hours);
 	UFUNCTION(Server, Reliable) void Server_SetWeather(int32 Weather);
+	UFUNCTION(Server, Reliable) void Server_AddBots(int32 Count, uint8 Team);
+	UFUNCTION(Server, Reliable) void Server_RemoveBots();
 };
