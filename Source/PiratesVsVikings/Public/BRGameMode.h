@@ -67,6 +67,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|World") float StartHour = 14.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|World") FVector2D WeatherChangeSeconds = FVector2D(240.f, 480.f);
 	UPROPERTY(EditDefaultsOnly, Category = "BR|World") FVector ArenaLocation = FVector(0.f, 0.f, 10000.f);
+	/** Off = never build the built-in test desert; always play on the level you made. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|World") bool bUseBuiltInTestMap = true;
 
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float ScandalPenalty = 35.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float WrongfulArrestPenalty = 10.f;

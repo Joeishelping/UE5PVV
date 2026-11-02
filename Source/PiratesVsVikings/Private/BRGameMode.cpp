@@ -57,7 +57,7 @@ void ABRGameMode::StartMatchFlow()
 		break;
 	}
 	// Your own map (Map Kit pieces placed)? Then the built-in desert is only used for sky, day/night, weather and music.
-	const bool bCustomMap = BRMap::IsCustomMap(World);
+	const bool bCustomMap = !bUseBuiltInTestMap || BRMap::IsCustomMap(World);
 	if (!Arena && (bCustomMap || !TActorIterator<APVVLake>(World)))
 	{
 		UClass* MapClass = ArenaClass ? ArenaClass.Get() : ABRDesertArena::StaticClass();
