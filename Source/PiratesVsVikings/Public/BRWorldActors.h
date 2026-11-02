@@ -738,3 +738,27 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Impact;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Flash;
 };
+
+// ===========================================================================================
+/** Local-only puff of dust / water splash / cannon smoke, or a floating "+$150" popup. */
+UCLASS()
+class PIRATESVSVIKINGS_API ABRFX : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ABRFX();
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	EBRFX Kind = EBRFX::Dust;
+	FString Text;
+
+protected:
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Blobs;
+	UPROPERTY() TObjectPtr<UTextRenderComponent> Popup;
+	TArray<FVector> Drift;
+	float Age = 0.f;
+	float Life = 1.f;
+	float BlobSize = 40.f;
+};

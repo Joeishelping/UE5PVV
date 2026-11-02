@@ -517,6 +517,7 @@ private:
 	FString EmoteBubble;
 	float EmoteBubbleUntil = -100.f;
 	float LastEmoteTime = -100.f;
+	EPVVCondition LastSoundCondition = EPVVCondition::Normal;
 	UFUNCTION(Server, Reliable) void Server_Grab();
 	UFUNCTION(Server, Reliable) void Server_Dive();
 	UFUNCTION(Server, Reliable) void Server_LeapOff();

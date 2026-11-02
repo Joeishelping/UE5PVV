@@ -69,6 +69,14 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 SeriesWardenWins = 0;
 
+	/** Server: play a game sound for everyone (at Location, or everywhere when b2D). */
+	static void Sfx(const UObject* Context, EBRSfx Sound, const FVector& Location, bool b2D = false);
+	/** Server: show a puff / splash / smoke / "+$150" popup for everyone. */
+	static void FX(const UObject* Context, EBRFX Kind, const FVector& Location, const FString& Text = FString());
+
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Sfx(EBRSfx Sound, FVector_NetQuantize Location, bool b2D);
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_FX(EBRFX Kind, FVector_NetQuantize Location, const FString& Text);
+
 	/** Kill-feed line in the top-right corner of everyone's screen ("Jorge got YEETED by Dave"). */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_Feed(const FString& Line);

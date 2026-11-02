@@ -333,6 +333,7 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		if (!PS->HasFreeSlot()) { Tell(Interactor, LOCTEXT("Full", "Your pockets are full (6 slots).")); return; }
 		PS->AddMoney(-Price);
 		PS->AddItem(Item);
+		ABRGameState::Sfx(this, EBRSfx::Buy, GetActorLocation());
 		if (Item == EBRItem::WireCutters)
 		{
 			PS->WireCutterCharges += 2;
@@ -364,6 +365,8 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		if (PS->RemoveItem(Item))
 		{
 			PS->AddMoney(Price);
+			ABRGameState::Sfx(this, EBRSfx::Sell, GetActorLocation());
+			ABRGameState::FX(this, EBRFX::MoneyText, Interactor->GetActorLocation() + FVector(0.f, 0.f, 60.f), FString::Printf(TEXT("+$%d"), Price));
 		}
 		break;
 
@@ -401,6 +404,11 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 			return;
 		}
 		PS->AddMoney(Price);
+		if (Price > 0)
+		{
+			ABRGameState::Sfx(this, EBRSfx::Sell, GetActorLocation());
+			ABRGameState::FX(this, EBRFX::MoneyText, Interactor->GetActorLocation() + FVector(0.f, 0.f, 60.f), FString::Printf(TEXT("+$%d"), Price));
+		}
 		if (Item != EBRItem::None && !PS->AddItem(Item))
 		{
 			Tell(Interactor, LOCTEXT("JobFull", "Pockets full - you only got paid."));
@@ -453,6 +461,7 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		default: PS->AddItem(Item); break;
 		}
 		NextUseServerTime = GS->GetServerWorldTimeSeconds() + CooldownSeconds;
+		ABRGameState::Sfx(this, EBRSfx::Requisition, GetActorLocation());
 		Tell(Interactor, FText::Format(LOCTEXT("Requisitioned", "Requisitioned: {0}. Budget left: ${1}"), FText::FromString(BR::WardenGearName(WardenGear, Item)), GS->WardenBudget));
 		break;
 	}
@@ -949,14 +958,17 @@ void ABRTrap::OnTriggered(UPrimitiveComponent* OverlappedComp, AActor* OtherActo
 	case EBRTrap::Bear:
 		Victim->ApplySlow(5.f, 0.f);
 		Victim->Spot(5.f);
+		ABRGameState::Sfx(this, EBRSfx::TrapSnap, GetActorLocation());
 		Victim->Notify(LOCTEXT("BearTrap", "CLANG! Bear trap - you're stuck!"));
 		break;
 	case EBRTrap::Glue:
 		Victim->ApplySlow(8.f, 0.3f);
+		ABRGameState::Sfx(this, EBRSfx::TrapSnap, GetActorLocation());
 		Victim->Notify(LOCTEXT("Glue", "Ugh, glue! You can barely move."));
 		break;
 	case EBRTrap::Alarm:
 		Victim->Spot(8.f);
+		ABRGameState::Sfx(this, EBRSfx::TripwireAlarm, GetActorLocation());
 		Victim->Notify(LOCTEXT("Alarm", "You tripped an alarm wire! Wardens can see you."));
 		break;
 	}
@@ -1501,6 +1513,7 @@ void ABRCannon::Fire()
 	Runner->SetInCannon(false);
 	Runner->TeleportTo(Muzzle->GetComponentLocation() + Dir * 60.f, FRotator(0.f, Dir.Rotation().Yaw, 0.f), false, true);
 	Runner->StartFlight(Dir * LaunchSpeed);
+	ABRGameState::FX(this, EBRFX::Smoke, Muzzle->GetComponentLocation() + Dir * 80.f);
 	Runner->Spot(8.f); // everyone saw that
 	if (ABRPlayerState* PS = Runner->GetBRPlayerState())
 	{
@@ -1953,6 +1966,7 @@ void ABRWatchtower::Tick(float DeltaSeconds)
 		C->Spot(SpotSeconds);
 		if (!bWasSpotted)
 		{
+			ABRGameState::Sfx(this, EBRSfx::Spotted, C->GetActorLocation());
 			C->Notify(LOCTEXT("InSpotlight", "SPOTLIGHT! Border Patrol can see you - get to cover!"));
 		}
 	}
@@ -2206,6 +2220,8 @@ void ABRCashPickup::OnInteract_Implementation(APVVCharacter* Interactor)
 		GM->Feed(FString::Printf(TEXT("%s accepted $%d from %s. Totally normal."), *PS->GetPlayerName(), Taken, *DropperName));
 	}
 	Tell(Interactor, FText::Format(LOCTEXT("GotCash", "+${0}"), Taken));
+	ABRGameState::Sfx(this, EBRSfx::CashPickup, GetActorLocation());
+	ABRGameState::FX(this, EBRFX::MoneyText, GetActorLocation() + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("+$%d"), Taken));
 	Destroy();
 }
 
@@ -2928,6 +2944,93 @@ void ABRVillage::Tick(float DeltaSeconds)
 			Rot = FRotator(0.f, To.Rotation().Yaw, 0.f);
 		}
 		Bird->SetRelativeLocationAndRotation(Pos, Rot);
+	}
+}
+
+// ===========================================================================================
+// Little effects
+
+ABRFX::ABRFX()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = false;
+	USceneComponent* FXRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(FXRoot);
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	for (int32 i = 0; i < 7; ++i)
+	{
+		UStaticMeshComponent* B = CreateDefaultSubobject<UStaticMeshComponent>(*FString::Printf(TEXT("Blob%d"), i));
+		B->SetupAttachment(FXRoot);
+		B->SetStaticMesh(Sphere.Object);
+		B->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		B->SetCastShadow(false);
+		B->SetRelativeScale3D(FVector(0.01f));
+		Blobs.Add(B);
+	}
+	Popup = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Popup"));
+	Popup->SetupAttachment(FXRoot);
+	Popup->SetHorizontalAlignment(EHTA_Center);
+	Popup->SetWorldSize(46.f);
+	Popup->SetHiddenInGame(true);
+}
+
+void ABRFX::BeginPlay()
+{
+	Super::BeginPlay();
+	const bool bText = Kind == EBRFX::MoneyText || Kind == EBRFX::PointsText;
+	FLinearColor Color(0.75f, 0.62f, 0.42f); // dust
+	Life = 0.9f;
+	BlobSize = 45.f;
+	if (Kind == EBRFX::Splash) { Color = FLinearColor(0.75f, 0.88f, 1.f); BlobSize = 35.f; Life = 0.8f; }
+	if (Kind == EBRFX::Smoke) { Color = FLinearColor(0.35f, 0.35f, 0.37f); BlobSize = 80.f; Life = 1.6f; }
+	for (UStaticMeshComponent* B : Blobs)
+	{
+		B->SetHiddenInGame(bText);
+		if (!bText)
+		{
+			if (UMaterialInstanceDynamic* MID = B->CreateDynamicMaterialInstance(0))
+			{
+				MID->SetVectorParameterValue(TEXT("Color"), Color);
+			}
+		}
+		FVector D = FMath::VRand();
+		D.Z = Kind == EBRFX::Splash ? FMath::Abs(D.Z) * 2.5f : FMath::Abs(D.Z) * 0.6f;
+		Drift.Add(D * (Kind == EBRFX::Smoke ? 120.f : 160.f));
+	}
+	if (bText && Popup)
+	{
+		Life = 1.6f;
+		Popup->SetHiddenInGame(false);
+		Popup->SetText(FText::FromString(Text));
+		Popup->SetTextRenderColor(Kind == EBRFX::MoneyText ? FColor(90, 255, 90) : FColor(255, 220, 60));
+	}
+	SetLifeSpan(Life + 0.1f);
+}
+
+void ABRFX::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	Age += DeltaSeconds;
+	const float T = FMath::Clamp(Age / Life, 0.f, 1.f);
+	if (Popup && (Kind == EBRFX::MoneyText || Kind == EBRFX::PointsText))
+	{
+		Popup->SetRelativeLocation(FVector(0.f, 0.f, 40.f + T * 120.f));
+		if (const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0))
+		{
+			const FVector ToCam = Cam->GetCameraLocation() - Popup->GetComponentLocation();
+			Popup->SetWorldRotation(FRotator(0.f, ToCam.Rotation().Yaw, 0.f));
+		}
+		return;
+	}
+	// Puffs swell, drift, then shrink away.
+	const float Size = BlobSize / 100.f * FMath::Sin(T * UE_PI) * (0.6f + T);
+	for (int32 i = 0; i < Blobs.Num(); ++i)
+	{
+		if (UStaticMeshComponent* B = Blobs[i].Get())
+		{
+			B->SetRelativeLocation(Drift[i] * T + (Kind == EBRFX::Splash ? FVector(0.f, 0.f, -300.f * T * T) : FVector::ZeroVector));
+			B->SetRelativeScale3D(FVector(FMath::Max(0.01f, Size * (0.7f + 0.1f * i))));
+		}
 	}
 }
 

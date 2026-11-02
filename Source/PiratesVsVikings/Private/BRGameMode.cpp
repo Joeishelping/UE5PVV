@@ -166,6 +166,10 @@ void ABRGameMode::TickBR()
 		return; // the Prep clock waits until everyone's ready
 	}
 	GS->PhaseSecondsLeft = FMath::Max(0, GS->PhaseSecondsLeft - 1);
+	if (GS->PhaseSecondsLeft > 0 && GS->PhaseSecondsLeft <= 5)
+	{
+		ABRGameState::Sfx(this, EBRSfx::Countdown, FVector::ZeroVector, true); // 5, 4, 3, 2, 1
+	}
 	if (GS->PhaseSecondsLeft == 60 && GS->Phase == EBRPhase::Prep)
 	{
 		Announce(LOCTEXT("OneMinute", "One minute until the Line opens!"));
@@ -209,12 +213,14 @@ void ABRGameMode::AdvancePhase()
 		GS->PhaseSecondsLeft = InvasionSeconds;
 		GS->RunnersNeeded = FMath::Max(1, FMath::DivideAndRoundUp(GS->CountPlayers(BR::Runners), 2));
 		NextNPCTruck = 3.f;
+		ABRGameState::Sfx(this, EBRSfx::RoundStart, FVector::ZeroVector, true);
 		Announce(FText::Format(LOCTEXT("Invasion", "THE LINE IS OPEN! {0}: cross, smuggle, score. {1}: catch, scan, score. Most points wins!"),
 			FText::FromString(BR::RunnerName()), FText::FromString(BR::WardenName())));
 	}
 	else if (GS->Phase == EBRPhase::Invasion)
 	{
 		GS->Phase = EBRPhase::Ended;
+		ABRGameState::Sfx(this, EBRSfx::RoundEnd, FVector::ZeroVector, true);
 		const EPVVFaction Winner = GS->RunnerScore > GS->WardenScore ? BR::Runners : (GS->WardenScore > GS->RunnerScore ? BR::Wardens : EPVVFaction::None);
 		Announce(FText::Format(LOCTEXT("FinalScore", "TIME! {0} {1} - {2} {3}"), FText::FromString(BR::RunnerName()), GS->RunnerScore, GS->WardenScore, FText::FromString(BR::WardenName())));
 		if (bBestOf3)
@@ -307,6 +313,8 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 			PS->StatContraband += Contraband;
 			const int32 Pay = CrossingPay + Contraband * ContrabandPay;
 			PS->AddMoney(Pay);
+			ABRGameState::Sfx(this, EBRSfx::SafeZone, Where);
+			ABRGameState::FX(this, EBRFX::MoneyText, Where + FVector(0.f, 0.f, 60.f), FString::Printf(TEXT("+$%d"), Pay));
 			AwardPoints(C, PointsPerCrossing + Contraband * PointsPerContraband);
 			Announce(Contraband > 0
 				? FText::Format(LOCTEXT("SafeContraband", "{0} MADE IT with {1} contraband! +${2}"), FText::FromString(NameOf(C)), Contraband, Pay)
@@ -753,6 +761,10 @@ void ABRGameMode::AwardPoints(APVVCharacter* Who, int32 Amount)
 		return;
 	}
 	PS->Points += Amount;
+	if (Amount > 0)
+	{
+		ABRGameState::FX(this, EBRFX::PointsText, Who->GetActorLocation() + FVector(0.f, 0.f, 120.f), FString::Printf(TEXT("+%d"), Amount));
+	}
 	if (PS->GetFaction() == BR::Runners)
 	{
 		GS->RunnerScore = FMath::Max(0, GS->RunnerScore + Amount);
@@ -838,6 +850,8 @@ void ABRGameMode::TickClients()
 		if (PS)
 		{
 			PS->AddMoney(Client->ClientPay);
+			ABRGameState::Sfx(this, EBRSfx::Payday, Runner->GetActorLocation());
+			ABRGameState::FX(this, EBRFX::MoneyText, Runner->GetActorLocation() + FVector(0.f, 0.f, 60.f), FString::Printf(TEXT("+$%d"), Client->ClientPay));
 			++PS->StatSmuggled;
 			AwardPoints(Runner, PointsPerClient);
 			Runner->Notify(FText::Format(LOCTEXT("ClientPaid", "Client delivered! +${0}"), Client->ClientPay));
@@ -896,6 +910,7 @@ void ABRGameMode::TickLobby(ABRGameState* GS)
 		Announce(LOCTEXT("AllReady", "Everyone's ready! Starting in 5..."));
 		return;
 	}
+	ABRGameState::Sfx(this, EBRSfx::Countdown, FVector::ZeroVector, true);
 	if (--GS->LobbyCountdown <= 0)
 	{
 		GS->bLobby = false;
@@ -1071,6 +1086,10 @@ void ABRGameMode::AddBudget(int32 Amount)
 void ABRGameMode::OnGoodCatch(APVVCharacter* Warden, ABRPlayerState* Caught)
 {
 	AddBudget(BudgetPerCatch);
+	if (Warden)
+	{
+		ABRGameState::Sfx(this, EBRSfx::Whistle, Warden->GetActorLocation());
+	}
 	ABRGameState* GS = GetBRGameState();
 	if (!GS || !Caught || GS->BountyTarget != Caught)
 	{
@@ -1103,6 +1122,7 @@ void ABRGameMode::TickBounty(ABRGameState* GS)
 	if (Top && Top != GS->BountyTarget)
 	{
 		GS->BountyTarget = Top;
+		ABRGameState::Sfx(this, EBRSfx::Bounty, FVector::ZeroVector, true);
 		Announce(FText::Format(LOCTEXT("Bounty", "WANTED: {0}! Border Patrol gets +{1} for catching them."), FText::FromString(Top->GetPlayerName()), BountyPoints));
 		Feed(FString::Printf(TEXT("BOUNTY on %s ($ above their head)"), *Top->GetPlayerName()));
 	}

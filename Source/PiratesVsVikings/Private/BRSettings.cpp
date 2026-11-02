@@ -8,6 +8,37 @@ UBRSettings::UBRSettings()
 	SectionName = TEXT("Border Run");
 }
 
+USoundBase* UBRSettings::GetSound(EBRSfx Sfx) const
+{
+	const TSoftObjectPtr<USoundBase>* Slot = nullptr;
+	switch (Sfx)
+	{
+	case EBRSfx::Buy:           Slot = &BuySound; break;
+	case EBRSfx::Sell:          Slot = &SellSound; break;
+	case EBRSfx::CashPickup:    Slot = &CashPickupSound; break;
+	case EBRSfx::Payday:        Slot = &PaydaySound; break;
+	case EBRSfx::ZipTie:        Slot = &ZipTieSound; break;
+	case EBRSfx::JailDoor:      Slot = &JailDoorSound; break;
+	case EBRSfx::Splash:        Slot = &SplashSound; break;
+	case EBRSfx::ScanOK:        Slot = &ScanOKSound; break;
+	case EBRSfx::ScanAlarm:     Slot = &ScanAlarmSound; break;
+	case EBRSfx::TrapSnap:      Slot = &TrapSnapSound; break;
+	case EBRSfx::TripwireAlarm: Slot = &TripwireAlarmSound; break;
+	case EBRSfx::HatPop:        Slot = &HatPopSound; break;
+	case EBRSfx::Spotted:       Slot = &SpottedSound; break;
+	case EBRSfx::Bounty:        Slot = &BountySound; break;
+	case EBRSfx::RoundStart:    Slot = &RoundStartSound; break;
+	case EBRSfx::RoundEnd:      Slot = &RoundEndSound; break;
+	case EBRSfx::Countdown:     Slot = &CountdownSound; break;
+	case EBRSfx::SafeZone:      Slot = &SafeZoneSound; break;
+	case EBRSfx::Whistle:       Slot = &WhistleSound; break;
+	case EBRSfx::Landing:       Slot = &LandingSound; break;
+	case EBRSfx::Requisition:   Slot = &RequisitionSound; break;
+	default: break;
+	}
+	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;
+}
+
 FText PVVFactionName(EPVVFaction Faction)
 {
 	switch (Faction)

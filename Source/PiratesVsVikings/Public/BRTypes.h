@@ -70,6 +70,21 @@ enum class EBRStationKind : uint8
 	WardenSupply	// Border Patrol only: buy gear with the government budget (pick Warden Gear, or an Item)
 };
 
+/** Game-wide sound effects (set them all in Project Settings -> Border Run -> Sounds). */
+UENUM(BlueprintType)
+enum class EBRSfx : uint8
+{
+	Buy, Sell, CashPickup, Payday, ZipTie, JailDoor, Splash, ScanOK, ScanAlarm, TrapSnap, TripwireAlarm,
+	HatPop, Spotted, Bounty, RoundStart, RoundEnd, Countdown, SafeZone, Whistle, Landing, Requisition
+};
+
+/** Simple world effects. */
+UENUM(BlueprintType)
+enum class EBRFX : uint8
+{
+	Dust, Splash, Smoke, MoneyText, PointsText
+};
+
 /** Match settings the host picks in the M menu (kept on the host's PC between rounds). */
 USTRUCT(BlueprintType)
 struct FBRHostSettings

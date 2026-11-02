@@ -1,4 +1,5 @@
 #include "BRCharacter.h"
+#include "BRSettings.h"
 #include "BRCar.h"
 #include "BRDesertArena.h"
 #include "BRMapKit.h"
@@ -210,6 +211,7 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 	if (HasAuthority() && bDiving)
 	{
 		bDiving = false;
+		ABRGameState::FX(this, EBRFX::Dust, GetActorLocation() - FVector(0.f, 0.f, 80.f));
 		ApplyKnockdown(nullptr, GetActorForwardVector() * 150.f); // missed: belly flop
 	}
 	if (!HasAuthority() || !bFlying)
@@ -217,6 +219,8 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 		return;
 	}
 	bFlying = false;
+	ABRGameState::FX(this, EBRFX::Dust, GetActorLocation() - FVector(0.f, 0.f, 80.f));
+	ABRGameState::Sfx(this, EBRSfx::Landing, GetActorLocation());
 	ClearRestraint(); // the zip-ties snap on impact
 	if (WornHat != EBRHat::CannonHelmet)
 	{
@@ -1549,18 +1553,22 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	else if (!Target->IsNPC() && !Target->IsDisguised())
 	{
 		Target->Spot(8.f);
+		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
 		Notify(LOCTEXT("ScanRunner", "SCAN: RUNNER! (tagged) - order them out / zip-tie them!"));
 	}
 	else if (Target->bIllegal)
 	{
+		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
 		Notify(LOCTEXT("ScanIllegal", "SCAN: NO PAPERS! Order them out of the truck and arrest them."));
 	}
 	else if (Target->bCarriesContraband)
 	{
+		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
 		Notify(LOCTEXT("ScanContraband", "SCAN: CONTRABAND! Order them out of the truck to seize it."));
 	}
 	else
 	{
+		ABRGameState::Sfx(this, EBRSfx::ScanOK, Target->GetActorLocation());
 		Notify(LOCTEXT("ScanCitizen", "SCAN: papers in order. Regular citizen."));
 	}
 }
@@ -1773,6 +1781,24 @@ void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 
 void ABRCharacter::OnStateEffectsRefreshed()
 {
+	// Zip-tie / cell-door sounds when your state changes (plays on every machine, no extra network message).
+	if (GetCondition() != LastSoundCondition)
+	{
+		const EPVVCondition Was = LastSoundCondition;
+		LastSoundCondition = GetCondition();
+		if (GetNetMode() != NM_DedicatedServer && GetWorld()->GetTimeSeconds() > 2.f)
+		{
+			const EBRSfx Which = GetCondition() == EPVVCondition::Restrained && Was != EPVVCondition::Restrained ? EBRSfx::ZipTie
+				: (GetCondition() == EPVVCondition::Detained ? EBRSfx::JailDoor : EBRSfx::Countdown);
+			if (Which != EBRSfx::Countdown)
+			{
+				if (USoundBase* Wave = GetDefault<UBRSettings>()->GetSound(Which))
+				{
+					UGameplayStatics::PlaySoundAtLocation(this, Wave, GetActorLocation());
+				}
+			}
+		}
+	}
 	if (!PhysicalAnimation || !GetMesh() || !GetMesh()->GetPhysicsAsset())
 	{
 		return;
@@ -1833,6 +1859,11 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	{
 		bInDeepWater = bDeep;
 		UpdateMovementSpeed();
+		if (bDeep && HasAuthority())
+		{
+			ABRGameState::FX(this, EBRFX::Splash, Location);
+			ABRGameState::Sfx(this, EBRSfx::Splash, Location);
+		}
 	}
 	const bool bSlowedNow = IsSlowed();
 	if (bSlowedNow != bSlowApplied)
@@ -2473,6 +2504,7 @@ void ABRCharacter::KnockOffHat()
 		Pickup->HatMesh = HatMeshes.FindRef(WornHat).Get();
 		Pickup->FinishSpawning(T);
 	}
+	ABRGameState::Sfx(this, EBRSfx::HatPop, Head);
 	SetHat(EBRHat::None);
 }
 
