@@ -928,6 +928,7 @@ void ABRCharacter::PlayTrumpet()
 
 void ABRCharacter::Multicast_Trumpet_Implementation()
 {
+	PlayOneShot(TrumpetAnim);
 	if (TrumpetSound && GetNetMode() != NM_DedicatedServer)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, TrumpetSound, GetActorLocation());

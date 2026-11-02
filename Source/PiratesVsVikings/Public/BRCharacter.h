@@ -247,6 +247,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float TrumpetCooldown = 25.f;
 	/** Your mariachi music (drag a sound in). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") TObjectPtr<USoundBase> TrumpetSound;
+	/** Played while you blow the trumpet (the animation pack has "Trumpet"). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> TrumpetAnim;
 	/** Dancing animation for whoever got hit by the music (Mixamo "Samba Dancing"). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> DanceAnim;
 
