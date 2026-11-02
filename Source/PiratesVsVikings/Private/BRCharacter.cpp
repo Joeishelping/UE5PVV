@@ -30,6 +30,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/PhysicalAnimationComponent.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Animation/AnimInstance.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
@@ -570,16 +572,75 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 
 void ABRCharacter::Multicast_ReloadStarted_Implementation()
 {
+	PlayOneShot(ReloadAnim);
 	OnReloadStarted();
 }
 
 void ABRCharacter::Multicast_Ate_Implementation()
 {
+	PlayOneShot(EatAnim);
 	OnAte();
+}
+
+void ABRCharacter::OnAttackStartedNative()
+{
+	PlayOneShot(PunchAnim);
+}
+
+bool ABRCharacter::UsesAnimationSlots() const
+{
+	const USkeletalMeshComponent* MeshComp = GetMesh();
+	return MeshComp && MeshComp->GetSkeletalMeshAsset() && !MeshComp->GetAnimClass() && (IdleAnim || WalkAnim || RunAnim);
+}
+
+void ABRCharacter::PlayOneShot(UAnimSequenceBase* Anim)
+{
+	if (!Anim || !UsesAnimationSlots() || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	GetMesh()->PlayAnimation(Anim, false);
+	CurrentSlotAnim = Anim;
+	OneShotUntil = GetWorld()->GetTimeSeconds() + FMath::Max(0.1f, Anim->GetPlayLength() - 0.05f);
+}
+
+void ABRCharacter::TickAnimationSlots()
+{
+	if (!UsesAnimationSlots() || GetNetMode() == NM_DedicatedServer || GetCondition() == EPVVCondition::KnockedDown)
+	{
+		return; // knocked down = ragdoll, no animation
+	}
+	if (GetWorld()->GetTimeSeconds() < OneShotUntil)
+	{
+		return; // let the punch / reload / eat finish
+	}
+
+	const float Speed = GetVelocity().Size2D();
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	auto Pick = [](UAnimSequenceBase* Preferred, UAnimSequenceBase* Fallback) { return Preferred ? Preferred : Fallback; };
+	UAnimSequenceBase* Locomotion = Speed > RunAnimAboveSpeed ? Pick(RunAnim, WalkAnim) : (Speed > 15.f ? Pick(WalkAnim, IdleAnim) : IdleAnim);
+
+	UAnimSequenceBase* Wanted = nullptr;
+	if (GetCarrier()) Wanted = Pick(CarriedAnim, IdleAnim);
+	else if (GetCurrentBoat()) Wanted = Pick(SeatedAnim, IdleAnim);
+	else if (GetCondition() == EPVVCondition::Restrained) Wanted = (GetStruggleProgress() > 0.f && StruggleAnim) ? StruggleAnim.Get() : Pick(RestrainedAnim, Locomotion);
+	else if (bInDeepWater) Wanted = Pick(SwimAnim, Locomotion);
+	else if (Move && Move->IsFalling()) Wanted = Pick(FallAnim, Locomotion);
+	else if (GetHoldProgress() > 0.f) Wanted = Pick(WorkAnim, Locomotion);
+	else if (bAiming) Wanted = Pick(AimAnim, Locomotion);
+	else if (bIsCrouched) Wanted = Speed > 15.f ? Pick(CrouchWalkAnim, Locomotion) : Pick(CrouchIdleAnim, Locomotion);
+	else Wanted = Locomotion;
+
+	if (Wanted && Wanted != CurrentSlotAnim)
+	{
+		GetMesh()->PlayAnimation(Wanted, true);
+		CurrentSlotAnim = Wanted;
+	}
 }
 
 void ABRCharacter::Multicast_Shot_Implementation(FVector_NetQuantize Start, FVector_NetQuantize End, bool bLethal, bool bHitSomeone)
 {
+	PlayOneShot(FireAnim);
 	OnWeaponFired(bLethal);
 	// Recoil kick through the physics arms.
 	if (bWobbleOn && GetMesh())
@@ -970,6 +1031,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	}
 
 	UpdateGunVisual();
+	TickAnimationSlots();
 	TickWobble();
 	UpdateLocalVisibility();
 }

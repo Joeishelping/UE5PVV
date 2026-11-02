@@ -348,6 +348,8 @@ protected:
 	void RefreshStateEffects();
 	/** Called at the end of RefreshStateEffects on every machine. */
 	virtual void OnStateEffectsRefreshed() {}
+	/** Runs on every machine when this character starts a punch (before the Blueprint OnAttackStarted event). */
+	virtual void OnAttackStartedNative() {}
 	/** Runs on every machine when this character gets hit (before the Blueprint OnHitReceived event). */
 	virtual void OnHitReceivedNative(APVVCharacter* Attacker) {}
 	/** Left-click punches unless a subclass wants it for something else (e.g. firing while aiming). */

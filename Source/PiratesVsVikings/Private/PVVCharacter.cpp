@@ -416,6 +416,7 @@ void APVVCharacter::Server_Attack_Implementation()
 
 void APVVCharacter::Multicast_AttackStarted_Implementation()
 {
+	OnAttackStartedNative();
 	OnAttackStarted();
 }
 

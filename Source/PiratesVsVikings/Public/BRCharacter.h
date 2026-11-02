@@ -12,6 +12,7 @@ class UInputAction;
 class UPhysicalAnimationComponent;
 class USkeletalMeshComponent;
 class USoundBase;
+class UAnimSequenceBase;
 
 /**
  * Border Run character.
@@ -78,6 +79,32 @@ protected:
 	virtual void OnStateEffectsRefreshed() override;
 	virtual bool WantsMeleeOnAttack() const override { return !bAiming; }
 	virtual void OnHitReceivedNative(APVVCharacter* Attacker) override;
+	virtual void OnAttackStartedNative() override;
+
+	// --- Animation slots: drag your (retargeted) animations in. No Animation Blueprint needed. ---
+	// Used when the Mesh has no Anim Class. The game picks the right one automatically.
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> IdleAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> WalkAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> RunAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> CrouchIdleAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> CrouchWalkAnim;
+	/** Jumping, falling, flying off the catapult. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> FallAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> SwimAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> SeatedAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> RestrainedAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> StruggleAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> CarriedAnim;
+	/** Holding E: jobs, cutting wire, zip-tying, refuelling. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> WorkAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> AimAnim;
+	// One-shots.
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> PunchAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> FireAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> ReloadAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EatAnim;
+	/** Speed (cm/s) where walking switches to running. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") float RunAnimAboveSpeed = 520.f;
 
 	// --- Animation events (play montages from these in your character Blueprint) ---------
 	UFUNCTION(BlueprintImplementableEvent, Category = "BR|Anim") void OnWeaponFired(bool bLethal);
@@ -195,6 +222,8 @@ private:
 	bool bSlowApplied = false;
 	bool bWobbleOn = false;
 	bool bArmsStiff = false;
+	UPROPERTY(Transient) TObjectPtr<UAnimSequenceBase> CurrentSlotAnim;
+	float OneShotUntil = 0.f;
 	float NextSwayTime = 0.f;
 	int32 GunStyle = -1;   // 0 none, 1 taser, 2 pistol, 3 revolver
 	int32 GunPlacement = -1; // 0 hand, 1 aiming
@@ -207,6 +236,9 @@ private:
 	void EnableWobble();
 	void ApplyMuscles(float ArmMultiplierOverride);
 	void TickWobble();
+	void TickAnimationSlots();
+	void PlayOneShot(UAnimSequenceBase* Anim);
+	bool UsesAnimationSlots() const;
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_ReloadStarted();
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_Ate();
 	int32& AmmoRef();
