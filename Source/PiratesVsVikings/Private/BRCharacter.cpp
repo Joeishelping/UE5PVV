@@ -1134,6 +1134,10 @@ void ABRCharacter::EnableWobble()
 	{
 		return;
 	}
+	if (GetCurrentBoat() || GetCarrier())
+	{
+		return; // switched on again when you get out
+	}
 	// The bones must have been posed at least once, or the physics reads bones that don't exist yet (crash).
 	if (MeshComp->GetComponentSpaceTransforms().Num() < MeshComp->GetNumBones() || !MeshComp->IsRegistered())
 	{
@@ -1154,6 +1158,21 @@ void ABRCharacter::EnableWobble()
 	bWobbleOn = true;
 	bArmsStiff = WantsStiffArms();
 	ApplyMuscles(bArmsStiff ? (bAiming ? AimArmStrength : DriveArmStrength) : ArmStrength);
+}
+
+void ABRCharacter::DisableWobble()
+{
+	bWobblePending = false;
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!bWobbleOn || !MeshComp)
+	{
+		return;
+	}
+	bWobbleOn = false;
+	PhysicalAnimation->SetSkeletalMeshComponent(nullptr); // drops all the muscle constraints
+	const FName SimRoot = bWobblyLegs ? FName(TEXT("pelvis")) : FName(TEXT("spine_01"));
+	MeshComp->SetAllBodiesBelowSimulatePhysics(SimRoot, false, true);
+	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(SimRoot, 0.f, false, true);
 }
 
 void ABRCharacter::ApplyMuscles(float ArmMuscle)
@@ -1223,7 +1242,13 @@ void ABRCharacter::OnStateEffectsRefreshed()
 	{
 		return;
 	}
-	const bool bRagdolling = GetCondition() == EPVVCondition::KnockedDown && !GetCarrier() && !GetCurrentBoat();
+	// Riding in a vehicle or being carried: no wobbly physics (it crashes the engine on moving, attached bodies).
+	if (GetCurrentBoat() || GetCarrier())
+	{
+		DisableWobble();
+		return;
+	}
+	const bool bRagdolling = GetCondition() == EPVVCondition::KnockedDown;
 	if (bRagdolling)
 	{
 		// Go fully limp: no muscles while knocked down.
@@ -1276,7 +1301,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	{
 		TickWander(DeltaSeconds);
 	}
-	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown)
+	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown && !GetCurrentBoat() && !GetCarrier())
 	{
 		EnableWobble(); // retries until the body has been posed
 	}

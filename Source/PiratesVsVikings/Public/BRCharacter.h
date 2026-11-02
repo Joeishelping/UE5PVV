@@ -293,6 +293,7 @@ private:
 	void UpdateAimCamera(float DeltaSeconds);
 	void ApplyAimRotationMode();
 	void EnableWobble();
+	void DisableWobble();
 	void ApplyMuscles(float ArmMultiplierOverride);
 	void TickWobble();
 	void TickAnimationSlots();
