@@ -1,11 +1,13 @@
 #include "BRWorldActors.h"
 #include "BRCharacter.h"
+#include "BRDog.h"
 #include "BRGameMode.h"
 #include "BRGameState.h"
 #include "BRPlayerState.h"
 #include "PVVBoat.h"
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -151,6 +153,7 @@ void ABRStation::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifeti
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ABRStation, Kind);
 	DOREPLIFETIME(ABRStation, Item);
+	DOREPLIFETIME(ABRStation, WardenGear);
 	DOREPLIFETIME(ABRStation, Price);
 	DOREPLIFETIME(ABRStation, WorkSeconds);
 	DOREPLIFETIME(ABRStation, CooldownSeconds);
@@ -198,6 +201,7 @@ void ABRStation::BeginPlay()
 		case EBRStationKind::BuyBoat: Text = FString::Printf(TEXT("BOATS $%d"), Price); break;
 		case EBRStationKind::Bet: Text = FString::Printf(TEXT("%s %s"), BetSide == 0 ? TEXT("RED") : TEXT("BLUE"), Price > 0 ? *FString::Printf(TEXT("$%d"), Price) : TEXT("ALL IN")); break;
 		case EBRStationKind::HireClient: Text = FString::Printf(TEXT("COYOTE: SMUGGLE A CLIENT (+$%d on arrival)"), Price); break;
+		case EBRStationKind::WardenSupply: Text = FString::Printf(TEXT("GOV. SUPPLY: %s $%d"), *BR::WardenGearName(WardenGear, Item).ToUpper(), Price); break;
 		default: break;
 		}
 	}
@@ -223,6 +227,10 @@ bool ABRStation::IsOpen() const
 
 bool ABRStation::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
+	if (Kind == EBRStationKind::WardenSupply)
+	{
+		return IsFreeWarden(Interactor) && IsOpen() && FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) <= 400.f;
+	}
 	if (!IsFreeRunner(Interactor) || !IsOpen() || FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) > 400.f)
 	{
 		return false;
@@ -292,6 +300,11 @@ FText ABRStation::GetInteractPrompt_Implementation(APVVCharacter* Interactor) co
 		return Price <= 0 ? FText::Format(LOCTEXT("AllIn", "Go ALL IN on the {0} rooster (pays x2.5)"), SideText)
 			: FText::Format(LOCTEXT("Bet", "Bet ${0} on the {1} rooster (pays x2)"), Price, SideText);
 	case EBRStationKind::HireClient: return FText::Format(LOCTEXT("Hire", "Take a smuggling client (paid ${0} when you get them to the Safe Zone)"), Price);
+	case EBRStationKind::WardenSupply:
+	{
+		const ABRGameState* GS = BRGame(this);
+		return FText::Format(LOCTEXT("Supply", "Requisition {0} (${1} of ${2} budget)"), FText::FromString(BR::WardenGearName(WardenGear, Item)), Price, GS ? GS->WardenBudget : 0);
+	}
 	default:
 	{
 		const FText Refusal = JobRefusal(this, Interactor);
@@ -405,6 +418,44 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		}
 		NextUseServerTime = GS->GetServerWorldTimeSeconds() + FMath::Max(CooldownSeconds, 5.f);
 		break;
+
+	case EBRStationKind::WardenSupply:
+	{
+		ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+		ABRCharacter* Warden = Cast<ABRCharacter>(Interactor);
+		if (!GM || !Warden)
+		{
+			return;
+		}
+		if (WardenGear == EBRWardenGear::None && (Item == EBRItem::None || !PS->HasFreeSlot()))
+		{
+			Tell(Interactor, LOCTEXT("SupplyFull", "Your pockets are full (6 slots)."));
+			return;
+		}
+		if (!GM->SpendBudget(Price))
+		{
+			Tell(Interactor, LOCTEXT("NoBudget", "Budget's spent. Clear legal trucks and make catches to get more funding."));
+			return;
+		}
+		switch (WardenGear)
+		{
+		case EBRWardenGear::ExtraTraps: GS->BonusTraps += 2; break;
+		case EBRWardenGear::HardHat: Warden->SetHat(EBRHat::HardHat); break;
+		case EBRWardenGear::DroneRecharge: Warden->RechargeDrone(); break;
+		case EBRWardenGear::PatrolDog:
+		{
+			FActorSpawnParameters DogParams;
+			DogParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+			UClass* DogType = GM->GetDogClass() ? GM->GetDogClass() : ABRDog::StaticClass();
+			GetWorld()->SpawnActor<ABRDog>(DogType, GetActorLocation() + GetActorForwardVector() * 250.f + FVector(0.f, 0.f, 60.f), FRotator::ZeroRotator, DogParams);
+			break;
+		}
+		default: PS->AddItem(Item); break;
+		}
+		NextUseServerTime = GS->GetServerWorldTimeSeconds() + CooldownSeconds;
+		Tell(Interactor, FText::Format(LOCTEXT("Requisitioned", "Requisitioned: {0}. Budget left: ${1}"), FText::FromString(BR::WardenGearName(WardenGear, Item)), GS->WardenBudget));
+		break;
+	}
 	}
 }
 
@@ -1665,6 +1716,271 @@ void ABRPhysicsProp::OnPropHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 }
 
 // ===========================================================================================
+// Chicken
+
+ABRChicken::ABRChicken()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cone(TEXT("/Engine/BasicShapes/Cone.Cone"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	Mesh->SetStaticMesh(Sphere.Object);
+	const float BodyScale = 0.32f;
+	Mesh->SetRelativeScale3D(FVector(BodyScale));
+	MassKg = 2.5f;
+	KnockoutSpeed = 700.f;
+	Color = FLinearColor(0.92f, 0.9f, 0.85f);
+	auto Part = [&](const TCHAR* Name, UStaticMesh* PartMesh, const FVector& AtCm, const FVector& SizeCm, const FLinearColor& PartColor)
+	{
+		UStaticMeshComponent* C = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		C->SetupAttachment(Mesh);
+		C->SetStaticMesh(PartMesh);
+		C->SetUsingAbsoluteScale(true);
+		C->SetRelativeLocation(AtCm / BodyScale); // parent is scaled
+		C->SetWorldScale3D(SizeCm / 100.f);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		C->SetCastShadow(false);
+		C->ComponentTags.Add(PartColor == Color ? FName(TEXT("Feather")) : FName(*FString::Printf(TEXT("Color_%.2f_%.2f_%.2f"), PartColor.R, PartColor.G, PartColor.B)));
+	};
+	Part(TEXT("Head"), Sphere.Object, FVector(17.f, 0.f, 16.f), FVector(16.f, 15.f, 16.f), Color);
+	Part(TEXT("Comb"), Cone.Object, FVector(17.f, 0.f, 27.f), FVector(6.f, 8.f, 10.f), FLinearColor(0.9f, 0.05f, 0.05f));
+	Part(TEXT("Beak"), Cone.Object, FVector(27.f, 0.f, 15.f), FVector(6.f, 6.f, 8.f), FLinearColor(1.f, 0.75f, 0.1f));
+	Part(TEXT("Tail"), Sphere.Object, FVector(-17.f, 0.f, 8.f), FVector(12.f, 18.f, 16.f), Color);
+	Part(TEXT("Legs"), Cylinder.Object, FVector(0.f, 0.f, -18.f), FVector(4.f, 14.f, 12.f), FLinearColor(1.f, 0.75f, 0.1f));
+}
+
+void ABRChicken::BeginPlay()
+{
+	Super::BeginPlay();
+	Home = GetActorLocation();
+	NextHop = FMath::FRandRange(0.5f, 3.f);
+	// Paint the head, comb, beak... (each part carries its colour in a tag).
+	TArray<UStaticMeshComponent*> Parts;
+	GetComponents<UStaticMeshComponent>(Parts);
+	for (UStaticMeshComponent* C : Parts)
+	{
+		if (C == Mesh || C->ComponentTags.Num() == 0)
+		{
+			continue;
+		}
+		if (C->ComponentTags[0] == TEXT("Feather"))
+		{
+			if (UMaterialInstanceDynamic* MID = C->CreateDynamicMaterialInstance(0))
+			{
+				MID->SetVectorParameterValue(TEXT("Color"), Color); // same feathers as the body
+			}
+			continue;
+		}
+		TArray<FString> Bits;
+		C->ComponentTags[0].ToString().ParseIntoArray(Bits, TEXT("_"));
+		if (Bits.Num() == 4)
+		{
+			if (UMaterialInstanceDynamic* MID = C->CreateDynamicMaterialInstance(0))
+			{
+				MID->SetVectorParameterValue(TEXT("Color"), FLinearColor(FCString::Atof(*Bits[1]), FCString::Atof(*Bits[2]), FCString::Atof(*Bits[3])));
+			}
+		}
+	}
+}
+
+void ABRChicken::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!HasAuthority() || IsHeld() || !Mesh->IsSimulatingPhysics())
+	{
+		return;
+	}
+	const FVector Vel = Mesh->GetPhysicsLinearVelocity();
+	if (Vel.Size() < 40.f)
+	{
+		// Landed: stand back up.
+		const FRotator Rot = GetActorRotation();
+		if (FMath::Abs(Rot.Pitch) > 5.f || FMath::Abs(Rot.Roll) > 5.f)
+		{
+			SetActorRotation(FRotator(0.f, Rot.Yaw, 0.f), ETeleportType::TeleportPhysics);
+			Mesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		}
+	}
+	NextHop -= DeltaSeconds;
+	if (NextHop > 0.f || Vel.Size() > 60.f)
+	{
+		return;
+	}
+	NextHop = FMath::FRandRange(1.2f, 3.5f);
+	FVector Dir = FMath::VRand() * FVector(1.f, 1.f, 0.f);
+	const FVector ToHome = (Home - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	if (ToHome.Size() > WanderRadius)
+	{
+		Dir = ToHome; // head back to the yard
+	}
+	Dir = Dir.GetSafeNormal();
+	// Run away from people nearby.
+	for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
+	{
+		const FVector Away = (GetActorLocation() - It->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+		if (Away.Size() < 250.f)
+		{
+			Dir = Away.GetSafeNormal();
+			break;
+		}
+	}
+	SetActorRotation(FRotator(0.f, Dir.Rotation().Yaw, 0.f), ETeleportType::TeleportPhysics);
+	Mesh->SetPhysicsLinearVelocity(Dir * FMath::FRandRange(150.f, 260.f) + FVector(0.f, 0.f, 230.f));
+	if (FMath::FRand() < 0.35f)
+	{
+		Multicast_Cluck();
+	}
+}
+
+void ABRChicken::Multicast_Cluck_Implementation()
+{
+	if (CluckSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, CluckSound, GetActorLocation());
+	}
+}
+
+// ===========================================================================================
+// Watchtower + spotlight
+
+ABRWatchtower::ABRWatchtower()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	const FLinearColor Wood(0.35f, 0.25f, 0.15f), Metal(0.2f, 0.2f, 0.22f);
+	const float H = 650.f;
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const float X = (i % 2) ? 160.f : -160.f, Y = (i / 2) ? 160.f : -160.f;
+		AddMesh(*FString::Printf(TEXT("Leg%d"), i), CylinderMesh, FVector(X, Y, H * 0.5f), FVector(30.f, 30.f, H), Wood);
+	}
+	AddMesh(TEXT("Platform"), CubeMesh, FVector(0.f, 0.f, H), FVector(420.f, 420.f, 20.f), Wood);
+	AddMesh(TEXT("RailN"), CubeMesh, FVector(0.f, 205.f, H + 55.f), FVector(420.f, 10.f, 90.f), Wood);
+	AddMesh(TEXT("RailS"), CubeMesh, FVector(0.f, -205.f, H + 55.f), FVector(420.f, 10.f, 90.f), Wood);
+	AddMesh(TEXT("RailW"), CubeMesh, FVector(-205.f, 0.f, H + 55.f), FVector(10.f, 420.f, 90.f), Wood);
+	AddMesh(TEXT("Roof"), ConeMesh, FVector(0.f, 0.f, H + 330.f), FVector(520.f, 520.f, 120.f), FLinearColor(0.5f, 0.2f, 0.12f));
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const float X = (i % 2) ? 195.f : -195.f, Y = (i / 2) ? 195.f : -195.f;
+		AddMesh(*FString::Printf(TEXT("Post%d"), i), CylinderMesh, FVector(X, Y, H + 140.f), FVector(16.f, 16.f, 280.f), Wood, FRotator::ZeroRotator, false);
+	}
+	AddMesh(TEXT("Ladder"), CubeMesh, FVector(240.f, 0.f, H * 0.5f), FVector(10.f, 80.f, H), Metal, FRotator(-8.f, 0.f, 0.f), false);
+	Lamp = AddMesh(TEXT("Lamp"), CylinderMesh, FVector(170.f, 0.f, H + 150.f), FVector(60.f, 60.f, 70.f), Metal, FRotator(-90.f, 0.f, 0.f), false);
+	Light = CreateDefaultSubobject<USpotLightComponent>(TEXT("Spotlight"));
+	Light->SetupAttachment(Root);
+	Light->SetRelativeLocation(FVector(170.f, 0.f, H + 150.f));
+	Light->SetIntensity(400000.f);
+	Light->SetAttenuationRadius(7000.f);
+	Light->SetInnerConeAngle(6.f);
+	Light->SetOuterConeAngle(10.f);
+	Light->SetLightColor(FLinearColor(1.f, 0.97f, 0.85f));
+	Light->SetCastShadows(true);
+}
+
+ABRCharacter* ABRWatchtower::FindOperator() const
+{
+	const FVector Top = GetActorLocation() + FVector(0.f, 0.f, Height);
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		const FVector D = It->GetActorLocation() - Top;
+		if (It->IsWarden() && !It->IsNPC() && FVector2D(D.X, D.Y).Size() < 260.f && D.Z > -20.f && D.Z < 250.f)
+		{
+			return *It;
+		}
+	}
+	return nullptr;
+}
+
+FRotator ABRWatchtower::GetBeamRotation() const
+{
+	if (const ABRCharacter* Operator = FindOperator())
+	{
+		FRotator Aim = Operator->GetBaseAimRotation();
+		Aim.Pitch = FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch), -60.f, 5.f);
+		return Aim;
+	}
+	const ABRGameState* GS = BRGame(this);
+	const float T = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+	return FRotator(-14.f, GetActorRotation().Yaw + FMath::Sin(T * 0.35f) * SweepAngle, 0.f);
+}
+
+void ABRWatchtower::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const FRotator Beam = GetBeamRotation();
+	if (Light)
+	{
+		Light->SetWorldRotation(Beam);
+		Light->SetRelativeLocation(FVector(170.f, 0.f, Height + 150.f));
+	}
+	if (Lamp)
+	{
+		Lamp->SetWorldRotation(Beam + FRotator(-90.f, 0.f, 0.f));
+	}
+	if (!HasAuthority())
+	{
+		return;
+	}
+	NextScan -= DeltaSeconds;
+	if (NextScan > 0.f)
+	{
+		return;
+	}
+	NextScan = 0.25f;
+	const FVector From = Light ? Light->GetComponentLocation() : GetActorLocation() + FVector(0.f, 0.f, Height + 150.f);
+	const FVector Dir = Beam.Vector();
+	const float CosLimit = FMath::Cos(FMath::DegreesToRadians(BeamAngle));
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* C = *It;
+		if (!C->IsRunner() || C->IsNPC() || C->IsDisguised() || C->GetCondition() == EPVVCondition::Restrained)
+		{
+			continue;
+		}
+		const FVector To = C->GetActorLocation() - From;
+		const float Dist = To.Size();
+		if (Dist > Range || FVector::DotProduct(To / FMath::Max(Dist, 1.f), Dir) < CosLimit)
+		{
+			continue;
+		}
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRSpotlight), false, this);
+		Params.AddIgnoredActor(C);
+		if (GetWorld()->LineTraceSingleByChannel(Hit, From, C->GetActorLocation(), ECC_Visibility, Params))
+		{
+			continue; // behind cover
+		}
+		const bool bWasSpotted = C->IsSpotted();
+		C->Spot(SpotSeconds);
+		if (!bWasSpotted)
+		{
+			C->Notify(LOCTEXT("InSpotlight", "SPOTLIGHT! Border Patrol can see you - get to cover!"));
+		}
+	}
+}
+
+bool ABRWatchtower::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	return IsFreeWarden(Interactor);
+}
+
+FText ABRWatchtower::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	const bool bUp = Interactor && Interactor->GetActorLocation().Z > GetActorLocation().Z + Height * 0.5f;
+	return bUp ? LOCTEXT("TowerDown", "Climb down") : LOCTEXT("TowerUp", "Climb the watchtower (aim the spotlight with your view)");
+}
+
+void ABRWatchtower::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!HasAuthority() || !Interactor)
+	{
+		return;
+	}
+	const bool bUp = Interactor->GetActorLocation().Z > GetActorLocation().Z + Height * 0.5f;
+	const FVector To = bUp ? GetActorTransform().TransformPosition(FVector(380.f, 0.f, 100.f)) : GetActorLocation() + FVector(0.f, 0.f, Height + 110.f);
+	Interactor->TeleportTo(To, Interactor->GetActorRotation(), false, true);
+}
+
+// ===========================================================================================
 // Item pickup (dropped items)
 
 ABRItemPickup::ABRItemPickup()
@@ -1804,6 +2120,92 @@ void ABRHatPickup::OnInteract_Implementation(APVVCharacter* Interactor)
 	BRC->KnockOffHat(); // drop the one you're wearing
 	BRC->SetHat(NewHat);
 	BRC->Notify(FText::Format(LOCTEXT("NowWearing", "{0}: {1}"), FText::FromString(BR::HatName(NewHat)), FText::FromString(BR::HatSkill(NewHat))));
+	Destroy();
+}
+
+// ===========================================================================================
+// Dropped cash
+
+ABRCashPickup::ABRCashPickup()
+{
+	bReplicates = true;
+	PrimaryActorTick.bCanEverTick = true;
+	AddMesh(TEXT("Stack"), CubeMesh, FVector(0.f, 0.f, 6.f), FVector(32.f, 16.f, 10.f), FLinearColor(0.25f, 0.6f, 0.25f), FRotator(0.f, 15.f, 0.f), false);
+	AddMesh(TEXT("Band"), CubeMesh, FVector(0.f, 0.f, 6.f), FVector(8.f, 17.f, 11.f), FLinearColor(0.9f, 0.85f, 0.7f), FRotator(0.f, 15.f, 0.f), false);
+	Tag = AddLabel(TEXT("Tag"), FVector(0.f, 0.f, 45.f), 24.f, FColor(90, 255, 90));
+	InitialLifeSpan = 240.f;
+}
+
+void ABRCashPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRCashPickup, Amount);
+	DOREPLIFETIME(ABRCashPickup, DropperName);
+	DOREPLIFETIME(ABRCashPickup, DropperTeam);
+}
+
+void ABRCashPickup::BeginPlay()
+{
+	Super::BeginPlay();
+	if (Tag)
+	{
+		Tag->SetText(FText::FromString(FString::Printf(TEXT("$%d"), Amount)));
+	}
+}
+
+void ABRCashPickup::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (Tag && GetNetMode() != NM_DedicatedServer)
+	{
+		Tag->SetText(FText::FromString(FString::Printf(TEXT("$%d"), Amount)));
+		Tag->SetRelativeRotation(FRotator(0.f, GetWorld()->GetTimeSeconds() * 90.f, 0.f));
+	}
+}
+
+bool ABRCashPickup::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	return BRC && !BRC->IsNPC() && Interactor->GetCondition() == EPVVCondition::Normal && Amount > 0;
+}
+
+FText ABRCashPickup::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRPlayerState* PS = BRState(Interactor);
+	if (PS && PS->GetPlayerName() == DropperName)
+	{
+		return FText::Format(LOCTEXT("TakeBack", "Pick your ${0} back up"), Amount);
+	}
+	if (Interactor && Interactor->GetFaction() == BR::Wardens)
+	{
+		return FText::Format(LOCTEXT("TakeCashW", "Accept ${0} from {1} (goes to the budget)"), Amount, FText::FromString(DropperName));
+	}
+	return FText::Format(LOCTEXT("TakeCash", "Take ${0} from {1}"), Amount, FText::FromString(DropperName));
+}
+
+void ABRCashPickup::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRPlayerState* PS = BRState(Interactor);
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	if (!HasAuthority() || !PS || !GM || IsActorBeingDestroyed() || Amount <= 0)
+	{
+		return;
+	}
+	const int32 Taken = Amount;
+	Amount = 0;
+	if (Interactor->GetFaction() == BR::Wardens)
+	{
+		GM->AddBudget(Taken);
+	}
+	else
+	{
+		PS->AddMoney(Taken);
+	}
+	if (PS->GetPlayerName() != DropperName && DropperTeam != Interactor->GetFaction())
+	{
+		GM->Feed(FString::Printf(TEXT("%s accepted $%d from %s. Totally normal."), *PS->GetPlayerName(), Taken, *DropperName));
+	}
+	Tell(Interactor, FText::Format(LOCTEXT("GotCash", "+${0}"), Taken));
 	Destroy();
 }
 
@@ -2288,10 +2690,7 @@ ABRVillage::ABRVillage()
 	ChickenYard = FVector(-14000.f, 4300.f, VillageFloorZ);
 	AddMesh(TEXT("Coop_Box"), CubeMesh, FVector(-14350.f, 4150.f, VillageFloorZ + 70.f), FVector(200.f, 160.f, 140.f), VillageWood);
 	AddMesh(TEXT("Coop_Roof"), CubeMesh, FVector(-14350.f, 4150.f, VillageFloorZ + 150.f), FVector(230.f, 190.f, 15.f), FLinearColor(0.6f, 0.25f, 0.15f), FRotator(0.f, 0.f, 8.f), false);
-	for (int32 i = 0; i < 5; ++i)
-	{
-		Chicken(ChickenYard.X + FMath::Cos(i * 1.3f) * 200.f, ChickenYard.Y + FMath::Sin(i * 1.3f) * 200.f);
-	}
+	// (The chickens themselves are real BR Chickens spawned at BeginPlay, so you can grab and throw them.)
 }
 
 FString ABRVillage::NextName(const TCHAR* Prefix)
@@ -2457,6 +2856,19 @@ void ABRVillage::BeginPlay()
 		{
 			Chickens.Add(Comp);
 			ChickenTargets.Add(Comp->GetRelativeLocation());
+		}
+	}
+	if (HasAuthority())
+	{
+		for (int32 i = 0; i < 6; ++i)
+		{
+			const FVector Local(ChickenYard.X + FMath::Cos(i * 1.3f) * 200.f, ChickenYard.Y + FMath::Sin(i * 1.3f) * 200.f, ChickenYard.Z + 30.f);
+			const FTransform T(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), GetActorTransform().TransformPosition(Local));
+			if (ABRChicken* Bird = GetWorld()->SpawnActorDeferred<ABRChicken>(ABRChicken::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn))
+			{
+				Bird->Color = (i % 2) ? FLinearColor(0.55f, 0.32f, 0.15f) : FLinearColor(0.92f, 0.9f, 0.85f);
+				Bird->FinishSpawning(T);
+			}
 		}
 	}
 	if (GetNetMode() == NM_DedicatedServer)

@@ -51,6 +51,28 @@ public:
 	/** Server: a truck waited too long at the checkpoint and pushed through. */
 	void OnTruckForcedThrough();
 
+	// --- Government budget + bounty ---------------------------------------------------------
+	/** Server: take money from Border Patrol's budget. False (and nothing taken) if there isn't enough. */
+	bool SpendBudget(int32 Amount);
+	UClass* GetDogClass() const { return DogClass.Get(); }
+	void AddBudget(int32 Amount);
+	/** Server: a Warden caught a Runner who had crossed (pen or catapult): budget + bounty. */
+	void OnGoodCatch(APVVCharacter* Warden, class ABRPlayerState* Caught);
+
+	/** Border Patrol's government budget at the start of each round. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Budget") int32 StartingBudget = 3000;
+	/** Budget raise for each legal truck cleared at the checkpoint. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Budget") int32 BudgetPerClearedTruck = 400;
+	/** Budget raise for each good catch. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Budget") int32 BudgetPerCatch = 150;
+	/** The top Runner gets a bounty once they have at least this many points. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Bounty") int32 BountyMinPoints = 6;
+	/** Extra points for the Warden who catches the bounty target. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Bounty") int32 BountyPoints = 3;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Bounty") int32 BountyBudget = 1000;
+	/** How often (seconds) the bounty moves to whoever is on top. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Bounty") float BountyCheckSeconds = 20.f;
+
 	/** Server: fling a Runner back across the border with this catapult (Warden = who loaded them, or null for the pen). */
 	void CatapultRunner(APVVCharacter* Prisoner, class ABRCatapult* Catapult, APVVCharacter* Warden);
 
@@ -132,6 +154,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Village", meta = (ClampMin = "0", ClampMax = "1")) float NPCSkinToneMax = 1.f;
 
 private:
+	float BountyClock = 0.f;
+	void TickBounty(class ABRGameState* GS);
 	UPROPERTY() TObjectPtr<ABRDesertArena> Arena;
 
 	FTimerHandle TickTimer;

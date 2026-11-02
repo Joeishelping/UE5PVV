@@ -1,4 +1,5 @@
 #include "BRGameState.h"
+#include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 
@@ -15,6 +16,9 @@ void ABRGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRGameState, RunnersNeeded);
 	DOREPLIFETIME(ABRGameState, RunnerScore);
 	DOREPLIFETIME(ABRGameState, WardenScore);
+	DOREPLIFETIME(ABRGameState, WardenBudget);
+	DOREPLIFETIME(ABRGameState, BonusTraps);
+	DOREPLIFETIME(ABRGameState, BountyTarget);
 }
 
 void ABRGameState::Multicast_NoisePing_Implementation(FVector_NetQuantize Location)

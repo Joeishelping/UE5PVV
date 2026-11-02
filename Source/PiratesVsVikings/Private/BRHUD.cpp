@@ -243,6 +243,16 @@ void ABRHUD::DrawHUD()
 			: TEXT("Cross the Line, get past the wire, river and Wall, reach the SAFE ZONE (far east)."));
 	DrawText(Goal, White, 20.f, SY - 143.f, Small, 1.2f);
 
+	if (bWarden)
+	{
+		DrawText(FString::Printf(TEXT("GOV. BUDGET $%d"), GS->WardenBudget), Green, 20.f, SY - 118.f, Big, 1.3f);
+	}
+	if (GS->BountyTarget && GS->Phase == EBRPhase::Invasion)
+	{
+		const bool bMe = GS->BountyTarget == PS;
+		Centered(bMe ? FString(TEXT("THERE'S A BOUNTY ON YOU! Border Patrol can see the $ over your head"))
+			: FString::Printf(TEXT("BOUNTY: %s"), *GS->BountyTarget->GetPlayerName()), 92.f, bMe ? Red : Green, Small, 1.3f);
+	}
 	if (!bWarden)
 	{
 		DrawText(FString::Printf(TEXT("$%d"), PS->Money), Green, 20.f, SY - 118.f, Big, 1.3f);
@@ -319,6 +329,29 @@ void ABRHUD::DrawHUD()
 		? TEXT("WASD move | Shift sprint | C crouch | LMB punch | hold RMB aim + LMB shoot | R reload | X taser/gun | V scan | B trap | Q drone | E interact")
 		: TEXT("WASD move | Shift sprint | C crouch | LMB punch | RMB aim + LMB shoot | Mouse wheel pick item | F use item | G drop | E interact"),
 		FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 40.f, Small, 1.1f);
+	DrawText(TEXT("Z grab/throw | Left Alt dive | hold T emotes | H drop $ | K mute mic | M menu"), FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 22.f, Small, 1.1f);
+
+	// --- Emote wheel (hold T, move the mouse toward one, let go)
+	if (Me->IsEmoteWheelOpen())
+	{
+		const float CX = SX * 0.5f, CY = SY * 0.5f, R = 150.f;
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), CX - R - 70.f, CY - R - 40.f, (R + 70.f) * 2.f, (R + 40.f) * 2.f);
+		for (int32 i = 0; i < ABRCharacter::NumEmotes; ++i)
+		{
+			const float A = FMath::DegreesToRadians(i * 360.f / ABRCharacter::NumEmotes);
+			const FString Name = ABRCharacter::EmoteName(i);
+			const bool bPicked = Me->GetEmoteChoice() == i;
+			float W = 0.f, H = 0.f;
+			GetTextSize(Name, W, H, Big, bPicked ? 1.5f : 1.1f);
+			const float X = CX + FMath::Sin(A) * R - W * 0.5f, Y = CY - FMath::Cos(A) * R - H * 0.5f;
+			if (bPicked)
+			{
+				DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.8f), X - 8.f, Y - 4.f, W + 16.f, H + 8.f);
+			}
+			DrawText(Name, bPicked ? FLinearColor::Black : White, X, Y, Big, bPicked ? 1.5f : 1.1f);
+		}
+		Centered(TEXT("let go of T"), CY - 8.f, FLinearColor(0.8f, 0.8f, 0.8f), Small, 1.1f);
+	}
 
 	// --- Status
 	switch (Me->GetCondition())

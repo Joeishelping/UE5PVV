@@ -79,6 +79,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Hats") EBRHat GetHat() const { return WornHat; }
 	float GetHatKnockOffChance() const { return HatKnockOffChance; }
 	EBRHat GetDefaultHat() const { return DefaultHat; }
+
+	// --- Emote wheel (local) ----------------------------------------------------------------
+	static constexpr int32 NumEmotes = 6;
+	static FString EmoteName(int32 Index);
+	bool IsEmoteWheelOpen() const { return bEmoteWheelOpen; }
+	/** Highlighted slice (-1 = none: let go to cancel). */
+	int32 GetEmoteChoice() const { return EmoteChoice; }
+	/** Server: drone ready to launch again right now (bought with the budget). */
+	void RechargeDrone() { LastDroneTime = -1000.f; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDisguised() const { return bDisguised; }
 	/** Server: put on a hat (drops nothing - see KnockOffHat). */
 	void SetHat(EBRHat Hat);
@@ -219,6 +228,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> GrabAction;
 	/** Left Alt: dive / tackle. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> DiveAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> EmoteAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> CashAction;
 
 	// --- Brawling (Gang Beasts style) ------------------------------------------------------
 	/** Flailing hands faster than this (cm/s, relative to you) smack people they hit. 0 = off. */
@@ -265,6 +276,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> TrumpetAnim;
 	/** Dancing animation for whoever got hit by the music (Mixamo "Samba Dancing"). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> DanceAnim;
+	/** Emote wheel animations (hold T, move the mouse, let go). The animation pack has Emote_Wave, _Flex, _Taunt, _Beg, _Cheer. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteWaveAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteFlexAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteTauntAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteBegAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteCheerAnim;
+
+	// --- Cash ---------------------------------------------------------------------------
+	/** How much H drops on the ground (anyone can choose to pick it up). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Cash") int32 CashDropAmount = 50;
 
 	// --- Tuning -----------------------------------------------------------------------
 
@@ -384,6 +405,8 @@ private:
 	bool bPunchConnected = false;
 	int32 MashCount = 0;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UTextRenderComponent> KOStars;
+	/** Floating text over your head: emote bubbles and the bounty "$ WANTED $". */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UTextRenderComponent> HeadTag;
 	// Local screen shake.
 	float ShakeAmount = 0.f;
 	FVector CameraBaseLocation = FVector::ZeroVector;
@@ -476,6 +499,20 @@ private:
 	bool TryClimb();
 	void Input_Grab();
 	void Input_Dive();
+	void Input_EmoteStart();
+	void Input_EmoteStop();
+	void Input_DropCash();
+	UFUNCTION(Server, Reliable) void Server_Emote(uint8 Index);
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Emote(uint8 Index);
+	UFUNCTION(Server, Reliable) void Server_DropCash();
+	void TickEmoteWheel();
+	void TickHeadTag();
+	bool bEmoteWheelOpen = false;
+	int32 EmoteChoice = -1;
+	FVector2D EmoteAim = FVector2D::ZeroVector;
+	FString EmoteBubble;
+	float EmoteBubbleUntil = -100.f;
+	float LastEmoteTime = -100.f;
 	UFUNCTION(Server, Reliable) void Server_Grab();
 	UFUNCTION(Server, Reliable) void Server_Dive();
 	UFUNCTION(Server, Reliable) void Server_LeapOff();

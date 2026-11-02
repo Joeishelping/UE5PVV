@@ -64,6 +64,8 @@ public:
 	/** Buy an item, sell an item, work a job for cash, buy a boat, or bet on the cockfight. */
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") EBRStationKind Kind = EBRStationKind::BuyItem;
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") EBRItem Item = EBRItem::None;
+	/** Warden Supply counters: what Border Patrol buys with the government budget (None = sell the Item above). */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") EBRWardenGear WardenGear = EBRWardenGear::None;
 	/** Cost (buy/boat/bet), or pay (job/sell). Bets: 0 = ALL IN. */
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") int32 Price = 10;
 	/** Jobs: seconds of holding E. */
@@ -445,6 +447,64 @@ private:
 	void ApplyHeldState();
 };
 
+/** A chicken. It wanders and hops around; grab it (Z), carry it, and THROW it (Z) at people. */
+UCLASS(meta = (DisplayName = "BR Chicken"))
+class PIRATESVSVIKINGS_API ABRChicken : public ABRPhysicsProp
+{
+	GENERATED_BODY()
+
+public:
+	ABRChicken();
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** How far (cm) it wanders from where it started. */
+	UPROPERTY(EditAnywhere, Category = "BR|Chicken") float WanderRadius = 600.f;
+	/** Drag in a cluck / squawk sound. */
+	UPROPERTY(EditAnywhere, Category = "BR|Chicken") TObjectPtr<USoundBase> CluckSound;
+
+protected:
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Cluck();
+	FVector Home = FVector::ZeroVector;
+	float NextHop = 0.f;
+};
+
+/**
+ * Border Patrol watchtower with a big spotlight. It sweeps on its own; a Warden standing on top aims it with their view.
+ * Runners caught in the beam are SPOTTED (Border Patrol sees them through walls for a few seconds). Disguised Runners are ignored.
+ */
+UCLASS(meta = (DisplayName = "BR Watchtower"))
+class PIRATESVSVIKINGS_API ABRWatchtower : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRWatchtower();
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.8f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	/** Platform height (cm). */
+	UPROPERTY(EditAnywhere, Category = "BR|Watchtower") float Height = 650.f;
+	/** How far the beam reaches (cm). */
+	UPROPERTY(EditAnywhere, Category = "BR|Watchtower") float Range = 6000.f;
+	/** Half-width of the beam (degrees). */
+	UPROPERTY(EditAnywhere, Category = "BR|Watchtower") float BeamAngle = 9.f;
+	/** Unmanned sweep: degrees left/right of the arrow. */
+	UPROPERTY(EditAnywhere, Category = "BR|Watchtower") float SweepAngle = 55.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Watchtower") float SpotSeconds = 4.f;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class USpotLightComponent> Light;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Lamp;
+	float NextScan = 0.f;
+	class ABRCharacter* FindOperator() const;
+	FRotator GetBeamRotation() const;
+};
+
 // ===========================================================================================
 /** An item lying on the ground (dropped with G). Walk up and press E to pick it up. Border Patrol confiscate contraband. */
 UCLASS(meta = (DisplayName = "BR Item Pickup"))
@@ -494,6 +554,31 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class USkeletalMeshComponent> Visual;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Tag;
 	UFUNCTION() void OnRep_HatInfo();
+};
+
+/** Cash someone dropped (H). Anyone can choose to pick it up (E). Border Patrol who take it put it in the budget. */
+UCLASS(meta = (DisplayName = "BR Cash Pickup"))
+class PIRATESVSVIKINGS_API ABRCashPickup : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRCashPickup();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.4f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Cash") int32 Amount = 50;
+	UPROPERTY(Replicated) FString DropperName;
+	UPROPERTY(Replicated) EPVVFaction DropperTeam = EPVVFaction::None;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Tag;
 };
 
 /** A taco platter someone put down: anyone can grab a taco (E) until it's empty. */

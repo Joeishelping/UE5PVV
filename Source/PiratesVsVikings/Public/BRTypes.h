@@ -66,7 +66,19 @@ enum class EBRStationKind : uint8
 	BuyBoat,	// pay Price, a boat appears at BoatSpawn
 	Job,		// hold to work, get Price (and Item if set)
 	Bet,		// bet Price (0 = ALL IN) on a rooster at the cockfight pit
-	HireClient	// a smuggling client pays you to get them across: they follow you (paid on arrival)
+	HireClient,	// a smuggling client pays you to get them across: they follow you (paid on arrival)
+	WardenSupply	// Border Patrol only: buy gear with the government budget (pick Warden Gear, or an Item)
+};
+
+/** What a Border Patrol supply counter sells (paid from the team's government budget). */
+UENUM(BlueprintType)
+enum class EBRWardenGear : uint8
+{
+	None,			// sells the station's Item instead (taco, ladder...)
+	ExtraTraps,		// +2 traps for the whole team
+	HardHat,		// wear a Hard Hat
+	DroneRecharge,	// your drone is ready again right now
+	PatrolDog		// a new patrol dog appears next to the counter
 };
 
 UENUM(BlueprintType)
@@ -83,6 +95,8 @@ namespace BR
 	PIRATESVSVIKINGS_API FString HatName(EBRHat Hat);
 	/** What the hat does, e.g. "+12% speed". */
 	PIRATESVSVIKINGS_API FString HatSkill(EBRHat Hat);
+	/** Name of a Border Patrol supply (uses the Item name when Gear is None). */
+	PIRATESVSVIKINGS_API FString WardenGearName(EBRWardenGear Gear, EBRItem Item);
 	/** Your team names from Project Settings -> Game -> Border Run. */
 	PIRATESVSVIKINGS_API FString RunnerName();
 	PIRATESVSVIKINGS_API FString WardenName();

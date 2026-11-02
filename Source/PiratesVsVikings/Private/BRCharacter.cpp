@@ -64,6 +64,13 @@ ABRCharacter::ABRCharacter()
 	KOStars->SetHorizontalAlignment(EHTA_Center);
 	KOStars->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	KOStars->SetHiddenInGame(true);
+	HeadTag = CreateDefaultSubobject<UTextRenderComponent>(TEXT("HeadTag"));
+	HeadTag->SetupAttachment(GetCapsuleComponent());
+	HeadTag->SetRelativeLocation(FVector(0.f, 0.f, 135.f));
+	HeadTag->SetWorldSize(30.f);
+	HeadTag->SetHorizontalAlignment(EHTA_Center);
+	HeadTag->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HeadTag->SetHiddenInGame(true);
 
 
 	auto MakeOutfit = [this](const TCHAR* Name)
@@ -738,6 +745,8 @@ void ABRCharacter::EnsureDefaultInput()
 	DropAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	GrabAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	DiveAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	EmoteAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	CashAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 
 	UInputMappingContext* IMC = DefaultMappingContext;
 	PVVInput::Map(IMC, AimAction, EKeys::RightMouseButton);
@@ -765,6 +774,8 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, GrabAction, EKeys::Gamepad_FaceButton_Right);
 	PVVInput::Map(IMC, DiveAction, EKeys::LeftAlt);
 	PVVInput::Map(IMC, DiveAction, EKeys::Gamepad_LeftThumbstick);
+	PVVInput::Map(IMC, EmoteAction, EKeys::T);
+	PVVInput::Map(IMC, CashAction, EKeys::H);
 	// Fire is the existing Attack action (left mouse / gamepad X) while aiming; also right trigger.
 	PVVInput::Map(IMC, AttackAction, EKeys::Gamepad_RightTrigger);
 }
@@ -796,6 +807,12 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (WeaponModeAction) Input->BindAction(WeaponModeAction, ETriggerEvent::Started, this, &ABRCharacter::Input_WeaponMode);
 	if (ScanAction) Input->BindAction(ScanAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Scan);
 	if (TrapAction) Input->BindAction(TrapAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Trap);
+	if (EmoteAction)
+	{
+		Input->BindAction(EmoteAction, ETriggerEvent::Started, this, &ABRCharacter::Input_EmoteStart);
+		Input->BindAction(EmoteAction, ETriggerEvent::Completed, this, &ABRCharacter::Input_EmoteStop);
+	}
+	if (CashAction) Input->BindAction(CashAction, ETriggerEvent::Started, this, &ABRCharacter::Input_DropCash);
 }
 
 void ABRCharacter::Input_Crouch()
@@ -1559,9 +1576,11 @@ void ABRCharacter::Server_PlaceTrap_Implementation()
 	{
 		++Count;
 	}
-	if (Count >= MaxTeamTraps)
+	const ABRGameState* TrapGS = GetBRGameState();
+	const int32 TrapCap = MaxTeamTraps + (TrapGS ? TrapGS->BonusTraps : 0);
+	if (Count >= TrapCap)
 	{
-		Notify(FText::Format(LOCTEXT("TrapLimit", "Trap limit reached ({0}). Wait for some to be sprung."), MaxTeamTraps));
+		Notify(FText::Format(LOCTEXT("TrapLimit", "Trap limit reached ({0}). Wait for some to be sprung, or buy more at the supply counter."), TrapCap));
 		return;
 	}
 
@@ -1575,7 +1594,7 @@ void ABRCharacter::Server_PlaceTrap_Implementation()
 		Trap->FinishSpawning(Where);
 		const TCHAR* Names[] = { TEXT("BEAR TRAP"), TEXT("GLUE PAD"), TEXT("ALARM TRIPWIRE") };
 		Notify(FText::Format(LOCTEXT("TrapPlaced", "Placed {0} ({1}/{2}). Press B again for the next type."),
-			FText::FromString(Names[static_cast<int32>(Type)]), Count + 1, MaxTeamTraps));
+			FText::FromString(Names[static_cast<int32>(Type)]), Count + 1, TrapCap));
 	}
 }
 
@@ -1830,6 +1849,8 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickOutfitState();
 	}
 	TickShake(DeltaSeconds);
+	TickEmoteWheel();
+	TickHeadTag();
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
 	{
 		const bool bKO = GetCondition() == EPVVCondition::KnockedDown;
@@ -2575,6 +2596,182 @@ void ABRCharacter::OnRep_HeldItem()
 		}
 	}
 	HeldItemMesh->SetVisibility(true);
+}
+
+// -------------------------------------------------------------------------------------------
+// Emote wheel, cash drop, head tag
+
+FString ABRCharacter::EmoteName(int32 Index)
+{
+	switch (Index)
+	{
+	case 0: return TEXT("Wave");
+	case 1: return TEXT("Flex");
+	case 2: return TEXT("Taunt");
+	case 3: return TEXT("Beg");
+	case 4: return TEXT("Cheer");
+	case 5: return TEXT("Dance");
+	default: return TEXT("");
+	}
+}
+
+void ABRCharacter::Input_EmoteStart()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || bEmoteWheelOpen)
+	{
+		return;
+	}
+	bEmoteWheelOpen = true;
+	EmoteChoice = -1;
+	EmoteAim = FVector2D::ZeroVector;
+	PC->SetIgnoreLookInput(true); // the mouse picks a slice instead of turning the camera
+}
+
+void ABRCharacter::Input_EmoteStop()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!bEmoteWheelOpen)
+	{
+		return;
+	}
+	bEmoteWheelOpen = false;
+	if (PC)
+	{
+		PC->SetIgnoreLookInput(false);
+	}
+	if (EmoteChoice >= 0)
+	{
+		Server_Emote(static_cast<uint8>(EmoteChoice));
+	}
+	EmoteChoice = -1;
+}
+
+void ABRCharacter::TickEmoteWheel()
+{
+	if (!bEmoteWheelOpen)
+	{
+		return;
+	}
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		bEmoteWheelOpen = false;
+		return;
+	}
+	float DX = 0.f, DY = 0.f;
+	PC->GetInputMouseDelta(DX, DY);
+	EmoteAim += FVector2D(DX, DY);
+	if (EmoteAim.Size() > 40.f)
+	{
+		EmoteAim = EmoteAim.GetSafeNormal() * 40.f;
+	}
+	if (EmoteAim.Size() < 12.f)
+	{
+		EmoteChoice = -1;
+		return;
+	}
+	// Slice 0 is straight up, going clockwise.
+	float Angle = FMath::RadiansToDegrees(FMath::Atan2(EmoteAim.X, EmoteAim.Y));
+	Angle = FMath::Fmod(Angle + 360.f + 180.f / NumEmotes, 360.f);
+	EmoteChoice = FMath::Clamp(FMath::FloorToInt(Angle / (360.f / NumEmotes)), 0, NumEmotes - 1);
+}
+
+void ABRCharacter::Server_Emote_Implementation(uint8 Index)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Index >= NumEmotes || GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || Now - LastEmoteTime < 1.5f)
+	{
+		return;
+	}
+	LastEmoteTime = Now;
+	Multicast_Emote(Index);
+}
+
+void ABRCharacter::Multicast_Emote_Implementation(uint8 Index)
+{
+	UAnimSequenceBase* Anims[] = { EmoteWaveAnim.Get(), EmoteFlexAnim.Get(), EmoteTauntAnim.Get(), EmoteBegAnim.Get(), EmoteCheerAnim.Get(), DanceAnim.Get() };
+	const TCHAR* Bubbles[] = { TEXT("*waves*"), TEXT("*FLEXES*"), TEXT("*taunts*"), TEXT("*begs*"), TEXT("*cheers*"), TEXT("*dances*") };
+	if (Index < NumEmotes)
+	{
+		PlayOneShot(Anims[Index]);
+		EmoteBubble = Bubbles[Index];
+		EmoteBubbleUntil = GetWorld()->GetTimeSeconds() + 2.5f;
+	}
+}
+
+void ABRCharacter::Input_DropCash() { Server_DropCash(); }
+
+void ABRCharacter::Server_DropCash_Implementation()
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	if (!PS || !GM || bIsNPC || GetCondition() != EPVVCondition::Normal || GetCurrentBoat())
+	{
+		return;
+	}
+	const int32 Amount = FMath::Max(1, CashDropAmount);
+	if (IsWarden())
+	{
+		if (!GM->SpendBudget(Amount))
+		{
+			Notify(LOCTEXT("NoBudgetCash", "The budget's empty."));
+			return;
+		}
+	}
+	else
+	{
+		if (PS->Money < Amount)
+		{
+			Notify(LOCTEXT("NoCash", "You don't have that much cash."));
+			return;
+		}
+		PS->AddMoney(-Amount);
+	}
+	const FVector At = GetActorLocation() + GetActorForwardVector() * 110.f - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	const FTransform T(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At);
+	if (ABRCashPickup* Cash = GetWorld()->SpawnActorDeferred<ABRCashPickup>(ABRCashPickup::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Cash->Amount = Amount;
+		Cash->DropperName = PS->GetPlayerName();
+		Cash->DropperTeam = GetFaction();
+		Cash->FinishSpawning(T);
+	}
+	Notify(FText::Format(LOCTEXT("CashDropped", "Dropped ${0}. Anyone can pick it up..."), Amount));
+}
+
+void ABRCharacter::TickHeadTag()
+{
+	if (!HeadTag || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	const ABRGameState* GS = GetBRGameState();
+	const bool bBounty = GS && GS->BountyTarget && GS->BountyTarget == GetPlayerState() && GetCondition() != EPVVCondition::Restrained;
+	FString Text;
+	FColor Color = FColor::White;
+	if (Now < EmoteBubbleUntil)
+	{
+		Text = EmoteBubble;
+	}
+	else if (bBounty)
+	{
+		Text = TEXT("$ WANTED $");
+		Color = FColor(80, 255, 80);
+	}
+	HeadTag->SetHiddenInGame(Text.IsEmpty());
+	if (Text.IsEmpty())
+	{
+		return;
+	}
+	HeadTag->SetText(FText::FromString(Text));
+	HeadTag->SetTextRenderColor(Color);
+	if (const APlayerController* Viewer = GetWorld()->GetFirstPlayerController(); Viewer && Viewer->PlayerCameraManager)
+	{
+		const FVector ToCam = Viewer->PlayerCameraManager->GetCameraLocation() - HeadTag->GetComponentLocation();
+		HeadTag->SetWorldRotation(FRotator(0.f, ToCam.Rotation().Yaw, 0.f));
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

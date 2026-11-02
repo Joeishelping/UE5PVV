@@ -492,6 +492,27 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	// --- Human cannon on the near bank, aimed across the border
 	World->SpawnActor<ABRCannon>(ABRCannon::StaticClass(), At(-5800.f, 2500.f, Ground), Params);
 
+	// --- Watchtowers with spotlights, looking back over Mexico
+	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, -4800.f, Ground, 180.f), Params);
+	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, 4200.f, Ground, 180.f), Params);
+
+	// --- Border Patrol supply counters (paid from the government budget)
+	auto Supply = [&](float X, float Y, EBRWardenGear Gear, EBRItem SupplyItem, int32 Cost, float Cooldown)
+	{
+		const FTransform T = At(X, Y, Ground, 180.f);
+		if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			S->Kind = EBRStationKind::WardenSupply; S->WardenGear = Gear; S->Item = SupplyItem; S->Price = Cost;
+			S->CooldownSeconds = Cooldown; S->Color = FLinearColor(0.15f, 0.25f, 0.55f);
+			S->FinishSpawning(T);
+		}
+	};
+	Supply(7800.f, -800.f, EBRWardenGear::ExtraTraps, EBRItem::None, 600, 0.f);
+	Supply(7800.f, -400.f, EBRWardenGear::DroneRecharge, EBRItem::None, 300, 0.f);
+	Supply(7800.f, 0.f, EBRWardenGear::HardHat, EBRItem::None, 400, 0.f);
+	Supply(7800.f, 400.f, EBRWardenGear::PatrolDog, EBRItem::None, 1500, 30.f);
+	Supply(7800.f, 800.f, EBRWardenGear::None, EBRItem::Taco, 20, 0.f);
+
 	// --- Warden base
 	World->SpawnActor<APVVDetentionZone>(APVVDetentionZone::StaticClass(), At(7000.f, 4000.f, Ground + 150.f), Params);
 	Catapult = World->SpawnActor<ABRCatapult>(ABRCatapult::StaticClass(), At(7200.f, 1500.f, Ground), Params);

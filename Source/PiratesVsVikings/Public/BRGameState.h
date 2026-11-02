@@ -43,6 +43,18 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 WardenScore = 0;
 
+	/** Border Patrol's government budget (shared by the team). Supply counters spend it; cleared trucks and catches raise it. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 WardenBudget = 0;
+
+	/** Extra traps the team bought on top of each Warden's Max Team Traps. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 BonusTraps = 0;
+
+	/** The top Runner with a price on their head (catch them for bonus points). Null = no bounty. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	TObjectPtr<APlayerState> BountyTarget;
+
 	/** Kill-feed line in the top-right corner of everyone's screen ("Jorge got YEETED by Dave"). */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_Feed(const FString& Line);

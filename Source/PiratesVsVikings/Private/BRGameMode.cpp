@@ -83,6 +83,9 @@ void ABRGameMode::StartMatchFlow()
 		GS->PhaseSecondsLeft = PrepSeconds;
 		GS->TimeOfDay = StartHour;
 		GS->Approval = 100.f;
+		GS->WardenBudget = StartingBudget;
+		GS->BonusTraps = 0;
+		GS->BountyTarget = nullptr;
 		GS->SetMatchPhase(EPVVMatchPhase::InProgress, EPVVFaction::None);
 	}
 	NextWeatherChange = FMath::FRandRange(WeatherChangeSeconds.X, WeatherChangeSeconds.Y);
@@ -150,6 +153,7 @@ void ABRGameMode::TickBR()
 	TickClients();
 	if (GS->Phase == EBRPhase::Invasion)
 	{
+		TickBounty(GS);
 		NextNPCTruck -= 1.f;
 		if (NextNPCTruck <= 0.f)
 		{
@@ -339,6 +343,7 @@ void ABRGameMode::NotifyDetained(APVVCharacter* Victim, APVVCharacter* Captor)
 		{
 			++CaptorPS->StatCatches;
 		}
+		OnGoodCatch(Captor, PS);
 		Feed(FString::Printf(TEXT("%s locked up %s"), *NameOf(Captor), *NameOf(Victim)));
 	}
 	else
@@ -433,6 +438,7 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 				{
 					++WPS->StatCatches;
 				}
+				OnGoodCatch(Warden, PS);
 			}
 			else
 			{
@@ -808,7 +814,67 @@ void ABRGameMode::OnTruckCleared(APVVCharacter* Warden)
 	{
 		++PS->StatClearedTrucks;
 	}
-	Feed(FString::Printf(TEXT("%s cleared a truck at the checkpoint"), *NameOf(Warden)));
+	AddBudget(BudgetPerClearedTruck);
+	Feed(FString::Printf(TEXT("%s cleared a truck at the checkpoint (budget +$%d)"), *NameOf(Warden), BudgetPerClearedTruck));
+}
+
+bool ABRGameMode::SpendBudget(int32 Amount)
+{
+	ABRGameState* GS = GetBRGameState();
+	if (!GS || Amount < 0 || GS->WardenBudget < Amount)
+	{
+		return false;
+	}
+	GS->WardenBudget -= Amount;
+	return true;
+}
+
+void ABRGameMode::AddBudget(int32 Amount)
+{
+	if (ABRGameState* GS = GetBRGameState())
+	{
+		GS->WardenBudget = FMath::Max(0, GS->WardenBudget + Amount);
+	}
+}
+
+void ABRGameMode::OnGoodCatch(APVVCharacter* Warden, ABRPlayerState* Caught)
+{
+	AddBudget(BudgetPerCatch);
+	ABRGameState* GS = GetBRGameState();
+	if (!GS || !Caught || GS->BountyTarget != Caught)
+	{
+		return;
+	}
+	AwardPoints(Warden, BountyPoints);
+	AddBudget(BountyBudget);
+	GS->BountyTarget = nullptr;
+	BountyClock = BountyCheckSeconds - 5.f; // a new bounty soon
+	Feed(FString::Printf(TEXT("%s CLAIMED THE BOUNTY on %s (+%d, budget +$%d)"), *NameOf(Warden), *Caught->GetPlayerName(), BountyPoints, BountyBudget));
+}
+
+void ABRGameMode::TickBounty(ABRGameState* GS)
+{
+	BountyClock += 1.f;
+	if (BountyClock < BountyCheckSeconds)
+	{
+		return;
+	}
+	BountyClock = 0.f;
+	ABRPlayerState* Top = nullptr;
+	for (APlayerState* Each : GS->PlayerArray)
+	{
+		ABRPlayerState* PS = Cast<ABRPlayerState>(Each);
+		if (PS && PS->GetFaction() == BR::Runners && PS->Points >= BountyMinPoints && (!Top || PS->Points > Top->Points))
+		{
+			Top = PS;
+		}
+	}
+	if (Top && Top != GS->BountyTarget)
+	{
+		GS->BountyTarget = Top;
+		Announce(FText::Format(LOCTEXT("Bounty", "WANTED: {0}! Border Patrol gets +{1} for catching them."), FText::FromString(Top->GetPlayerName()), BountyPoints));
+		Feed(FString::Printf(TEXT("BOUNTY on %s ($ above their head)"), *Top->GetPlayerName()));
+	}
 }
 
 void ABRGameMode::OnTruckForcedThrough()

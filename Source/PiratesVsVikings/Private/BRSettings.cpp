@@ -80,6 +80,18 @@ namespace BR
 		}
 	}
 
+	FString WardenGearName(EBRWardenGear Gear, EBRItem Item)
+	{
+		switch (Gear)
+		{
+		case EBRWardenGear::ExtraTraps:    return TEXT("+2 Team Traps");
+		case EBRWardenGear::HardHat:       return TEXT("Hard Hat");
+		case EBRWardenGear::DroneRecharge: return TEXT("Drone Recharge");
+		case EBRWardenGear::PatrolDog:     return TEXT("Patrol Dog");
+		default:                           return ItemName(Item);
+		}
+	}
+
 	FLinearColor SkinColor(float Tone)
 	{
 		// Real skin tones from very light to very dark (sRGB), blended smoothly.
