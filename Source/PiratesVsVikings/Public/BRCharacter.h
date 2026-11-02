@@ -211,6 +211,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 650.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapDamage = 12.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapPush = 350.f;
+	/** How hard a punch throws your arm forward (physics fists). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchImpulse = 900.f;
+	/** Seconds after the wind-up during which your fist can connect. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchWindow = 0.3f;
+	/** Jump presses to shake off a knockout early. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") int32 MashToWake = 7;
+	/** Tallest ledge you can climb onto with Z (cm above your feet). Walls taller than this need a ladder or a friend. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ClimbHeight = 240.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> PunchSwingSound;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> PunchHitSound;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> KnockoutSound;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> GrabSound;
 	/** Throw speed for people and objects (cm/s). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ThrowSpeed = 1300.f;
 	/** Seconds you can hold someone who isn't zip-tied before they wriggle free. */
@@ -330,6 +342,11 @@ private:
 	float GrabStartTime = 0.f;
 	float BaseAttackDamage = -1.f;
 	float BaseKnockback = -1.f;
+	float PunchUntil = -1.f;
+	bool bPunchLeft = false;
+	bool bPunchConnected = false;
+	int32 MashCount = 0;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UTextRenderComponent> KOStars;
 	// Local screen shake.
 	float ShakeAmount = 0.f;
 	FVector CameraBaseLocation = FVector::ZeroVector;
@@ -409,6 +426,10 @@ private:
 	UFUNCTION() void OnRep_InCannon();
 	UFUNCTION() void OnRep_Shoulders();
 	virtual bool HandleJumpPressed() override;
+	virtual bool HandlePunchHit() override;
+	virtual bool CanAttackWhileCarrying() const override;
+	UFUNCTION(Server, Reliable) void Server_Mash();
+	bool TryClimb();
 	void Input_Grab();
 	void Input_Dive();
 	UFUNCTION(Server, Reliable) void Server_Grab();

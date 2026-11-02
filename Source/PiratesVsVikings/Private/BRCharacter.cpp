@@ -55,6 +55,15 @@ ABRCharacter::ABRCharacter()
 	// Always work out bone positions, even off-screen (the wobbly body needs them every frame).
 	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	KnockdownDuration = 4.5f; // arcade: get flattened, get back up
+	KOStars = CreateDefaultSubobject<UTextRenderComponent>(TEXT("KOStars"));
+	KOStars->SetupAttachment(GetCapsuleComponent());
+	KOStars->SetRelativeLocation(FVector(0.f, 0.f, 40.f));
+	KOStars->SetText(FText::FromString(TEXT("*  @  *")));
+	KOStars->SetTextRenderColor(FColor(255, 230, 60));
+	KOStars->SetWorldSize(40.f);
+	KOStars->SetHorizontalAlignment(EHTA_Center);
+	KOStars->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	KOStars->SetHiddenInGame(true);
 
 
 	auto MakeOutfit = [this](const TCHAR* Name)
@@ -1216,6 +1225,89 @@ void ABRCharacter::Multicast_Ate_Implementation()
 void ABRCharacter::OnAttackStartedNative()
 {
 	PlayOneShot(PunchAnim);
+	// Physics fists: throw one arm forward (alternating), on every screen.
+	bPunchLeft = !bPunchLeft;
+	if (bWobbleOn && GetMesh())
+	{
+		const FVector Dir = (GetActorForwardVector() + FVector(0.f, 0.f, 0.15f)).GetSafeNormal();
+		const FName Hand = bPunchLeft ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
+		const FName Fore = bPunchLeft ? FName(TEXT("lowerarm_l")) : FName(TEXT("lowerarm_r"));
+		if (GetMesh()->GetBoneIndex(Hand) != INDEX_NONE)
+		{
+			GetMesh()->AddImpulse(Dir * PunchImpulse, Hand, true);
+			GetMesh()->AddImpulse(Dir * PunchImpulse * 0.6f, Fore, true);
+		}
+	}
+	if (PunchSwingSound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, PunchSwingSound, GetActorLocation());
+	}
+}
+
+bool ABRCharacter::CanAttackWhileCarrying() const
+{
+	const APVVCharacter* Held = GetCarriedCharacter();
+	return Held && Held->GetCondition() != EPVVCondition::Restrained;
+}
+
+bool ABRCharacter::HandlePunchHit()
+{
+	// Holding someone? Punch them in the face with your free hand.
+	if (APVVCharacter* Held = GetCarriedCharacter())
+	{
+		Held->ReceiveHeldPunch(this, AttackDamage);
+		Multicast_Sfx(3);
+		return true;
+	}
+	// Wobbly body: the actual fist has to connect (checked in TickBrawl during the punch window).
+	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("hand_r")) != INDEX_NONE)
+	{
+		PunchUntil = GetWorld()->GetTimeSeconds() + PunchWindow;
+		bPunchConnected = false;
+		return true;
+	}
+	return false; // no physics body: classic punch
+}
+
+void ABRCharacter::Server_Mash_Implementation()
+{
+	if (GetCondition() != EPVVCondition::KnockedDown || GetCarrier())
+	{
+		return;
+	}
+	if (++MashCount >= MashToWake)
+	{
+		MashCount = 0;
+		Recover(0.4f); // shook it off
+	}
+}
+
+bool ABRCharacter::TryClimb()
+{
+	// Grab the edge in front of you and haul yourself up (crates, truck beds, low walls, roofs).
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, HalfHeight);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRClimb), false, this);
+	FHitResult Wall;
+	if (!GetWorld()->LineTraceSingleByChannel(Wall, GetActorLocation(), GetActorLocation() + Forward * 110.f, ECC_Visibility, Params))
+	{
+		return false;
+	}
+	FHitResult Top;
+	const FVector Above = Wall.ImpactPoint + Forward * 40.f + FVector(0.f, 0.f, ClimbHeight + 60.f);
+	if (!GetWorld()->LineTraceSingleByChannel(Top, Above, Above - FVector(0.f, 0.f, ClimbHeight + 120.f), ECC_Visibility, Params) || Top.bStartPenetrating)
+	{
+		return false;
+	}
+	const float LedgeHeight = Top.ImpactPoint.Z - Feet.Z;
+	if (LedgeHeight < 40.f || LedgeHeight > ClimbHeight)
+	{
+		return false;
+	}
+	const float Up = FMath::Sqrt(2.f * 980.f * (LedgeHeight + 70.f));
+	LaunchCharacter(Forward * 280.f + FVector(0.f, 0.f, Up), true, true);
+	return true;
 }
 
 bool ABRCharacter::UsesAnimationSlots() const
@@ -1631,6 +1723,11 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		{
 			AddShake(1.f);
 		}
+		MashCount = 0;
+		if (KnockoutSound && GetNetMode() != NM_DedicatedServer)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, KnockoutSound, GetActorLocation());
+		}
 		// Go fully limp: no muscles while knocked down.
 		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("pelvis"), FPhysicalAnimationData(), false);
 		bWobbleOn = false;
@@ -1684,6 +1781,17 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickBrawl(DeltaSeconds);
 	}
 	TickShake(DeltaSeconds);
+	if (KOStars && GetNetMode() != NM_DedicatedServer)
+	{
+		const bool bKO = GetCondition() == EPVVCondition::KnockedDown;
+		KOStars->SetHiddenInGame(!bKO);
+		if (bKO)
+		{
+			// Stars circle the head (follow the ragdoll's head).
+			const FVector Head = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation();
+			KOStars->SetWorldLocationAndRotation(Head + FVector(0.f, 0.f, 45.f), FRotator(0.f, GetWorld()->GetTimeSeconds() * 360.f, 0.f));
+		}
+	}
 	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown && !GetCurrentBoat() && !GetCarrier())
 	{
 		EnableWobble(); // retries until the body has been posed
@@ -1934,6 +2042,11 @@ bool ABRCharacter::HandleJumpPressed()
 		Server_LeapOff();
 		return true;
 	}
+	if (GetCondition() == EPVVCondition::KnockedDown)
+	{
+		Server_Mash(); // mash Space to wake up
+		return true;
+	}
 	return false;
 }
 
@@ -1943,7 +2056,17 @@ void ABRCharacter::Multicast_Sfx_Implementation(uint8 Which)
 	{
 		return;
 	}
-	USoundBase* Sound = Which == 0 ? SlapSound.Get() : (Which == 1 ? TackleSound.Get() : ThrowSound.Get());
+	USoundBase* Sound = nullptr;
+	switch (Which)
+	{
+	case 0: Sound = SlapSound.Get(); break;
+	case 1: Sound = TackleSound.Get(); break;
+	case 2: Sound = ThrowSound.Get(); break;
+	case 3: Sound = PunchHitSound.Get(); break;
+	case 4: Sound = KnockoutSound.Get(); break;
+	case 5: Sound = GrabSound.Get(); break;
+	default: break;
+	}
 	if (Sound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
@@ -2037,6 +2160,7 @@ void ABRCharacter::Server_Grab_Implementation()
 	ABRCharacter* Target = Cast<ABRCharacter>(Best);
 	if (!Target)
 	{
+		TryClimb(); // nothing to grab: grab the ledge in front and climb
 		return;
 	}
 	// A teammate standing up: climb on their shoulders. Anyone else: grab them.
@@ -2048,8 +2172,9 @@ void ABRCharacter::Server_Grab_Implementation()
 	Grab(Target);
 	if (GetCarriedCharacter() == Target)
 	{
+		Multicast_Sfx(5);
 		GrabStartTime = GetWorld()->GetTimeSeconds();
-		Notify(LOCTEXT("Grabbed", "Grabbed! Press Z to THROW them (into the river?)."));
+		Notify(LOCTEXT("Grabbed", "Grabbed! Left click to PUNCH them, Z to THROW them."));
 	}
 }
 
@@ -2169,6 +2294,27 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 					++PS->StatTackles;
 				}
 				Multicast_Sfx(1);
+				break;
+			}
+		}
+	}
+
+	// Physics punch: did the fist connect?
+	if (Now < PunchUntil && !bPunchConnected && GetMesh())
+	{
+		const FName Hand = bPunchLeft ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
+		TArray<FOverlapResult> Hits;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRPunch), false, this);
+		GetWorld()->OverlapMultiByObjectType(Hits, GetMesh()->GetBoneLocation(Hand), FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(55.f), Params);
+		for (const FOverlapResult& H : Hits)
+		{
+			APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
+			if (Victim && Victim != this && !Victim->GetCarrier())
+			{
+				bPunchConnected = true;
+				const FVector Dir = (Victim->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+				Victim->ReceiveMeleeHit(this, AttackDamage, Dir * KnockbackStrength + FVector(0.f, 0.f, 200.f));
+				Multicast_Sfx(3);
 				break;
 			}
 		}

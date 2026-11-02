@@ -294,7 +294,7 @@ FString APVVCharacter::GetPlayerDisplayName() const
 
 bool APVVCharacter::CanAttack() const
 {
-	return Condition == EPVVCondition::Normal && !CarriedCharacter && !CarriedBy;
+	return Condition == EPVVCondition::Normal && !CarriedBy && (!CarriedCharacter || CanAttackWhileCarrying());
 }
 
 bool APVVCharacter::CanMove() const
@@ -426,7 +426,7 @@ void APVVCharacter::Multicast_AttackStarted_Implementation()
 
 void APVVCharacter::PerformAttackSweep()
 {
-	if (!CanAttack())
+	if (!CanAttack() || HandlePunchHit())
 	{
 		return;
 	}
@@ -557,6 +557,23 @@ void APVVCharacter::Restrain(APVVCharacter* Captor)
 	}
 }
 
+void APVVCharacter::ReceiveHeldPunch(APVVCharacter* Attacker, float Damage)
+{
+	if (!HasAuthority() || !CarriedBy || Condition != EPVVCondition::Normal)
+	{
+		return;
+	}
+	Multicast_HitReceived(Attacker);
+	Balance = FMath::Max(0.f, Balance - Damage);
+	LastDamageTime = GetWorld()->GetTimeSeconds();
+	if (Balance <= 0.f)
+	{
+		// Knocked out cold: dropped on the floor.
+		CarriedBy->TakeCarried();
+		ApplyKnockdown(Attacker, (Attacker ? Attacker->GetActorForwardVector() : FVector::ZeroVector) * 300.f + FVector(0.f, 0.f, 150.f));
+	}
+}
+
 void APVVCharacter::ClearRestraint()
 {
 	if (!HasAuthority() || Condition != EPVVCondition::Restrained)
@@ -641,8 +658,8 @@ void APVVCharacter::Grab(APVVCharacter* Target)
 	Target->StruggleProgress = 0.f;
 	Target->RefreshStateEffects();
 	Target->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-	Target->SetActorRelativeLocation(CarryOffset);
-	Target->SetActorRelativeRotation(CarryRotation);
+	Target->SetActorRelativeLocation(Target->Condition == EPVVCondition::Restrained ? CarryOffset : GrabOffset);
+	Target->SetActorRelativeRotation(Target->Condition == EPVVCondition::Restrained ? CarryRotation : FRotator(0.f, 180.f, 0.f));
 	RefreshStateEffects();
 	ForceNetUpdate();
 	Target->ForceNetUpdate();

@@ -100,8 +100,10 @@ public:
 	void ClearRestraint();
 
 	void StartCarrying(APVVCharacter* Prisoner);
-	/** Pick up anyone (not just zip-tied prisoners) - used for grab & throw. */
+	/** Pick up anyone (not just zip-tied prisoners) - used for grab & throw. Held in front of you. */
 	void Grab(APVVCharacter* Target);
+	/** Server: punched while being held by someone (bypasses the usual "carried = untouchable"). */
+	void ReceiveHeldPunch(APVVCharacter* Attacker, float Damage);
 	/** Detaches the carried prisoner (left where they are) and returns them. */
 	APVVCharacter* TakeCarried();
 	/** Sets the carried prisoner down in front of us. */
@@ -239,6 +241,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "PVV|Interaction")
 	FRotator CarryRotation = FRotator(0.f, 90.f, 90.f);
 
+	/** Where someone you grabbed (not zip-tied) dangles: in front of you, facing you. */
+	UPROPERTY(EditDefaultsOnly, Category = "PVV|Carry")
+	FVector GrabOffset = FVector(80.f, 0.f, 15.f);
+
 	/** Progress added per Jump press while restrained (1 = free). */
 	UPROPERTY(EditDefaultsOnly, Category = "PVV|Struggle")
 	float StrugglePerPress = 0.07f;
@@ -362,6 +368,10 @@ protected:
 	virtual void EnsureDefaultInput();
 	/** Return true to use the Jump key for something else this time (e.g. leaping off a friend's shoulders). */
 	virtual bool HandleJumpPressed() { return false; }
+	/** Return true if this character deals punch damage itself (physics fists) instead of the invisible sphere in front. */
+	virtual bool HandlePunchHit() { return false; }
+	/** Allow punching while holding someone (Gang Beasts style hold + punch). */
+	virtual bool CanAttackWhileCarrying() const { return false; }
 	void CancelHold();
 	void SetState(EPVVCondition NewCondition);
 
