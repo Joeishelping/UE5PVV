@@ -39,6 +39,7 @@ public:
 
 	// --- Points race ----------------------------------------------------------------------
 	void AwardPoints(APVVCharacter* Who, int32 Amount);
+	virtual void NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause) override;
 	/** Kill-feed line on everyone's screen. */
 	void Feed(const FString& Line);
 	/** Server: a Runner takes on a smuggling client (an NPC who follows them; paid on arrival in the Safe Zone). */

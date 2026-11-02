@@ -8,6 +8,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -1439,6 +1440,10 @@ void ABRCannon::Fire()
 	Runner->TeleportTo(Muzzle->GetComponentLocation() + Dir * 60.f, FRotator(0.f, Dir.Rotation().Yaw, 0.f), false, true);
 	Runner->StartFlight(Dir * LaunchSpeed);
 	Runner->Spot(8.f); // everyone saw that
+	if (ABRPlayerState* PS = Runner->GetBRPlayerState())
+	{
+		++PS->StatCannonShots;
+	}
 	if (ABRGameState* GS = BRGame(this))
 	{
 		GS->Multicast_NoisePing(GetActorLocation());
@@ -1512,6 +1517,139 @@ void ABRCannon::Tick(float DeltaSeconds)
 			Text = TEXT("LOADED!");
 		}
 		Sign->SetText(FText::FromString(Text));
+	}
+}
+
+// ===========================================================================================
+// Physics prop
+
+ABRPhysicsProp::ABRPhysicsProp()
+{
+	bReplicates = true;
+	SetReplicateMovement(true);
+	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	SetRootComponent(Mesh);
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	Mesh->SetStaticMesh(Cube.Object);
+	Mesh->SetRelativeScale3D(FVector(0.6f));
+	Mesh->SetCollisionProfileName(TEXT("PhysicsActor"));
+	Mesh->SetSimulatePhysics(true);
+	Mesh->SetNotifyRigidBodyCollision(true);
+}
+
+void ABRPhysicsProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRPhysicsProp, Holder);
+}
+
+void ABRPhysicsProp::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	if (PropMesh)
+	{
+		Mesh->SetStaticMesh(PropMesh);
+	}
+}
+
+void ABRPhysicsProp::BeginPlay()
+{
+	Super::BeginPlay();
+	Mesh->SetMassOverrideInKg(NAME_None, MassKg, true);
+	if (!PropMesh)
+	{
+		if (UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(0))
+		{
+			MID->SetVectorParameterValue(TEXT("Color"), Color);
+		}
+	}
+	if (HasAuthority())
+	{
+		Mesh->OnComponentHit.AddDynamic(this, &ABRPhysicsProp::OnPropHit);
+	}
+}
+
+void ABRPhysicsProp::ApplyHeldState()
+{
+	if (Holder)
+	{
+		Mesh->SetSimulatePhysics(false);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		if (USkeletalMeshComponent* Hand = Holder->GetMesh())
+		{
+			const FName Socket = Hand->DoesSocketExist(TEXT("hand_r")) ? FName(TEXT("hand_r")) : NAME_None;
+			AttachToComponent(Hand, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+			SetActorRelativeLocation(FVector(0.f, 10.f, 0.f));
+		}
+	}
+	else
+	{
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		Mesh->SetCollisionProfileName(TEXT("PhysicsActor"));
+		Mesh->SetSimulatePhysics(true);
+	}
+}
+
+void ABRPhysicsProp::OnRep_Holder()
+{
+	ApplyHeldState();
+}
+
+void ABRPhysicsProp::PickUp(ABRCharacter* By)
+{
+	if (!HasAuthority() || !By || Holder)
+	{
+		return;
+	}
+	Holder = By;
+	ApplyHeldState();
+	ForceNetUpdate();
+}
+
+void ABRPhysicsProp::Throw(const FVector& Velocity)
+{
+	if (!HasAuthority() || !Holder)
+	{
+		return;
+	}
+	LastThrower = Holder;
+	ThrownTime = GetWorld()->GetTimeSeconds();
+	const FVector From = Holder->GetActorLocation() + Holder->GetActorForwardVector() * 90.f + FVector(0.f, 0.f, 40.f);
+	Holder = nullptr;
+	ApplyHeldState();
+	SetActorLocation(From, false, nullptr, ETeleportType::TeleportPhysics);
+	Mesh->SetPhysicsLinearVelocity(Velocity);
+	Mesh->SetPhysicsAngularVelocityInDegrees(FVector(FMath::FRandRange(-400.f, 400.f), FMath::FRandRange(-400.f, 400.f), 0.f));
+	ForceNetUpdate();
+}
+
+void ABRPhysicsProp::Drop()
+{
+	if (!HasAuthority() || !Holder)
+	{
+		return;
+	}
+	Holder = nullptr;
+	ApplyHeldState();
+	ForceNetUpdate();
+}
+
+void ABRPhysicsProp::OnPropHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+	APVVCharacter* Victim = Cast<APVVCharacter>(OtherActor);
+	const FVector Vel = Mesh->GetPhysicsLinearVelocity();
+	if (!Victim || Holder || Vel.Size() < KnockoutSpeed || Victim == LastThrower.Get() || Victim->GetCondition() != EPVVCondition::Normal)
+	{
+		return;
+	}
+	// Bonk.
+	Victim->ApplyKnockdown(LastThrower.Get(), Vel.GetSafeNormal2D() * 500.f + FVector(0.f, 0.f, 250.f));
+	if (ABRCharacter* Thrower = LastThrower.Get())
+	{
+		if (ABRPlayerState* PS = Thrower->GetBRPlayerState())
+		{
+			++PS->StatThrows;
+		}
 	}
 }
 

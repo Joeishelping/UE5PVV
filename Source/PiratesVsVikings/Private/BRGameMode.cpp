@@ -698,6 +698,22 @@ void ABRGameMode::AwardPoints(APVVCharacter* Who, int32 Amount)
 	}
 }
 
+void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
+{
+	Super::NotifyKnockedDown(Victim, Cause);
+	APVVCharacter* By = Cast<APVVCharacter>(Cause);
+	if (!By || By == Victim)
+	{
+		return;
+	}
+	if (ABRPlayerState* PS = Cast<ABRPlayerState>(By->GetPVVPlayerState()))
+	{
+		++PS->StatKnockdowns;
+	}
+	static const TCHAR* Verbs[] = { TEXT("FLATTENED"), TEXT("BONKED"), TEXT("BODY-SLAMMED"), TEXT("SENT FLYING"), TEXT("DROPPED"), TEXT("CLOTHESLINED") };
+	Feed(FString::Printf(TEXT("%s %s %s"), *NameOf(By), Verbs[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Verbs)) - 1)], *NameOf(Victim)));
+}
+
 void ABRGameMode::Feed(const FString& Line)
 {
 	if (ABRGameState* GS = GetBRGameState())

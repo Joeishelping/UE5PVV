@@ -100,6 +100,8 @@ public:
 	void ClearRestraint();
 
 	void StartCarrying(APVVCharacter* Prisoner);
+	/** Pick up anyone (not just zip-tied prisoners) - used for grab & throw. */
+	void Grab(APVVCharacter* Target);
 	/** Detaches the carried prisoner (left where they are) and returns them. */
 	APVVCharacter* TakeCarried();
 	/** Sets the carried prisoner down in front of us. */
@@ -358,6 +360,8 @@ protected:
 	virtual bool WantsMeleeOnAttack() const { return true; }
 	virtual void UpdateMovementSpeed();
 	virtual void EnsureDefaultInput();
+	/** Return true to use the Jump key for something else this time (e.g. leaping off a friend's shoulders). */
+	virtual bool HandleJumpPressed() { return false; }
 	void CancelHold();
 	void SetState(EPVVCondition NewCondition);
 

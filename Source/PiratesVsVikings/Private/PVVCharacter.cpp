@@ -326,6 +326,10 @@ void APVVCharacter::Input_Look(const FInputActionValue& Value)
 
 void APVVCharacter::Input_Jump()
 {
+	if (HandleJumpPressed())
+	{
+		return;
+	}
 	if (Condition == EPVVCondition::Restrained)
 	{
 		Server_Struggle();
@@ -617,6 +621,31 @@ void APVVCharacter::BreakFree()
 		LaunchCharacter(Back * 300.f + FVector(0.f, 0.f, 450.f), true, true);
 		Carrier->LaunchCharacter(Carrier->GetActorForwardVector() * 400.f + FVector(0.f, 0.f, 150.f), true, true);
 	}
+}
+
+void APVVCharacter::Grab(APVVCharacter* Target)
+{
+	if (!HasAuthority() || !Target || Target == this || CarriedCharacter || CarriedBy || CurrentBoat || Target->CarriedBy
+		|| Target->Condition == EPVVCondition::Detained || Target->CarriedCharacter)
+	{
+		return;
+	}
+	if (Target->CurrentBoat)
+	{
+		Target->CurrentBoat->Unseat(Target);
+	}
+	CancelHold();
+	Target->CancelHold();
+	CarriedCharacter = Target;
+	Target->CarriedBy = this;
+	Target->StruggleProgress = 0.f;
+	Target->RefreshStateEffects();
+	Target->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	Target->SetActorRelativeLocation(CarryOffset);
+	Target->SetActorRelativeRotation(CarryRotation);
+	RefreshStateEffects();
+	ForceNetUpdate();
+	Target->ForceNetUpdate();
 }
 
 void APVVCharacter::StartCarrying(APVVCharacter* Prisoner)

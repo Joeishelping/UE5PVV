@@ -70,6 +70,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsInCannon() const { return bInCannon; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsFlying() const { return bFlying; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDancing() const;
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsOnShoulders() const { return bOnShoulders; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDiving() const { return bDiving; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsHoldingProp() const { return HeldProp != nullptr; }
 	/** Selected inventory slot (mouse wheel). */
 	int32 GetSelectedSlot() const { return SelectedSlot; }
 	/** Server: dance uncontrollably for a while (mariachi). */
@@ -197,6 +200,27 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> NextItemAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> PrevItemAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> DropAction;
+	/** Z: grab a person or object / throw it. On a teammate: climb onto their shoulders. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> GrabAction;
+	/** Left Alt: dive / tackle. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> DiveAction;
+
+	// --- Brawling (Gang Beasts style) ------------------------------------------------------
+	/** Flailing hands faster than this (cm/s, relative to you) smack people they hit. 0 = off. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 650.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapDamage = 12.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapPush = 350.f;
+	/** Throw speed for people and objects (cm/s). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ThrowSpeed = 1300.f;
+	/** Seconds you can hold someone who isn't zip-tied before they wriggle free. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float GrabHoldSeconds = 3.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveSpeed = 1100.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveCooldown = 3.f;
+	/** How high you leap off a friend's shoulders (cm/s up). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ShoulderLeap = 1100.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> SlapSound;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> TackleSound;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> ThrowSound;
 
 	// --- Mariachi trumpet ---------------------------------------------------------------
 	/** Border Patrol within this range (cm) can't stop dancing. */
@@ -291,6 +315,15 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_InCannon) bool bInCannon = false;
 	UPROPERTY(Replicated) bool bFlying = false;
 	UPROPERTY(Replicated) float DanceUntil = 0.f;
+	UPROPERTY(ReplicatedUsing = OnRep_Shoulders) bool bOnShoulders = false;
+	UPROPERTY(Replicated) bool bDiving = false;
+	UPROPERTY(Replicated) TObjectPtr<class ABRPhysicsProp> HeldProp;
+	TWeakObjectPtr<ABRCharacter> ShoulderBase;
+	float LastSlapTime = -100.f;
+	float LastDiveTime = -100.f;
+	float GrabStartTime = 0.f;
+	float BaseAttackDamage = -1.f;
+	float BaseKnockback = -1.f;
 	float LastTrumpetTime = -100.f;
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
 	bool bWandering = false;
@@ -360,6 +393,18 @@ private:
 	UFUNCTION() void OnRep_Aiming();
 	UFUNCTION() void OnRep_Look();
 	UFUNCTION() void OnRep_InCannon();
+	UFUNCTION() void OnRep_Shoulders();
+	virtual bool HandleJumpPressed() override;
+	void Input_Grab();
+	void Input_Dive();
+	UFUNCTION(Server, Reliable) void Server_Grab();
+	UFUNCTION(Server, Reliable) void Server_Dive();
+	UFUNCTION(Server, Reliable) void Server_LeapOff();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Sfx(uint8 Which);
+	void TickBrawl(float DeltaSeconds);
+	void ClimbOnto(ABRCharacter* Base);
+	void LeapOff(const FVector& Velocity);
+	void SetHeldProp(class ABRPhysicsProp* Prop);
 	void ApplyLook(const FBRLook& L);
 	void ApplySkin(const FLinearColor& Color);
 	void TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color, int32 OnlySlot = -1);

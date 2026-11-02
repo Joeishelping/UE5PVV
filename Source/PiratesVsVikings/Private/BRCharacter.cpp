@@ -33,6 +33,7 @@
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/OverlapResult.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/PhysicalAnimationComponent.h"
 #include "Animation/AnimSequenceBase.h"
@@ -51,6 +52,8 @@ ABRCharacter::ABRCharacter()
 	PhysicalAnimation = CreateDefaultSubobject<UPhysicalAnimationComponent>(TEXT("PhysicalAnimation"));
 	// Always work out bone positions, even off-screen (the wobbly body needs them every frame).
 	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	KnockdownDuration = 4.5f; // arcade: get flattened, get back up
+
 
 	auto MakeOutfit = [this](const TCHAR* Name)
 	{
@@ -107,6 +110,10 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, Look);
 	DOREPLIFETIME(ABRCharacter, bInCannon);
 	DOREPLIFETIME(ABRCharacter, bFlying);
+	DOREPLIFETIME(ABRCharacter, DanceUntil);
+	DOREPLIFETIME(ABRCharacter, bOnShoulders);
+	DOREPLIFETIME(ABRCharacter, bDiving);
+	DOREPLIFETIME(ABRCharacter, HeldProp);
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -156,6 +163,11 @@ void ABRCharacter::StartFlight(const FVector& Velocity)
 void ABRCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+	if (HasAuthority() && bDiving)
+	{
+		bDiving = false;
+		ApplyKnockdown(nullptr, GetActorForwardVector() * 150.f); // missed: belly flop
+	}
 	if (!HasAuthority() || !bFlying)
 	{
 		return;
@@ -671,6 +683,8 @@ void ABRCharacter::EnsureDefaultInput()
 	NextItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	PrevItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	DropAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	GrabAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	DiveAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 
 	UInputMappingContext* IMC = DefaultMappingContext;
 	PVVInput::Map(IMC, AimAction, EKeys::RightMouseButton);
@@ -694,6 +708,10 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, NextItemAction, EKeys::Gamepad_RightShoulder);
 	PVVInput::Map(IMC, PrevItemAction, EKeys::MouseScrollUp);
 	PVVInput::Map(IMC, DropAction, EKeys::G);
+	PVVInput::Map(IMC, GrabAction, EKeys::Z);
+	PVVInput::Map(IMC, GrabAction, EKeys::Gamepad_FaceButton_Right);
+	PVVInput::Map(IMC, DiveAction, EKeys::LeftAlt);
+	PVVInput::Map(IMC, DiveAction, EKeys::Gamepad_LeftThumbstick);
 	// Fire is the existing Attack action (left mouse / gamepad X) while aiming; also right trigger.
 	PVVInput::Map(IMC, AttackAction, EKeys::Gamepad_RightTrigger);
 }
@@ -719,6 +737,8 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (NextItemAction) Input->BindAction(NextItemAction, ETriggerEvent::Started, this, &ABRCharacter::Input_NextItem);
 	if (PrevItemAction) Input->BindAction(PrevItemAction, ETriggerEvent::Started, this, &ABRCharacter::Input_PrevItem);
 	if (DropAction) Input->BindAction(DropAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drop);
+	if (GrabAction) Input->BindAction(GrabAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Grab);
+	if (DiveAction) Input->BindAction(DiveAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Dive);
 	if (DroneAction) Input->BindAction(DroneAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drone);
 	if (WeaponModeAction) Input->BindAction(WeaponModeAction, ETriggerEvent::Started, this, &ABRCharacter::Input_WeaponMode);
 	if (ScanAction) Input->BindAction(ScanAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Scan);
@@ -1425,7 +1445,7 @@ void ABRCharacter::EnableWobble()
 	{
 		return;
 	}
-	if (GetCurrentBoat() || GetCarrier() || bInCannon)
+	if (GetCurrentBoat() || GetCarrier() || bInCannon || bOnShoulders)
 	{
 		return; // switched on again when you get out
 	}
@@ -1534,7 +1554,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		return;
 	}
 	// Riding in a vehicle or being carried: no wobbly physics (it crashes the engine on moving, attached bodies).
-	if (GetCurrentBoat() || GetCarrier() || bInCannon)
+	if (GetCurrentBoat() || GetCarrier() || bInCannon || bOnShoulders)
 	{
 		DisableWobble();
 		return;
@@ -1592,6 +1612,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	{
 		TickWander(DeltaSeconds);
 		TickFollow(DeltaSeconds);
+		TickBrawl(DeltaSeconds);
 	}
 	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown && !GetCurrentBoat() && !GetCarrier())
 	{
@@ -1825,6 +1846,293 @@ void ABRCharacter::UpdateLocalVisibility()
 		if (StatusLabel && !bHide)
 		{
 			StatusLabel->SetVisibility(!bIsNPC && Viewer == GetFaction());
+		}
+	}
+}
+
+// -------------------------------------------------------------------------------------------
+// Brawling: slaps, grab & throw, dive tackles, shoulder rides, props
+
+void ABRCharacter::Input_Grab() { Server_Grab(); }
+void ABRCharacter::Input_Dive() { Server_Dive(); }
+
+bool ABRCharacter::HandleJumpPressed()
+{
+	if (bOnShoulders)
+	{
+		Server_LeapOff();
+		return true;
+	}
+	return false;
+}
+
+void ABRCharacter::Multicast_Sfx_Implementation(uint8 Which)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	USoundBase* Sound = Which == 0 ? SlapSound.Get() : (Which == 1 ? TackleSound.Get() : ThrowSound.Get());
+	if (Sound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
+	}
+}
+
+void ABRCharacter::SetHeldProp(ABRPhysicsProp* Prop)
+{
+	HeldProp = Prop;
+	if (BaseAttackDamage < 0.f)
+	{
+		BaseAttackDamage = AttackDamage;
+		BaseKnockback = KnockbackStrength;
+	}
+	// Swinging a crate hurts more than a fist.
+	AttackDamage = Prop ? BaseAttackDamage * 2.f : BaseAttackDamage;
+	KnockbackStrength = Prop ? BaseKnockback * 1.8f : BaseKnockback;
+}
+
+void ABRCharacter::Server_Grab_Implementation()
+{
+	if (GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || bInCannon || bOnShoulders)
+	{
+		return;
+	}
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+
+	// Holding something? Throw it.
+	if (HeldProp)
+	{
+		ABRPhysicsProp* Prop = HeldProp;
+		SetHeldProp(nullptr);
+		Prop->Throw(Forward * ThrowSpeed + FVector(0.f, 0.f, ThrowSpeed * 0.35f) + GetVelocity() * 0.5f);
+		Multicast_Sfx(2);
+		return;
+	}
+	if (APVVCharacter* Held = GetCarriedCharacter())
+	{
+		TakeCarried();
+		Held->TeleportTo(GetActorLocation() + Forward * 100.f + FVector(0.f, 0.f, 60.f), Held->GetActorRotation(), false, true);
+		if (ABRCharacter* Flying = Cast<ABRCharacter>(Held))
+		{
+			Flying->bFlying = false;
+			Flying->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		}
+		Held->LaunchCharacter(Forward * ThrowSpeed + FVector(0.f, 0.f, ThrowSpeed * 0.45f), true, true);
+		if (ABRPlayerState* PS = GetBRPlayerState())
+		{
+			++PS->StatThrows;
+		}
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->Feed(FString::Printf(TEXT("%s THREW %s"), *GetPlayerDisplayName(), *Held->GetPlayerDisplayName()));
+		}
+		Multicast_Sfx(2);
+		return;
+	}
+
+	// Find the closest thing in front of us.
+	TArray<FOverlapResult> Overlaps;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRGrab), false, this);
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_Pawn);
+	Objects.AddObjectTypesToQuery(ECC_PhysicsBody);
+	GetWorld()->OverlapMultiByObjectType(Overlaps, GetActorLocation() + Forward * 90.f, FQuat::Identity, Objects, FCollisionShape::MakeSphere(130.f), Params);
+	AActor* Best = nullptr;
+	float BestDist = MAX_flt;
+	for (const FOverlapResult& O : Overlaps)
+	{
+		AActor* A = O.GetActor();
+		const ABRPhysicsProp* Prop = Cast<ABRPhysicsProp>(A);
+		const ABRCharacter* Other = Cast<ABRCharacter>(A);
+		if ((Prop && !Prop->IsHeld()) || (Other && Other != this && !Other->GetCarrier() && !Other->GetCurrentBoat() && !Other->IsInCannon()
+			&& Other->GetCondition() != EPVVCondition::Detained))
+		{
+			const float D = FVector::DistSquared(A->GetActorLocation(), GetActorLocation());
+			if (D < BestDist)
+			{
+				BestDist = D;
+				Best = A;
+			}
+		}
+	}
+	if (ABRPhysicsProp* Prop = Cast<ABRPhysicsProp>(Best))
+	{
+		Prop->PickUp(this);
+		SetHeldProp(Prop);
+		Notify(LOCTEXT("PropGrabbed", "Got it! Left click to swing, Z to throw."));
+		return;
+	}
+	ABRCharacter* Target = Cast<ABRCharacter>(Best);
+	if (!Target)
+	{
+		return;
+	}
+	// A teammate standing up: climb on their shoulders. Anyone else: grab them.
+	if (Target->GetFaction() == GetFaction() && !Target->IsNPC() && !IsNPC() && Target->GetCondition() == EPVVCondition::Normal && !Target->IsOnShoulders())
+	{
+		ClimbOnto(Target);
+		return;
+	}
+	Grab(Target);
+	if (GetCarriedCharacter() == Target)
+	{
+		GrabStartTime = GetWorld()->GetTimeSeconds();
+		Notify(LOCTEXT("Grabbed", "Grabbed! Press Z to THROW them (into the river?)."));
+	}
+}
+
+void ABRCharacter::Server_Dive_Implementation()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || GetCarriedCharacter() || bInCannon || bOnShoulders
+		|| GetCharacterMovement()->IsFalling() || Now - LastDiveTime < DiveCooldown)
+	{
+		return;
+	}
+	LastDiveTime = Now;
+	bDiving = true;
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	LaunchCharacter(Forward * DiveSpeed + FVector(0.f, 0.f, 320.f), true, true);
+}
+
+void ABRCharacter::ClimbOnto(ABRCharacter* Base)
+{
+	if (!Base || !HasAuthority())
+	{
+		return;
+	}
+	ShoulderBase = Base;
+	bOnShoulders = true;
+	AttachToComponent(Base->GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	SetActorRelativeLocation(FVector(0.f, 0.f, Base->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 2.f + 15.f));
+	OnRep_Shoulders();
+	Notify(LOCTEXT("OnShoulders", "On your friend's shoulders! SPACE to leap (great for getting over the Wall)."));
+	Base->Notify(LOCTEXT("Carrying", "Someone's on your shoulders. Walk them to the Wall!"));
+	ForceNetUpdate();
+}
+
+void ABRCharacter::LeapOff(const FVector& Velocity)
+{
+	if (!bOnShoulders)
+	{
+		return;
+	}
+	bOnShoulders = false;
+	ShoulderBase = nullptr;
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	OnRep_Shoulders();
+	LaunchCharacter(Velocity, true, true);
+	ForceNetUpdate();
+}
+
+void ABRCharacter::Server_LeapOff_Implementation()
+{
+	const FVector Forward = FRotator(0.f, GetControlRotation().Yaw, 0.f).Vector();
+	LeapOff(Forward * 450.f + FVector(0.f, 0.f, ShoulderLeap));
+}
+
+void ABRCharacter::OnRep_Shoulders()
+{
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, bOnShoulders ? ECR_Ignore : ECR_Block);
+	if (bOnShoulders)
+	{
+		DisableWobble();
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+	}
+	else
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		EnableWobble();
+	}
+}
+
+void ABRCharacter::TickBrawl(float DeltaSeconds)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+
+	// Shoulder rider falls off if the person underneath goes down / gets in a car.
+	if (bOnShoulders)
+	{
+		const ABRCharacter* Base = ShoulderBase.Get();
+		if (!Base || Base->GetCondition() != EPVVCondition::Normal || Base->GetCurrentBoat() || Base->GetCarrier() || GetCondition() != EPVVCondition::Normal)
+		{
+			LeapOff(FVector(0.f, 0.f, 200.f));
+		}
+		return;
+	}
+
+	// Drop what you're holding if you get knocked down / grabbed / get in a car.
+	if (HeldProp && (GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon))
+	{
+		HeldProp->Drop();
+		SetHeldProp(nullptr);
+	}
+
+	// Someone grabbed (not zip-tied) wriggles free after a few seconds.
+	if (APVVCharacter* Held = GetCarriedCharacter())
+	{
+		if (Held->GetCondition() != EPVVCondition::Restrained && Now - GrabStartTime > GrabHoldSeconds)
+		{
+			DropCarried();
+		}
+	}
+
+	// Dive tackle: knock over the first person we fly into.
+	if (bDiving)
+	{
+		TArray<FOverlapResult> Hits;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRTackle), false, this);
+		const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+		GetWorld()->OverlapMultiByObjectType(Hits, GetActorLocation() + Forward * 70.f, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(75.f), Params);
+		for (const FOverlapResult& H : Hits)
+		{
+			APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
+			if (Victim && Victim != this && Victim->GetCondition() == EPVVCondition::Normal && !Victim->GetCarrier() && !Victim->GetCurrentBoat())
+			{
+				bDiving = false;
+				Victim->ApplyKnockdown(this, Forward * 650.f + FVector(0.f, 0.f, 300.f));
+				if (ABRPlayerState* PS = GetBRPlayerState())
+				{
+					++PS->StatTackles;
+				}
+				Multicast_Sfx(1);
+				break;
+			}
+		}
+	}
+
+	// Flailing wobbly hands smack whoever they hit.
+	if (SlapSpeed > 0.f && bWobbleOn && GetCondition() == EPVVCondition::Normal && Now - LastSlapTime > 0.35f && GetMesh())
+	{
+		for (const TCHAR* BoneName : { TEXT("hand_l"), TEXT("hand_r") })
+		{
+			const FName Bone(BoneName);
+			if (GetMesh()->GetBoneIndex(Bone) == INDEX_NONE)
+			{
+				continue;
+			}
+			const FVector HandVel = GetMesh()->GetPhysicsLinearVelocity(Bone) - GetVelocity();
+			if (HandVel.Size() < SlapSpeed)
+			{
+				continue;
+			}
+			TArray<FOverlapResult> Hits;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(BRSlap), false, this);
+			GetWorld()->OverlapMultiByObjectType(Hits, GetMesh()->GetBoneLocation(Bone), FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(35.f), Params);
+			for (const FOverlapResult& H : Hits)
+			{
+				APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
+				if (Victim && Victim != this && Victim != GetCarriedCharacter() && !Victim->GetCarrier())
+				{
+					LastSlapTime = Now;
+					const float Power = FMath::Clamp(HandVel.Size() / SlapSpeed, 1.f, 2.f);
+					Victim->ReceiveMeleeHit(this, SlapDamage * Power, HandVel.GetSafeNormal2D() * SlapPush * Power + FVector(0.f, 0.f, 120.f));
+					Multicast_Sfx(0);
+					return;
+				}
+			}
 		}
 	}
 }

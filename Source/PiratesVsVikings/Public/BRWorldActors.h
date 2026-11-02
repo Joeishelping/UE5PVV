@@ -403,6 +403,49 @@ private:
 };
 
 // ===========================================================================================
+/**
+ * A physics object anyone can pick up (Z), swing (left click) and throw (Z again).
+ * Anything it hits hard gets knocked over. Put your own mesh on it (crates, chairs, cactus pots, chickens...).
+ */
+UCLASS(meta = (DisplayName = "BR Physics Prop"))
+class PIRATESVSVIKINGS_API ABRPhysicsProp : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ABRPhysicsProp();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
+
+	/** Your mesh (leave empty for a crate). */
+	UPROPERTY(EditAnywhere, Category = "BR|Prop") TObjectPtr<UStaticMesh> PropMesh;
+	UPROPERTY(EditAnywhere, Category = "BR|Prop") FLinearColor Color = FLinearColor(0.6f, 0.45f, 0.25f);
+	/** Speed (cm/s) at which it knocks people over when it hits them. */
+	UPROPERTY(EditAnywhere, Category = "BR|Prop") float KnockoutSpeed = 800.f;
+	/** Heavier = harder to throw far. */
+	UPROPERTY(EditAnywhere, Category = "BR|Prop") float MassKg = 15.f;
+
+	bool IsHeld() const { return Holder != nullptr; }
+	/** Server. */
+	void PickUp(class ABRCharacter* By);
+	void Throw(const FVector& Velocity);
+	void Drop();
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Mesh;
+
+	UFUNCTION() void OnRep_Holder();
+	UFUNCTION() void OnPropHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+
+private:
+	UPROPERTY(ReplicatedUsing = OnRep_Holder) TObjectPtr<class ABRCharacter> Holder;
+	TWeakObjectPtr<class ABRCharacter> LastThrower;
+	float ThrownTime = -100.f;
+	void ApplyHeldState();
+};
+
+// ===========================================================================================
 /** An item lying on the ground (dropped with G). Walk up and press E to pick it up. Border Patrol confiscate contraband. */
 UCLASS(meta = (DisplayName = "BR Item Pickup"))
 class PIRATESVSVIKINGS_API ABRItemPickup : public ABRGreyboxActor, public IPVVInteractable

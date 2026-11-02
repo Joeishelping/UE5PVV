@@ -471,6 +471,23 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 		T2->FinishSpawning(At(-6200.f, 6000.f, Ground));
 	}
 
+	// --- Stuff to grab, swing and throw (Z)
+	{
+		const FVector2D PropSpots[] = { {-10900.f, -560.f}, {-10650.f, -480.f}, {-9700.f, 300.f}, {-10300.f, 1150.f}, {-11050.f, 2500.f},
+			{-12100.f, -1900.f}, {-9100.f, 1700.f}, {-8300.f, -2300.f}, {-6000.f, -1700.f}, {5600.f, -2200.f}, {6400.f, 2600.f} };
+		int32 PropIndex = 0;
+		for (const FVector2D& Spot : PropSpots)
+		{
+			const FTransform T = At(Spot.X, Spot.Y, Ground + 60.f, PropIndex * 37.f);
+			if (ABRPhysicsProp* Prop = World->SpawnActorDeferred<ABRPhysicsProp>(ABRPhysicsProp::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn))
+			{
+				Prop->Color = (PropIndex % 3 == 0) ? FLinearColor(0.35f, 0.2f, 0.1f) : FLinearColor(0.6f, 0.45f, 0.25f);
+				Prop->FinishSpawning(T);
+			}
+			++PropIndex;
+		}
+	}
+
 	// --- Human cannon on the near bank, aimed across the border
 	World->SpawnActor<ABRCannon>(ABRCannon::StaticClass(), At(-5800.f, 2500.f, Ground), Params);
 
