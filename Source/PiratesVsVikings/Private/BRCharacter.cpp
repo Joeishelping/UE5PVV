@@ -163,6 +163,10 @@ void ABRCharacter::StartFlight(const FVector& Velocity)
 void ABRCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+	if (IsLocallyControlled() && bFlying)
+	{
+		AddShake(1.2f); // big landing
+	}
 	if (HasAuthority() && bDiving)
 	{
 		bDiving = false;
@@ -558,6 +562,7 @@ void ABRCharacter::BeginPlay()
 	DefaultArmLength = CameraBoom->TargetArmLength;
 	DefaultSocketOffset = CameraBoom->SocketOffset;
 	DefaultFOV = FollowCamera->FieldOfView;
+	CameraBaseLocation = FollowCamera->GetRelativeLocation();
 	EnableWobble();
 	if (GetMesh())
 	{
@@ -1537,8 +1542,32 @@ void ABRCharacter::TickWobble()
 	}
 }
 
+void ABRCharacter::TickShake(float DeltaSeconds)
+{
+	if (!IsLocallyControlled() || !FollowCamera)
+	{
+		return;
+	}
+	if (ShakeAmount <= 0.f)
+	{
+		return;
+	}
+	ShakeAmount = FMath::Max(0.f, ShakeAmount - DeltaSeconds * 2.5f);
+	if (ShakeAmount <= 0.f)
+	{
+		FollowCamera->SetRelativeLocation(CameraBaseLocation);
+		return;
+	}
+	const float S = ShakeAmount * ScreenShake * 25.f;
+	FollowCamera->SetRelativeLocation(CameraBaseLocation + FVector(0.f, FMath::FRandRange(-S, S), FMath::FRandRange(-S, S)));
+}
+
 void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 {
+	if (IsLocallyControlled())
+	{
+		AddShake(0.5f);
+	}
 	if (!bWobbleOn || !GetMesh())
 	{
 		return;
@@ -1562,6 +1591,10 @@ void ABRCharacter::OnStateEffectsRefreshed()
 	const bool bRagdolling = GetCondition() == EPVVCondition::KnockedDown;
 	if (bRagdolling)
 	{
+		if (IsLocallyControlled())
+		{
+			AddShake(1.f);
+		}
 		// Go fully limp: no muscles while knocked down.
 		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("pelvis"), FPhysicalAnimationData(), false);
 		bWobbleOn = false;
@@ -1614,6 +1647,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickFollow(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
 	}
+	TickShake(DeltaSeconds);
 	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown && !GetCurrentBoat() && !GetCarrier())
 	{
 		EnableWobble(); // retries until the body has been posed

@@ -221,6 +221,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> SlapSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> TackleSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> ThrowSound;
+	/** Screen shake when you get hit / knocked down / land a big flight (0 = off). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ScreenShake = 1.f;
 
 	// --- Mariachi trumpet ---------------------------------------------------------------
 	/** Border Patrol within this range (cm) can't stop dancing. */
@@ -324,6 +326,11 @@ private:
 	float GrabStartTime = 0.f;
 	float BaseAttackDamage = -1.f;
 	float BaseKnockback = -1.f;
+	// Local screen shake.
+	float ShakeAmount = 0.f;
+	FVector CameraBaseLocation = FVector::ZeroVector;
+	void AddShake(float Amount) { ShakeAmount = FMath::Clamp(ShakeAmount + Amount, 0.f, 1.5f); }
+	void TickShake(float DeltaSeconds);
 	float LastTrumpetTime = -100.f;
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
 	bool bWandering = false;
