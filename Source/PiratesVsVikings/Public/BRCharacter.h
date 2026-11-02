@@ -149,6 +149,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") bool bWobblyBody = true;
 	/** Overall muscle strength (multiplies the ones below). Lower = drunker. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float WobbleStrength = 1.f;
+	/** Off = legs follow the walk animation exactly (feet stay planted), only the upper body wobbles. On = legs wobble too. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") bool bWobblyLegs = false;
 	/** Gang Beasts feel: firm legs, loose spine, floppy arms. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float LegStrength = 1600.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SpineStrength = 700.f;

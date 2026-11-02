@@ -763,8 +763,10 @@ void ABRCharacter::EnableWobble()
 	MeshComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
 	PhysicalAnimation->SetSkeletalMeshComponent(MeshComp);
-	MeshComp->SetAllBodiesBelowSimulatePhysics(TEXT("pelvis"), true, false);
-	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(TEXT("pelvis"), 1.f, false, false);
+	// Simulate from the spine up (legs stay on the animation), or the whole body below the pelvis.
+	const FName SimRoot = bWobblyLegs ? FName(TEXT("pelvis")) : FName(TEXT("spine_01"));
+	MeshComp->SetAllBodiesBelowSimulatePhysics(SimRoot, true, !bWobblyLegs);
+	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(SimRoot, 1.f, false, !bWobblyLegs);
 	bWobbleOn = true;
 	bArmsStiff = bAiming;
 	ApplyMuscles(bAiming ? AimArmStrength : ArmStrength);
@@ -787,8 +789,15 @@ void ABRCharacter::ApplyMuscles(float ArmMuscle)
 	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("neck_01"), Muscle(HeadStrength), true);
 	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_l"), Muscle(ArmMuscle), true);
 	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_r"), Muscle(ArmMuscle), true);
-	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_l"), Muscle(LegStrength), true);
-	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_r"), Muscle(LegStrength), true);
+	if (bWobblyLegs)
+	{
+		// Legs also get a position pull so the feet track the walk cycle.
+		FPhysicalAnimationData Legs = Muscle(LegStrength);
+		Legs.PositionStrength = LegStrength * WobbleStrength * 0.5f;
+		Legs.VelocityStrength = LegStrength * WobbleStrength * 0.05f;
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_l"), Legs, true);
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_r"), Legs, true);
+	}
 }
 
 void ABRCharacter::TickWobble()
@@ -837,7 +846,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("pelvis"), FPhysicalAnimationData(), false);
 		bWobbleOn = false;
 	}
-	else if (!bWobbleOn || !GetMesh()->IsSimulatingPhysics(TEXT("spine_01")))
+	else if (!bWobbleOn || !GetMesh()->IsSimulatingPhysics(TEXT("spine_02")))
 	{
 		EnableWobble();
 	}
