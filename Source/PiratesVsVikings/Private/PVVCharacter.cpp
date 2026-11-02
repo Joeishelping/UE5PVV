@@ -487,6 +487,7 @@ void APVVCharacter::ReceiveMeleeHit(APVVCharacter* Attacker, float Damage, const
 
 void APVVCharacter::Multicast_HitReceived_Implementation(APVVCharacter* Attacker)
 {
+	OnHitReceivedNative(Attacker);
 	OnHitReceived(Attacker);
 }
 

@@ -77,6 +77,12 @@ protected:
 	virtual void UpdateMovementSpeed() override;
 	virtual void OnStateEffectsRefreshed() override;
 	virtual bool WantsMeleeOnAttack() const override { return !bAiming; }
+	virtual void OnHitReceivedNative(APVVCharacter* Attacker) override;
+
+	// --- Animation events (play montages from these in your character Blueprint) ---------
+	UFUNCTION(BlueprintImplementableEvent, Category = "BR|Anim") void OnWeaponFired(bool bLethal);
+	UFUNCTION(BlueprintImplementableEvent, Category = "BR|Anim") void OnReloadStarted();
+	UFUNCTION(BlueprintImplementableEvent, Category = "BR|Anim") void OnAte();
 
 	// --- Components -------------------------------------------------------------------
 
@@ -141,7 +147,19 @@ protected:
 
 	/** Wobbly active-ragdoll body (needs a skeletal mesh with a Physics Asset). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") bool bWobblyBody = true;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float WobbleStrength = 900.f;
+	/** Overall muscle strength (multiplies the ones below). Lower = drunker. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float WobbleStrength = 1.f;
+	/** Gang Beasts feel: firm legs, loose spine, floppy arms. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float LegStrength = 1600.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SpineStrength = 700.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HeadStrength = 350.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float ArmStrength = 180.f;
+	/** Arms stiffen up while aiming so shooting looks and feels precise. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float AimArmStrength = 5000.f;
+	/** How hard a punch/shot shoves the upper body. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HitWobble = 350.f;
+	/** Random drunken sway. Gets worse when you're starving or nearly knocked out. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SwayStrength = 40.f;
 
 private:
 	UPROPERTY(Replicated) bool bIsNPC = false;
@@ -174,6 +192,8 @@ private:
 	bool bInDeepWater = false;
 	bool bSlowApplied = false;
 	bool bWobbleOn = false;
+	bool bArmsStiff = false;
+	float NextSwayTime = 0.f;
 	int32 GunStyle = -1;   // 0 none, 1 taser, 2 pistol, 3 revolver
 	int32 GunPlacement = -1; // 0 hand, 1 aiming
 	FTimerHandle ReloadTimer;
@@ -183,6 +203,10 @@ private:
 	void UpdateAimCamera(float DeltaSeconds);
 	void ApplyAimRotationMode();
 	void EnableWobble();
+	void ApplyMuscles(float ArmMultiplierOverride);
+	void TickWobble();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_ReloadStarted();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Ate();
 	int32& AmmoRef();
 	float FireCooldown() const;
 	float ReloadSeconds() const;

@@ -74,9 +74,10 @@ public:
 	float GetBalanceFraction() const { return MaxBalance > 0.f ? Balance / MaxBalance : 0.f; }
 
 	const FText& GetFocusPrompt() const { return FocusPrompt; }
-	float GetHoldProgress() const { return HoldProgress; }
-	float GetStruggleProgress() const { return StruggleProgress; }
-	bool IsWading() const { return bIsWading; }
+	/** 0..1 while holding Interact (working a job, cutting wire, zip-tying...). */
+	UFUNCTION(BlueprintPure, Category = "PVV|Anim") float GetHoldProgress() const { return HoldProgress; }
+	UFUNCTION(BlueprintPure, Category = "PVV|Anim") float GetStruggleProgress() const { return StruggleProgress; }
+	UFUNCTION(BlueprintPure, Category = "PVV|Anim") bool IsWading() const { return bIsWading; }
 
 	APVVDetentionZone* GetDetentionZone() const { return DetentionZone; }
 	bool IsPlayerCharacter() const { return bIsPlayerCharacter; }
@@ -347,6 +348,8 @@ protected:
 	void RefreshStateEffects();
 	/** Called at the end of RefreshStateEffects on every machine. */
 	virtual void OnStateEffectsRefreshed() {}
+	/** Runs on every machine when this character gets hit (before the Blueprint OnHitReceived event). */
+	virtual void OnHitReceivedNative(APVVCharacter* Attacker) {}
 	/** Left-click punches unless a subclass wants it for something else (e.g. firing while aiming). */
 	virtual bool WantsMeleeOnAttack() const { return true; }
 	virtual void UpdateMovementSpeed();

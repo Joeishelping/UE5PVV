@@ -87,7 +87,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, Breath);
 	DOREPLIFETIME(ABRCharacter, bLethalMode);
 	DOREPLIFETIME_CONDITION(ABRCharacter, bAiming, COND_SkipOwner);
-	DOREPLIFETIME_CONDITION(ABRCharacter, bReloading, COND_OwnerOnly);
+	DOREPLIFETIME(ABRCharacter, bReloading);
 	DOREPLIFETIME_CONDITION(ABRCharacter, AmmoTaser, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, AmmoGun, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, AmmoRunnerGun, COND_OwnerOnly);
@@ -465,6 +465,7 @@ void ABRCharacter::Server_Reload_Implementation()
 	}
 	bReloading = true;
 	GetWorldTimerManager().SetTimer(ReloadTimer, this, &ABRCharacter::FinishReload, ReloadSeconds(), false);
+	Multicast_ReloadStarted();
 	if (ReloadSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, ReloadSound, GetActorLocation());
@@ -567,8 +568,24 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 	}
 }
 
+void ABRCharacter::Multicast_ReloadStarted_Implementation()
+{
+	OnReloadStarted();
+}
+
+void ABRCharacter::Multicast_Ate_Implementation()
+{
+	OnAte();
+}
+
 void ABRCharacter::Multicast_Shot_Implementation(FVector_NetQuantize Start, FVector_NetQuantize End, bool bLethal, bool bHitSomeone)
 {
+	OnWeaponFired(bLethal);
+	// Recoil kick through the physics arms.
+	if (bWobbleOn && GetMesh())
+	{
+		GetMesh()->AddImpulseToAllBodiesBelow(-GetActorForwardVector() * 60.f + FVector(0.f, 0.f, 40.f), TEXT("upperarm_r"), true, true);
+	}
 	if (GetNetMode() == NM_DedicatedServer)
 	{
 		return;
@@ -592,6 +609,7 @@ void ABRCharacter::Server_Eat_Implementation()
 	if (PS && Hunger < 95.f && PS->RemoveItem(EBRItem::Taco))
 	{
 		Eat(TacoFood);
+		Multicast_Ate();
 		Notify(LOCTEXT("Ate", "Delicious. (+food)"));
 	}
 	else if (PS && !PS->HasItem(EBRItem::Taco))
@@ -744,17 +762,66 @@ void ABRCharacter::EnableWobble()
 	MeshComp->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
 	MeshComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
-	FPhysicalAnimationData Data;
-	Data.bIsLocalSimulation = false;
-	Data.OrientationStrength = WobbleStrength;
-	Data.AngularVelocityStrength = WobbleStrength * 0.1f;
-	Data.PositionStrength = 0.f;
-	Data.VelocityStrength = 0.f;
 	PhysicalAnimation->SetSkeletalMeshComponent(MeshComp);
-	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("pelvis"), Data, false);
 	MeshComp->SetAllBodiesBelowSimulatePhysics(TEXT("pelvis"), true, false);
 	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(TEXT("pelvis"), 1.f, false, false);
 	bWobbleOn = true;
+	bArmsStiff = bAiming;
+	ApplyMuscles(bAiming ? AimArmStrength : ArmStrength);
+}
+
+void ABRCharacter::ApplyMuscles(float ArmMuscle)
+{
+	auto Muscle = [this](float Strength)
+	{
+		FPhysicalAnimationData Data;
+		Data.bIsLocalSimulation = false;
+		Data.OrientationStrength = Strength * WobbleStrength;
+		Data.AngularVelocityStrength = Strength * WobbleStrength * 0.1f;
+		Data.PositionStrength = 0.f;
+		Data.VelocityStrength = 0.f;
+		return Data;
+	};
+	// Order matters: each call overrides the bodies below that bone.
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("spine_01"), Muscle(SpineStrength), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("neck_01"), Muscle(HeadStrength), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_l"), Muscle(ArmMuscle), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_r"), Muscle(ArmMuscle), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_l"), Muscle(LegStrength), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_r"), Muscle(LegStrength), true);
+}
+
+void ABRCharacter::TickWobble()
+{
+	if (!bWobbleOn || !GetMesh())
+	{
+		return;
+	}
+	// Arms snap to the aim pose while aiming; floppy otherwise.
+	if (bAiming != bArmsStiff)
+	{
+		bArmsStiff = bAiming;
+		ApplyMuscles(bAiming ? AimArmStrength : ArmStrength);
+	}
+	// Drunken sway: little random shoves to the upper body.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now >= NextSwayTime && GetCondition() == EPVVCondition::Normal && !bAiming)
+	{
+		NextSwayTime = Now + FMath::FRandRange(0.5f, 1.4f);
+		const float Woozy = 1.f + (Hunger < WeakHunger ? 1.5f : 0.f) + (1.f - GetBalanceFraction()) * 2.f;
+		const FVector Shove = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f) * SwayStrength * Woozy;
+		GetMesh()->AddImpulseToAllBodiesBelow(Shove, TEXT("spine_02"), true, true);
+	}
+}
+
+void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
+{
+	if (!bWobbleOn || !GetMesh())
+	{
+		return;
+	}
+	const FVector Dir = Attacker ? (GetActorLocation() - Attacker->GetActorLocation()).GetSafeNormal2D() : -GetActorForwardVector();
+	GetMesh()->AddImpulseToAllBodiesBelow(Dir * HitWobble + FVector(0.f, 0.f, HitWobble * 0.3f), TEXT("spine_01"), true, true);
 }
 
 void ABRCharacter::OnStateEffectsRefreshed()
@@ -894,6 +961,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	}
 
 	UpdateGunVisual();
+	TickWobble();
 	UpdateLocalVisibility();
 }
 
