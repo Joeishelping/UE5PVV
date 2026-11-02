@@ -49,6 +49,8 @@ ABRCharacter::ABRCharacter()
 	GetCharacterMovement()->MaxWalkSpeedCrouched = 220.f;
 
 	PhysicalAnimation = CreateDefaultSubobject<UPhysicalAnimationComponent>(TEXT("PhysicalAnimation"));
+	// Always work out bone positions, even off-screen (the wobbly body needs them every frame).
+	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
 	auto MakeOutfit = [this](const TCHAR* Name)
 	{
@@ -1132,6 +1134,13 @@ void ABRCharacter::EnableWobble()
 	{
 		return;
 	}
+	// The bones must have been posed at least once, or the physics reads bones that don't exist yet (crash).
+	if (MeshComp->GetComponentSpaceTransforms().Num() < MeshComp->GetNumBones() || !MeshComp->IsRegistered())
+	{
+		bWobblePending = true;
+		return;
+	}
+	bWobblePending = false;
 	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	MeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	MeshComp->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
@@ -1266,6 +1275,10 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority())
 	{
 		TickWander(DeltaSeconds);
+	}
+	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown)
+	{
+		EnableWobble(); // retries until the body has been posed
 	}
 	if (bFacePending && GetNetMode() != NM_DedicatedServer && GetWorld()->GetTimeSeconds() >= FaceReadyTime)
 	{
