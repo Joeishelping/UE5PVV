@@ -3007,8 +3007,12 @@ ABRLuchaRing::ABRLuchaRing()
 	AddMesh(TEXT("ApronE"), CubeMesh, FVector(Half + 2.f, 0.f, DeckHeight * 0.45f), FVector(4.f, RingSize, DeckHeight * 0.9f), Apron, FRotator::ZeroRotator, false);
 	AddMesh(TEXT("ApronW"), CubeMesh, FVector(-Half - 2.f, 0.f, DeckHeight * 0.45f), FVector(4.f, RingSize, DeckHeight * 0.9f), Apron, FRotator::ZeroRotator, false);
 	// Steps up to the canvas on two sides.
-	AddMesh(TEXT("StepW1"), CubeMesh, FVector(-Half - 60.f, 0.f, 22.f), FVector(120.f, 200.f, 44.f), FLinearColor(0.3f, 0.3f, 0.32f));
-	AddMesh(TEXT("StepE1"), CubeMesh, FVector(Half + 60.f, 0.f, 22.f), FVector(120.f, 200.f, 44.f), FLinearColor(0.3f, 0.3f, 0.32f));
+	// Two small steps (20 cm each) so you can walk right up onto the canvas.
+	const FLinearColor StepColor(0.3f, 0.3f, 0.32f);
+	AddMesh(TEXT("StepW1"), CubeMesh, FVector(-Half - 120.f, 0.f, 10.f), FVector(80.f, 220.f, 20.f), StepColor);
+	AddMesh(TEXT("StepW2"), CubeMesh, FVector(-Half - 40.f, 0.f, 20.f), FVector(80.f, 220.f, 40.f), StepColor);
+	AddMesh(TEXT("StepE1"), CubeMesh, FVector(Half + 120.f, 0.f, 10.f), FVector(80.f, 220.f, 20.f), StepColor);
+	AddMesh(TEXT("StepE2"), CubeMesh, FVector(Half + 40.f, 0.f, 20.f), FVector(80.f, 220.f, 40.f), StepColor);
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float X = (i % 2) ? Half - 15.f : -Half + 15.f, Y = (i / 2) ? Half - 15.f : -Half + 15.f;

@@ -798,7 +798,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float ToughnessPer100 = 0.35f;
 	/** Size of the square ring (cm, edge to edge). */
 	static constexpr float RingSize = 700.f;
-	static constexpr float DeckHeight = 90.f;
+	static constexpr float DeckHeight = 60.f;
 
 	bool IsOpenForChallenge() const;
 	bool IsTakingBets() const;

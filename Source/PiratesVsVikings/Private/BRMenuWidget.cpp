@@ -230,7 +230,7 @@ void UBRMenuWidget::BuildHostPanel(UCanvasPanel* Canvas)
 	UButton* StartButton = MakeButton(TEXT("START NOW (skip the lobby)"), Go);
 	StartButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnStartNow);
 	AddRow(HostBox, StartButton, 6.f);
-	AddRow(HostBox, MakeText(TEXT("Times apply from the next phase. Bots fill each team up to its size."), 12, FLinearColor(0.6f, 0.6f, 0.6f)), 2.f);
+	AddRow(HostBox, MakeText(TEXT("Time changes apply right away. Bots fill each team up to its size."), 12, FLinearColor(0.6f, 0.6f, 0.6f)), 2.f);
 	RefreshHost();
 }
 

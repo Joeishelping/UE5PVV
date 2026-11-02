@@ -935,6 +935,13 @@ void ABRGameMode::TickLobby(ABRGameState* GS)
 
 void ABRGameMode::ApplyHostSettings(const FBRHostSettings& Settings)
 {
+	// Changing a time during that phase changes the clock right away (by the difference).
+	if (ABRGameState* ClockGS = GetBRGameState(); ClockGS && !ClockGS->bLobby && ClockGS->Phase != EBRPhase::Ended)
+	{
+		const int32 OldLength = ClockGS->Phase == EBRPhase::Prep ? PrepSeconds : InvasionSeconds;
+		const int32 NewLength = FMath::Clamp(ClockGS->Phase == EBRPhase::Prep ? Settings.PrepSeconds : Settings.InvasionSeconds, 30, 3600);
+		ClockGS->PhaseSecondsLeft = FMath::Max(10, ClockGS->PhaseSecondsLeft + NewLength - OldLength);
+	}
 	PrepSeconds = FMath::Clamp(Settings.PrepSeconds, 30, 1800);
 	InvasionSeconds = FMath::Clamp(Settings.InvasionSeconds, 60, 3600);
 	bUseLobby = Settings.bLobby;
