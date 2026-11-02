@@ -78,7 +78,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsHoldingProp() const;
 	UFUNCTION(BlueprintPure, Category = "BR|Hats") EBRHat GetHat() const { return WornHat; }
 	float GetHatKnockOffChance() const { return HatKnockOffChance; }
-	EBRHat GetDefaultHat() const { return DefaultHat; }
+	/** The hat you get when you didn't pick one (Border Patrol gets the Patrol Cap unless the Blueprint says otherwise). */
+	EBRHat GetDefaultHat() const { return (IsWarden() && DefaultHat == EBRHat::CowboyHat) ? EBRHat::PatrolCap : DefaultHat; }
 
 	// --- Emote wheel (local) ----------------------------------------------------------------
 	static constexpr int32 NumEmotes = 6;

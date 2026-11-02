@@ -166,9 +166,15 @@ void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 	Look = Random;
 	if (HatMeshes.Num() > 0)
 	{
-		TArray<EBRHat> Hats;
-		HatMeshes.GetKeys(Hats);
-		Hats.Add(EBRHat::None);
+		// Locals wear everyday hats (or none), not helmets.
+		TArray<EBRHat> Hats = { EBRHat::None };
+		for (const EBRHat Everyday : { EBRHat::CowboyHat, EBRHat::Sombrero })
+		{
+			if (HatMeshes.Contains(Everyday))
+			{
+				Hats.Add(Everyday);
+			}
+		}
 		WornHat = Hats[FMath::RandRange(0, Hats.Num() - 1)];
 		bHatAssigned = true;
 	}
@@ -181,7 +187,7 @@ void ABRCharacter::PossessedBy(AController* NewController)
 	{
 		const ABRPlayerState* HatPS = GetBRPlayerState();
 		const int32 Choice = HatPS && HatPS->bHasLook ? HatPS->Look.HatChoice : -1;
-		SetHat(Choice >= 0 ? static_cast<EBRHat>(Choice) : DefaultHat);
+		SetHat(Choice >= 0 ? static_cast<EBRHat>(Choice) : GetDefaultHat());
 	}
 	if (const ABRPlayerState* PS = GetBRPlayerState(); PS && PS->bHasLook)
 	{
