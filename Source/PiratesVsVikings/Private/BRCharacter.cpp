@@ -16,8 +16,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/Engine.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstance.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Components/TextRenderComponent.h"
 #include "EnhancedInputComponent.h"
@@ -107,18 +109,20 @@ void ABRCharacter::InitAsNPC()
 	bIsNPC = true;
 	DefaultFaction = BR::Runners;
 	// Every NPC gets a random look so the crowd isn't all clones (and players can blend in).
+	// Ordinary-looking people: small face differences, natural dark/brown hair, plain clothes.
 	FBRLook Random;
 	Random.SkinTone = FMath::FRand();
-	Random.ShirtColor = FMath::FRandRange(0.06f, 1.f);
-	Random.PantsColor = FMath::RandBool() ? 0.f : FMath::FRandRange(0.06f, 1.f);
-	Random.bHat = FMath::RandBool();
-	Random.HeadSize = FMath::FRandRange(.3f, .7f);
-	Random.NoseSize = FMath::FRandRange(.2f, .8f);
-	Random.LipSize = FMath::FRandRange(.25f, .75f);
-	Random.EarSize = FMath::FRandRange(.25f, .75f);
-	Random.HairStyle = FMath::RandRange(0, HairStyles.Num());
-	Random.FacialHair = FMath::RandBool() ? 0 : FMath::RandRange(0, FacialHairStyles.Num());
-	Random.HairColor = FMath::RandRange(0, 3) == 0 ? 0.f : FMath::FRandRange(.05f, .6f);
+	Random.ShirtColor = FMath::RandRange(0, 2) == 0 ? 0.f : FMath::FRandRange(0.06f, 1.f);
+	Random.PantsColor = FMath::RandRange(0, 1) == 0 ? 0.f : FMath::FRandRange(0.06f, 1.f);
+	Random.bHat = FMath::RandRange(0, 2) != 0;
+	Random.HeadSize = FMath::FRandRange(.42f, .58f);
+	Random.NoseSize = FMath::FRandRange(.35f, .65f);
+	Random.LipSize = FMath::FRandRange(.4f, .6f);
+	Random.EarSize = FMath::FRandRange(.4f, .6f);
+	Random.HairStyle = HairStyles.Num() > 0 ? FMath::RandRange(1, HairStyles.Num()) : 1;
+	Random.FacialHair = (FacialHairStyles.Num() > 0 && FMath::RandRange(0, 2) == 0) ? FMath::RandRange(1, FacialHairStyles.Num()) : 0;
+	const float HairRoll = FMath::FRand();
+	Random.HairColor = HairRoll < 0.5f ? 0.f : (HairRoll < 0.9f ? FMath::FRandRange(.06f, .3f) : FMath::FRandRange(.8f, .95f)); // own colour, dark/brown, or grey
 	Random.bSet = true;
 	Look = Random;
 }
@@ -171,8 +175,8 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	PickStyle(Hair, HairStyles, L.HairStyle);
 	PickStyle(FacialHair, FacialHairStyles, L.FacialHair);
 	ApplySkin(BR::SkinColor(L.SkinTone));
-	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor), BR::ClothColor(L.ShirtColor));
-	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor), BR::ClothColor(L.PantsColor));
+	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor), BR::ClothColor(L.ShirtColor), ClothMaterialSlot);
+	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor), BR::ClothColor(L.PantsColor), ClothMaterialSlot);
 	TintOutfit(Hair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	TintOutfit(FacialHair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	if (OutfitHead)
@@ -200,8 +204,25 @@ void ABRCharacter::PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectP
 	}
 }
 
-void ABRCharacter::ApplyFaceShape(const FBRLook& L)
+void ABRCharacter::ApplyFaceShape(const FBRLook& InLook)
 {
+	// The body must have the shape keys, or only the hair/hat would grow. Check and tell the player what to fix.
+	const USkeletalMesh* BodyMesh = GetMesh() ? GetMesh()->GetSkeletalMeshAsset() : nullptr;
+	const bool bBodyHasShapes = BodyMesh && BodyMesh->FindMorphTarget(TEXT("Head_Big")) != nullptr;
+	FBRLook L = InLook;
+	if (!bBodyHasShapes)
+	{
+		L.HeadSize = L.NoseSize = L.LipSize = L.EarSize = 0.5f; // keep hair/hats normal size so they still fit
+		if (BodyMesh && !bWarnedNoMorphs && IsLocallyControlled() && GEngine)
+		{
+			bWarnedNoMorphs = true;
+			const FString Msg = FString::Printf(TEXT("Face sliders: your body mesh '%s' has NO shape keys (Head_Big, Nose_Big...). ")
+				TEXT("Import Art/Characters/SK_PVV_Body_Custom.glb with 'Import Morph Targets' ticked and use THAT mesh on this character's Mesh component."),
+				*BodyMesh->GetName());
+			GEngine->AddOnScreenDebugMessage(-1, 20.f, FColor::Orange, Msg);
+			UE_LOG(LogTemp, Warning, TEXT("%s"), *Msg);
+		}
+	}
 	// Each slider drives a pair of shape keys: left half = "_Small", right half = "_Big", middle = normal.
 	auto Pair = [this](const TCHAR* Small, const TCHAR* Big, float Slider)
 	{
@@ -229,9 +250,44 @@ void ABRCharacter::ApplySkin(const FLinearColor& Color)
 	{
 		return;
 	}
-	bool bFound = false;
+	// Which slots are skin? Match by slot/material name ("M_Skin"), so eyes, lips, shoes and clothes are left alone.
+	// Worked out once per mesh (after we recolour a slot its material name changes).
+	TArray<int32>& SkinSlots = SkinSlotsCache;
+	if (SkinSlotsMesh.Get() != Body->GetSkeletalMeshAsset())
+	{
+	SkinSlotsMesh = Body->GetSkeletalMeshAsset();
+	SkinSlots.Reset();
+	const TArray<FName> SlotNames = Body->GetMaterialSlotNames();
 	for (int32 Index = 0; Index < Body->GetNumMaterials(); ++Index)
 	{
+		const UMaterialInterface* Material = Body->GetMaterial(Index);
+		FString Names = SlotNames.IsValidIndex(Index) ? SlotNames[Index].ToString() : FString();
+		if (Material)
+		{
+			Names += TEXT(" ") + Material->GetName();
+			if (const UMaterialInstance* Instance = Cast<UMaterialInstance>(Material); Instance && Instance->Parent)
+			{
+				Names += TEXT(" ") + Instance->Parent->GetName(); // a coloured copy keeps its original's name here
+			}
+		}
+		for (const FString& Word : SkinSlotKeywords)
+		{
+			if (!Word.IsEmpty() && Names.Contains(Word))
+			{
+				SkinSlots.Add(Index);
+				break;
+			}
+		}
+	}
+	if (SkinSlots.Num() == 0 && SkinMaterialSlot >= 0 && SkinMaterialSlot < Body->GetNumMaterials())
+	{
+		SkinSlots.Add(SkinMaterialSlot);
+	}
+	}
+
+	for (const int32 Index : SkinSlots)
+	{
+		bool bFound = false;
 		for (const FName& Parameter : SkinColorParameters)
 		{
 			if (BRHasVectorParam(Body->GetMaterial(Index), Parameter))
@@ -243,26 +299,26 @@ void ABRCharacter::ApplySkin(const FLinearColor& Color)
 				}
 			}
 		}
-	}
-	if (!bFound && bAutoSkinMaterial && Body->GetNumMaterials() > SkinMaterialSlot && SkinMaterialSlot >= 0)
-	{
-		// No SkinColor parameter on your material: use a plain colour material for the skin slot.
-		if (!SkinFallbackMID)
+		if (!bFound && bAutoSkinMaterial)
 		{
-			if (UMaterialInterface* Plain = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+			// No colour parameter on your skin material: use a plain colour material for that slot.
+			if (!SkinFallbackMID)
 			{
-				SkinFallbackMID = UMaterialInstanceDynamic::Create(Plain, this);
+				if (UMaterialInterface* Plain = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+				{
+					SkinFallbackMID = UMaterialInstanceDynamic::Create(Plain, this);
+				}
 			}
-		}
-		if (SkinFallbackMID)
-		{
-			SkinFallbackMID->SetVectorParameterValue(TEXT("Color"), Color);
-			Body->SetMaterial(SkinMaterialSlot, SkinFallbackMID);
+			if (SkinFallbackMID)
+			{
+				SkinFallbackMID->SetVectorParameterValue(TEXT("Color"), Color);
+				Body->SetMaterial(Index, SkinFallbackMID);
+			}
 		}
 	}
 }
 
-void ABRCharacter::TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color)
+void ABRCharacter::TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color, int32 OnlySlot)
 {
 	if (!Part || !Part->GetSkeletalMeshAsset())
 	{
@@ -270,6 +326,10 @@ void ABRCharacter::TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>&
 	}
 	for (int32 Index = 0; Index < Part->GetNumMaterials(); ++Index)
 	{
+		if (OnlySlot >= 0 && Index != OnlySlot)
+		{
+			continue;
+		}
 		UMaterialInterface* Material = Part->GetMaterial(Index);
 		if (bOriginal)
 		{

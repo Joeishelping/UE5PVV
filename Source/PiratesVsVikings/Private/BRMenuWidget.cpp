@@ -438,11 +438,11 @@ void UBRMenuWidget::OnRandomLook()
 	GI->Look.ShirtColor = FMath::FRand();
 	GI->Look.PantsColor = FMath::FRand();
 	GI->Look.bHat = FMath::RandBool();
-	GI->Look.HeadSize = FMath::FRandRange(.25f, .75f);
-	GI->Look.NoseSize = FMath::FRand();
-	GI->Look.LipSize = FMath::FRand();
-	GI->Look.EarSize = FMath::FRand();
-	GI->Look.HairColor = FMath::FRand();
+	GI->Look.HeadSize = FMath::FRandRange(.4f, .6f);
+	GI->Look.NoseSize = FMath::FRandRange(.3f, .7f);
+	GI->Look.LipSize = FMath::FRandRange(.35f, .65f);
+	GI->Look.EarSize = FMath::FRandRange(.35f, .65f);
+	GI->Look.HairColor = FMath::RandBool() ? 0.f : FMath::FRandRange(.06f, .4f);
 	const ABRPlayerController* PC = GetBRController();
 	const ABRCharacter* Me = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
 	GI->Look.HairStyle = FMath::RandRange(0, Me ? Me->GetHairStyleCount() : 0);

@@ -221,9 +221,14 @@ protected:
 	// --- Customization: how the menu sliders reach your materials ---------------------
 	/** Vector parameters on your BODY material(s) that get the skin colour. Add one called SkinColor to your body material. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> SkinColorParameters = { TEXT("SkinColor"), TEXT("SkinTint"), TEXT("BaseColorFactor") };
-	/** If your body material has none of those parameters, swap material slot SkinMaterialSlot for a plain colour material so the slider still works. */
+	/** Only material slots whose slot name or material name contains one of these words get the skin colour (eyes, lips, clothes stay as they are). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FString> SkinSlotKeywords = { TEXT("Skin") };
+	/** If your skin material has none of the parameters above, swap it for a plain colour material so the slider still works. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") bool bAutoSkinMaterial = true;
+	/** Used only when no slot name matches SkinSlotKeywords. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") int32 SkinMaterialSlot = 0;
+	/** Shirt / pants colour only goes on this material slot of the outfit (0 = the main fabric, so logos and letters keep their colour). -1 = all slots. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") int32 ClothMaterialSlot = 0;
 	/** Vector parameters on the shirt (OutfitTop) / pants (OutfitBottom) materials that get the colour. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> ShirtColorParameters = { TEXT("ShirtColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> PantsColorParameters = { TEXT("PantsColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
@@ -307,7 +312,10 @@ private:
 	UFUNCTION() void OnRep_Look();
 	void ApplyLook(const FBRLook& L);
 	void ApplySkin(const FLinearColor& Color);
-	void TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color);
+	void TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color, int32 OnlySlot = -1);
+	TArray<int32> SkinSlotsCache;
+	TWeakObjectPtr<USkeletalMesh> SkinSlotsMesh;
+	bool bWarnedNoMorphs = false;
 	void PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectPtr<USkeletalMesh>>& Styles, int32 Index);
 	void ApplyFaceShape(const FBRLook& L);
 	void TickWander(float DeltaSeconds);

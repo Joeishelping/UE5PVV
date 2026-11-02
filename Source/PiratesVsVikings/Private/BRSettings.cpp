@@ -63,9 +63,10 @@ namespace BR
 
 	FLinearColor HairColor(float Slider)
 	{
+		// Natural hair only: black -> browns -> blonde -> auburn/red -> grey -> white.
 		static const FColor Stops[] = {
-			FColor(20, 16, 14), FColor(60, 38, 24), FColor(110, 70, 40), FColor(170, 120, 70), FColor(230, 200, 130),
-			FColor(170, 60, 25), FColor(160, 160, 160), FColor(240, 240, 240), FColor(230, 60, 140), FColor(40, 90, 230), FColor(40, 200, 90)
+			FColor(14, 11, 10), FColor(30, 22, 17), FColor(55, 36, 24), FColor(90, 60, 36), FColor(130, 95, 60),
+			FColor(175, 140, 90), FColor(205, 175, 120), FColor(120, 50, 25), FColor(150, 70, 35), FColor(125, 120, 115), FColor(200, 198, 195)
 		};
 		constexpr int32 Num = UE_ARRAY_COUNT(Stops);
 		const float T = FMath::Clamp((Slider - 0.05f) / 0.95f, 0.f, 1.f) * (Num - 1);
@@ -75,14 +76,15 @@ namespace BR
 
 	FLinearColor ClothColor(float Slider)
 	{
-		// 0.05 .. 0.9 = rainbow, 0.9 .. 1 = white -> black.
-		const float S = FMath::Clamp(Slider, 0.f, 1.f);
-		if (S >= 0.9f)
-		{
-			const float Grey = 1.f - (S - 0.9f) / 0.1f;
-			return FLinearColor(Grey, Grey, Grey) * 0.9f + FLinearColor(0.02f, 0.02f, 0.02f);
-		}
-		const float Hue = (S - 0.05f) / 0.85f * 360.f;
-		return FLinearColor(Hue, 0.75f, 0.85f).HSVToLinearRGB();
+		// Everyday fabric colours (workwear, denim, khaki...), picked in steps - no neon.
+		static const FColor Swatches[] = {
+			FColor(235, 232, 222), FColor(214, 200, 170), FColor(176, 156, 112), FColor(140, 110, 75), FColor(96, 70, 48),
+			FColor(110, 112, 70), FColor(62, 78, 52), FColor(150, 170, 190), FColor(70, 95, 130), FColor(40, 55, 85),
+			FColor(30, 36, 52), FColor(130, 130, 128), FColor(70, 70, 72), FColor(28, 28, 30), FColor(120, 35, 35),
+			FColor(80, 25, 30), FColor(185, 150, 60), FColor(170, 95, 55)
+		};
+		constexpr int32 Num = UE_ARRAY_COUNT(Swatches);
+		const int32 Index = FMath::Clamp(FMath::FloorToInt((FMath::Clamp(Slider, 0.05f, 1.f) - 0.05f) / 0.95f * Num), 0, Num - 1);
+		return FLinearColor::FromSRGBColor(Swatches[Index]);
 	}
 }
