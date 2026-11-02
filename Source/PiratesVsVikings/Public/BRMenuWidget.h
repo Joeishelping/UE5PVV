@@ -42,6 +42,7 @@ private:
 	UFUNCTION() void OnHostSteam();
 	UFUNCTION() void OnHostLan();
 	UFUNCTION() void OnFindSteam();
+	UFUNCTION() void OnInviteSteam();
 	UFUNCTION() void OnJoinAddress();
 	UFUNCTION() void OnPlay();
 	UFUNCTION() void OnQuit();

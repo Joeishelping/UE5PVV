@@ -156,7 +156,18 @@ void UBRGameInstance::Invite()
 	IOnlineExternalUIPtr UI = Subsystem ? Subsystem->GetExternalUIInterface() : nullptr;
 	if (!UI || !IsInSession() || !UI->ShowInviteUI(0, NAME_GameSession))
 	{
-		Status(TEXT("Host first (HostSteam), then press Shift+Tab and invite from your friends list."));
+		if (GetOnlineServiceName() != TEXT("STEAM"))
+		{
+			Status(TEXT("Steam is NOT connected (Online: ") + GetOnlineServiceName() + TEXT("). Open Steam first, use the packaged Development .exe, not the editor."));
+		}
+		else if (!IsInSession())
+		{
+			Status(TEXT("Click HOST GAME (invite Steam friends) first, then press M and Invite."));
+		}
+		else
+		{
+			Status(TEXT("Overlay blocked. In the Steam app: Friends list -> right-click your friend -> Invite to Game."));
+		}
 	}
 }
 

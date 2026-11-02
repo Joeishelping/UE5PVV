@@ -122,6 +122,10 @@ void UBRMenuWidget::BuildLayout()
 	FindSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFindSteam);
 	AddRow(Box, FindSteam);
 
+	UButton* InviteSteam = MakeButton(TEXT("INVITE A STEAM FRIEND  (after hosting)"), Neutral);
+	InviteSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnInviteSteam);
+	AddRow(Box, InviteSteam);
+
 	UButton* HostLan = MakeButton(TEXT("HOST GAME  (Radmin / LAN)"), Neutral);
 	HostLan->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHostLan);
 	AddRow(Box, HostLan);
@@ -229,6 +233,14 @@ void UBRMenuWidget::OnFindSteam()
 	{
 		GI->bMenuDone = true;
 		GI->FindGame();
+	}
+}
+
+void UBRMenuWidget::OnInviteSteam()
+{
+	if (UBRGameInstance* GI = GetBRGameInstance())
+	{
+		GI->Invite();
 	}
 }
 
