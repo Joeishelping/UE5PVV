@@ -50,6 +50,8 @@ private:
 	UPROPERTY() TObjectPtr<UBorder> HairColorSwatch;
 	UPROPERTY() TObjectPtr<UTextBlock> HairLabel;
 	UPROPERTY() TObjectPtr<UTextBlock> FacialHairLabel;
+	UPROPERTY() TObjectPtr<UTextBlock> HatLabel;
+	UPROPERTY() TObjectPtr<UTextBlock> HatLockedText;
 
 	void BuildLayout();
 	UTextBlock* MakeText(const FString& Text, int32 Size, const FLinearColor& Color);
@@ -79,8 +81,11 @@ private:
 	UFUNCTION() void OnHairNext();
 	UFUNCTION() void OnFacialPrev();
 	UFUNCTION() void OnFacialNext();
+	UFUNCTION() void OnHatPrev();
+	UFUNCTION() void OnHatNext();
 	void StepStyle(bool bFacial, int32 Step);
-	UHorizontalBox* MakePickerRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, bool bFacial);
+	UHorizontalBox* MakePickerRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, int32 Which); // 0 hair, 1 beard, 2 hat
+	void StepHat(int32 Step);
 	void RefreshPickers();
 
 	UFUNCTION() void OnRunner();

@@ -640,6 +640,10 @@ ABRCharacter* ABRGameMode::SpawnNPC(const FTransform& Where)
 	NPC->AutoPossessAI = EAutoPossessAI::Disabled;
 	NPC->InitAsNPC(NPCSkinToneMin, NPCSkinToneMax);
 	NPC->FinishSpawning(Where);
+	if (FMath::FRand() < NPCPonchoChance)
+	{
+		NPC->SetNPCPoncho(true); // locals wear ponchos too, so a poncho'd Runner blends in
+	}
 	return NPC;
 }
 
@@ -701,6 +705,13 @@ void ABRGameMode::AwardPoints(APVVCharacter* Who, int32 Amount)
 void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
 {
 	Super::NotifyKnockedDown(Victim, Cause);
+	if (ABRCharacter* Hatted = Cast<ABRCharacter>(Victim))
+	{
+		if (Hatted->GetHat() != EBRHat::None && FMath::FRand() < Hatted->GetHatKnockOffChance())
+		{
+			Hatted->KnockOffHat(); // it flies off; anyone can grab it
+		}
+	}
 	APVVCharacter* By = Cast<APVVCharacter>(Cause);
 	if (!By || By == Victim)
 	{

@@ -49,6 +49,18 @@ public:
 	void SaveLook() const;
 	void LoadLook();
 
+	// --- Unlockable hats (lifetime stats saved on this PC) ---------------------------------
+	int32 LifetimeTacos = 0;
+	int32 LifetimeKnockdowns = 0;
+	int32 LifetimeCannonShots = 0;
+	int32 LifetimeCatches = 0;
+	/** Add one finished round's stats (called once when a round ends). */
+	void BankRoundStats(const class ABRPlayerState* PS);
+	/** Can you start a round wearing this hat? */
+	bool IsHatUnlocked(EBRHat Hat) const;
+	/** "Eat 30 tacos (12/30)" style text for a locked hat; empty when unlocked. */
+	FString HatUnlockText(EBRHat Hat) const;
+
 private:
 	IOnlineSessionPtr GetSessions() const;
 	void Status(const FString& Text);

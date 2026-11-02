@@ -11,6 +11,8 @@ class ABRPlayerState;
 class UInputAction;
 class UPhysicalAnimationComponent;
 class USkeletalMesh;
+class UStaticMesh;
+class UStaticMeshComponent;
 class USkeletalMeshComponent;
 class USoundBase;
 class UAnimSequenceBase;
@@ -57,7 +59,7 @@ public:
 	float LastScannedTime = -1000.f;
 	TWeakObjectPtr<ABRCharacter> ScannedBy;
 	/** Something Border Patrol must deal with: a Runner player, or an NPC with no papers / contraband. */
-	bool IsSuspect() const { return (!bIsNPC && IsRunner()) || bIllegal || bCarriesContraband; }
+	bool IsSuspect() const { return (!bIsNPC && IsRunner() && !bDisguised) || bIllegal || bCarriesContraband; }
 	void StartFollowing(ABRCharacter* NewLeader, int32 Pay);
 
 	virtual void PossessedBy(AController* NewController) override;
@@ -74,6 +76,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsOnShoulders() const { return bOnShoulders; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDiving() const { return bDiving; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsHoldingProp() const;
+	UFUNCTION(BlueprintPure, Category = "BR|Hats") EBRHat GetHat() const { return WornHat; }
+	float GetHatKnockOffChance() const { return HatKnockOffChance; }
+	EBRHat GetDefaultHat() const { return DefaultHat; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDisguised() const { return bDisguised; }
+	/** Server: put on a hat (drops nothing - see KnockOffHat). */
+	void SetHat(EBRHat Hat);
+	/** Server: the hat flies off and lands on the ground for anyone to grab. */
+	void KnockOffHat();
+	/** Server: tell the server which inventory slot is selected (shows that item in your hand). */
+	UFUNCTION(Server, Reliable) void Server_SelectSlot(int32 Slot);
+	/** NPCs: wear a poncho just for looks (so disguised Runners blend in). */
+	void SetNPCPoncho(bool bOn) { bDisguised = bOn; OnRep_Disguise(); }
 	/** Selected inventory slot (mouse wheel). */
 	int32 GetSelectedSlot() const { return SelectedSlot; }
 	/** Server: dance uncontrollably for a while (mariachi). */
@@ -306,6 +320,20 @@ protected:
 	/** Arm strength while driving (high = hands stay on the wheel like the animation). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float DriveArmStrength = 5000.f;
 
+	// --- Hats with skills -----------------------------------------------------------------
+	/** Hat meshes (SK_Outfit_CowboyHat, SK_Hat_Sombrero...). Leave empty to keep your OutfitHead as set. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Hats") TMap<EBRHat, TObjectPtr<USkeletalMesh>> HatMeshes;
+	/** Hat this team starts with (Runner: Cowboy Hat, Border Patrol: Patrol Cap). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Hats") EBRHat DefaultHat = EBRHat::CowboyHat;
+	/** Chance (0..1) your hat flies off when someone knocks you out. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Hats") float HatKnockOffChance = 0.6f;
+	/** Disguise poncho mesh (SK_Outfit_Poncho), shown while disguised. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Hats") TObjectPtr<USkeletalMesh> PonchoMesh;
+	/** What you hold in your hand for each selected item (trumpet: SM_Trumpet). Missing ones use a simple shape. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Hats") TMap<EBRItem, TObjectPtr<UStaticMesh>> HeldItemMeshes;
+	/** Position/turn of held items in your hand. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Hats") FTransform HeldItemOffset = FTransform(FRotator(0.f, 0.f, 0.f), FVector(0.f, 8.f, 0.f));
+
 	// --- Customization: how the menu sliders reach your materials ---------------------
 	/** Vector parameters on your BODY material(s) that get the skin colour. Add one called SkinColor to your body material. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> SkinColorParameters = { TEXT("SkinColor"), TEXT("SkinTint"), TEXT("BaseColorFactor") };
@@ -338,6 +366,13 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_Shoulders) bool bOnShoulders = false;
 	UPROPERTY(Replicated) bool bDiving = false;
 	UPROPERTY(Replicated) TObjectPtr<class ABRPhysicsProp> HeldProp;
+	UPROPERTY(ReplicatedUsing = OnRep_Hat) EBRHat WornHat = EBRHat::None;
+	UPROPERTY(ReplicatedUsing = OnRep_Disguise) bool bDisguised = false;
+	UPROPERTY(ReplicatedUsing = OnRep_HeldItem) EBRItem HeldItem = EBRItem::None;
+	int32 ServerSelectedSlot = 0;
+	bool bHatAssigned = false;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USkeletalMeshComponent> DisguiseOutfit;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> HeldItemMesh;
 	TWeakObjectPtr<ABRCharacter> ShoulderBase;
 	float LastSlapTime = -100.f;
 	float LastDiveTime = -100.f;
@@ -427,6 +462,13 @@ private:
 	UFUNCTION() void OnRep_Look();
 	UFUNCTION() void OnRep_InCannon();
 	UFUNCTION() void OnRep_Shoulders();
+	UFUNCTION() void OnRep_Hat();
+	UFUNCTION() void OnRep_Disguise();
+	UFUNCTION() void OnRep_HeldItem();
+	virtual float GetDamageTakenMultiplier() const override;
+	/** Server: something blew your disguise (sprinting, fighting, getting hit). */
+	void BlowDisguise();
+	void TickOutfitState();
 	virtual bool HandleJumpPressed() override;
 	virtual bool HandlePunchHit() override;
 	virtual bool CanAttackWhileCarrying() const override;

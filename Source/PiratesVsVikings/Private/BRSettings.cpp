@@ -49,6 +49,33 @@ namespace BR
 		case EBRItem::Trumpet:     return TEXT("Mariachi Trumpet");
 		case EBRItem::TacoPlatter: return TEXT("Taco Platter");
 		case EBRItem::Drugs:       return TEXT("Drug Package");
+		case EBRItem::Poncho:      return TEXT("Disguise Poncho");
+		default:                   return TEXT("");
+		}
+	}
+
+	FString HatName(EBRHat Hat)
+	{
+		switch (Hat)
+		{
+		case EBRHat::CowboyHat:    return TEXT("Cowboy Hat");
+		case EBRHat::Sombrero:     return TEXT("Sombrero");
+		case EBRHat::PatrolCap:    return TEXT("Patrol Cap");
+		case EBRHat::HardHat:      return TEXT("Hard Hat");
+		case EBRHat::CannonHelmet: return TEXT("Cannonball Helmet");
+		default:                   return TEXT("No hat");
+		}
+	}
+
+	FString HatSkill(EBRHat Hat)
+	{
+		switch (Hat)
+		{
+		case EBRHat::CowboyHat:    return TEXT("+12% speed");
+		case EBRHat::Sombrero:     return TEXT("get hungry 40% slower, harder to spot by day");
+		case EBRHat::PatrolCap:    return TEXT("scanner: longer range, twice as fast");
+		case EBRHat::HardHat:      return TEXT("take 40% less damage from hits");
+		case EBRHat::CannonHelmet: return TEXT("land from the cannon / catapult on your feet");
 		default:                   return TEXT("");
 		}
 	}

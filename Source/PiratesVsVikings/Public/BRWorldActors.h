@@ -471,6 +471,31 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Tag;
 };
 
+/** A hat that got knocked off someone's head. Anyone can pick it up and wear it (E). */
+UCLASS(meta = (DisplayName = "BR Hat Pickup"))
+class PIRATESVSVIKINGS_API ABRHatPickup : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRHatPickup();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.3f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	UPROPERTY(ReplicatedUsing = OnRep_HatInfo, EditAnywhere, Category = "BR|Hat") EBRHat Hat = EBRHat::CowboyHat;
+	UPROPERTY(ReplicatedUsing = OnRep_HatInfo, EditAnywhere, Category = "BR|Hat") TObjectPtr<class USkeletalMesh> HatMesh;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class USkeletalMeshComponent> Visual;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Tag;
+	UFUNCTION() void OnRep_HatInfo();
+};
+
 /** A taco platter someone put down: anyone can grab a taco (E) until it's empty. */
 UCLASS(meta = (DisplayName = "BR Taco Platter"))
 class PIRATESVSVIKINGS_API ABRTacoPlatter : public ABRGreyboxActor, public IPVVInteractable

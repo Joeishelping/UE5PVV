@@ -475,7 +475,7 @@ void APVVCharacter::ReceiveMeleeHit(APVVCharacter* Attacker, float Damage, const
 
 	if (Damage > 0.f && Condition == EPVVCondition::Normal)
 	{
-		Balance = FMath::Max(0.f, Balance - Damage);
+		Balance = FMath::Max(0.f, Balance - Damage * GetDamageTakenMultiplier());
 		LastDamageTime = GetWorld()->GetTimeSeconds();
 		if (Balance <= 0.f)
 		{
@@ -564,7 +564,7 @@ void APVVCharacter::ReceiveHeldPunch(APVVCharacter* Attacker, float Damage)
 		return;
 	}
 	Multicast_HitReceived(Attacker);
-	Balance = FMath::Max(0.f, Balance - Damage);
+	Balance = FMath::Max(0.f, Balance - Damage * GetDamageTakenMultiplier());
 	LastDamageTime = GetWorld()->GetTimeSeconds();
 	if (Balance <= 0.f)
 	{

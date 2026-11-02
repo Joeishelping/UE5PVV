@@ -370,6 +370,8 @@ protected:
 	virtual bool HandleJumpPressed() { return false; }
 	/** Return true if this character deals punch damage itself (physics fists) instead of the invisible sphere in front. */
 	virtual bool HandlePunchHit() { return false; }
+	/** Damage taken from hits is multiplied by this (e.g. a hard hat). */
+	virtual float GetDamageTakenMultiplier() const { return 1.f; }
 	/** Allow punching while holding someone (Gang Beasts style hold + punch). */
 	virtual bool CanAttackWhileCarrying() const { return false; }
 	void CancelHold();

@@ -15,6 +15,7 @@ class PIRATESVSVIKINGS_API ABRPlayerController : public APVVPlayerController
 public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void PlayerTick(float DeltaTime) override;
 
 	/** Main menu (team choice, host/join). Opens at startup and with M in game. */
 	void ShowMenu();
@@ -67,6 +68,8 @@ public:
 protected:
 	UPROPERTY() TObjectPtr<UBRMenuWidget> Menu;
 	FTimerHandle PreferredTeamTimer;
+	/** This round's stats were added to your lifetime unlock progress. */
+	bool bBankedRound = false;
 	void ApplyPreferredTeam();
 
 	UFUNCTION(Server, Reliable) void Server_SetLook(const FBRLook& NewLook);

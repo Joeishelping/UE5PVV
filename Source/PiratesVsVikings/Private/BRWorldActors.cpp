@@ -11,6 +11,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -334,7 +335,11 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		}
 		else if (Item == EBRItem::CannonSuit)
 		{
-			Tell(Interactor, LOCTEXT("BoughtSuit", "Bought: Cannonball Suit. Climb into the Human Cannon once the Line opens!"));
+			if (ABRCharacter* Buyer = Cast<ABRCharacter>(Interactor))
+			{
+				Buyer->SetHat(EBRHat::CannonHelmet); // you wear it right away
+			}
+			Tell(Interactor, LOCTEXT("BoughtSuit", "Suited up: Cannonball Helmet (no knockdown when you land). Climb into the Human Cannon once the Line opens!"));
 		}
 		else
 		{
@@ -1370,7 +1375,9 @@ bool ABRCannon::CanInteract_Implementation(APVVCharacter* Interactor) const
 	const ABRPlayerState* PS = BRState(Interactor);
 	const ABRGameState* GS = BRGame(this);
 	const bool bPhaseOK = GS && (GS->Phase == EBRPhase::Invasion || (bUsableDuringPrep && GS->Phase == EBRPhase::Prep));
-	return IsFreeRunner(Interactor) && PS && PS->HasItem(EBRItem::CannonSuit) && bPhaseOK;
+	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	const bool bSuited = (PS && PS->HasItem(EBRItem::CannonSuit)) || (BRC && BRC->GetHat() == EBRHat::CannonHelmet);
+	return IsFreeRunner(Interactor) && bSuited && bPhaseOK;
 }
 
 float ABRCannon::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
@@ -1415,9 +1422,13 @@ void ABRCannon::OnInteract_Implementation(APVVCharacter* Interactor)
 	}
 	ABRPlayerState* PS = BRState(Interactor);
 	ABRCharacter* Runner = Cast<ABRCharacter>(Interactor);
-	if (!PS || !Runner || !PS->RemoveItem(EBRItem::CannonSuit))
+	if (!PS || !Runner || (Runner->GetHat() != EBRHat::CannonHelmet && !PS->RemoveItem(EBRItem::CannonSuit)))
 	{
 		return;
+	}
+	if (Runner->GetHat() != EBRHat::CannonHelmet)
+	{
+		Runner->SetHat(EBRHat::CannonHelmet); // suit on
 	}
 	Loaded = Runner;
 	Aim = FRotator(45.f, 0.f, 0.f);
@@ -1724,6 +1735,76 @@ void ABRItemPickup::OnInteract_Implementation(APVVCharacter* Interactor)
 		}
 		Destroy();
 	}
+}
+
+// ===========================================================================================
+// Hat pickup (knocked-off hats)
+
+ABRHatPickup::ABRHatPickup()
+{
+	bReplicates = true;
+	Visual = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Visual"));
+	Visual->SetupAttachment(Root);
+	Visual->SetRelativeLocation(FVector(0.f, 0.f, -165.f)); // hat meshes sit at head height; drop them to the ground
+	Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AddMesh(TEXT("Marker"), SphereMesh, FVector(0.f, 0.f, 12.f), FVector(22.f, 22.f, 22.f), FLinearColor(0.9f, 0.75f, 0.2f), FRotator::ZeroRotator, false);
+	Tag = AddLabel(TEXT("Tag"), FVector(0.f, 0.f, 60.f), 18.f, FColor(255, 230, 120));
+	InitialLifeSpan = 180.f;
+}
+
+void ABRHatPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRHatPickup, Hat);
+	DOREPLIFETIME(ABRHatPickup, HatMesh);
+}
+
+void ABRHatPickup::BeginPlay()
+{
+	Super::BeginPlay();
+	OnRep_HatInfo();
+}
+
+void ABRHatPickup::OnRep_HatInfo()
+{
+	if (Visual)
+	{
+		Visual->SetSkeletalMeshAsset(HatMesh);
+	}
+	if (UStaticMeshComponent* Marker = FindComponentByClass<UStaticMeshComponent>())
+	{
+		Marker->SetHiddenInGame(HatMesh != nullptr); // little ball only when there's no hat mesh to show
+	}
+	if (Tag)
+	{
+		Tag->SetText(FText::FromString(FString::Printf(TEXT("%s: %s"), *BR::HatName(Hat), *BR::HatSkill(Hat))));
+	}
+}
+
+bool ABRHatPickup::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	return BRC && !BRC->IsNPC() && Interactor->GetCondition() == EPVVCondition::Normal && Hat != EBRHat::None;
+}
+
+FText ABRHatPickup::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return FText::Format(LOCTEXT("WearHat", "Wear the {0} ({1})"), FText::FromString(BR::HatName(Hat)), FText::FromString(BR::HatSkill(Hat)));
+}
+
+void ABRHatPickup::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	if (!HasAuthority() || !BRC || IsActorBeingDestroyed())
+	{
+		return;
+	}
+	const EBRHat NewHat = Hat;
+	Hat = EBRHat::None; // so a swap can't loop
+	BRC->KnockOffHat(); // drop the one you're wearing
+	BRC->SetHat(NewHat);
+	BRC->Notify(FText::Format(LOCTEXT("NowWearing", "{0}: {1}"), FText::FromString(BR::HatName(NewHat)), FText::FromString(BR::HatSkill(NewHat))));
+	Destroy();
 }
 
 // ===========================================================================================

@@ -69,14 +69,48 @@ void ABRPlayerController::Server_SetLook_Implementation(const FBRLook& NewLook)
 	Look.HairColor = FMath::Clamp(Look.HairColor, 0.f, 1.f);
 	Look.HairStyle = FMath::Clamp(Look.HairStyle, 0, 64);
 	Look.FacialHair = FMath::Clamp(Look.FacialHair, 0, 64);
+	Look.HatChoice = FMath::Clamp(Look.HatChoice, -1, static_cast<int32>(EBRHat::CannonHelmet));
+	bool bHatChanged = false;
 	if (ABRPlayerState* PS = GetPlayerState<ABRPlayerState>())
 	{
+		bHatChanged = !PS->bHasLook || PS->Look.HatChoice != Look.HatChoice;
 		PS->Look = Look;
 		PS->bHasLook = true;
+	}
+	// Changing hats in the menu only works before the Line opens (no mid-fight swaps).
+	const ABRGameState* HatGS = GetWorld()->GetGameState<ABRGameState>();
+	if (bHatChanged && (!HatGS || HatGS->Phase == EBRPhase::Prep))
+	{
+		if (ABRCharacter* Hatter = Cast<ABRCharacter>(GetPawn()))
+		{
+			Hatter->SetHat(Look.HatChoice >= 0 ? static_cast<EBRHat>(Look.HatChoice) : Hatter->GetDefaultHat());
+		}
 	}
 	if (ABRCharacter* Me = Cast<ABRCharacter>(GetPawn()))
 	{
 		Me->SetLook(Look);
+	}
+}
+
+void ABRPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
+	if (!IsLocalController() || !GS)
+	{
+		return;
+	}
+	if (GS->Phase != EBRPhase::Ended)
+	{
+		bBankedRound = false;
+	}
+	else if (!bBankedRound)
+	{
+		bBankedRound = true;
+		if (UBRGameInstance* GI = GetGameInstance<UBRGameInstance>())
+		{
+			GI->BankRoundStats(GetPlayerState<ABRPlayerState>()); // hat unlock progress
+		}
 	}
 }
 

@@ -419,6 +419,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Station(-11000.f, -3000.f, EBRStationKind::BuyItem, EBRItem::CannonSuit, 500, TEXT("CANNONBALL SUIT $500"), FLinearColor(0.8f, 0.15f, 0.1f));
 	Station(-11500.f, -3300.f, EBRStationKind::BuyItem, EBRItem::Shovel, 80, TEXT("SHOVEL $80"), Shop);
 	Station(-11500.f, -2700.f, EBRStationKind::BuyItem, EBRItem::Trumpet, 120, TEXT("MARIACHI TRUMPET $120"), FLinearColor(0.9f, 0.6f, 0.1f));
+	Station(-12000.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Poncho, 200, TEXT("PONCHO DISGUISE $200"), FLinearColor(0.75f, 0.25f, 0.15f));
 	Station(-11000.f, -2600.f, EBRStationKind::Job, EBRItem::None, 20, TEXT("Work the register"), Job, 5.f, 3.f);
 	Station(-10300.f, -4000.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS PUMP $25"), Shop);
 	Station(-11700.f, 1550.f, EBRStationKind::Job, EBRItem::None, 15, TEXT("Cook & sell tacos"), Job, 4.f, 2.f);

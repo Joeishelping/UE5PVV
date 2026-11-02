@@ -139,5 +139,5 @@ if __name__ == "__main__":
     process("../SK_PVV_Body_Custom.glb", "../SK_PVV_Body_Custom.glb", body_deltas)
     import glob
     for f in ["../SK_PVV_Hair_01.glb", "../Outfits/SK_Outfit_CowboyHat.glb", "../Outfits/SK_Outfit_PatrolCap.glb",
-              "../Outfits/SK_Outfit_Sunglasses.glb"] + sorted(glob.glob("../SK_Hair_*.glb")) + sorted(glob.glob("../SK_Face_*.glb")):
+              "../Outfits/SK_Outfit_Sunglasses.glb"] + sorted(glob.glob("../SK_Hair_*.glb")) + sorted(glob.glob("../SK_Face_*.glb")) + sorted(glob.glob("../SK_Hat_*.glb")):
         process(f, f, head_item_deltas)

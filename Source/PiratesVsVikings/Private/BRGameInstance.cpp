@@ -1,5 +1,7 @@
 #include "BRGameInstance.h"
 #include "PiratesVsVikings.h"
+#include "BRPlayerState.h"
+#include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -35,6 +37,11 @@ void UBRGameInstance::SaveLook() const
 	GConfig->SetInt(LookSection, TEXT("HairStyle"), Look.HairStyle, GGameUserSettingsIni);
 	GConfig->SetFloat(LookSection, TEXT("HairColor"), Look.HairColor, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("FacialHair"), Look.FacialHair, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("HatChoice"), Look.HatChoice, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("LifetimeTacos"), LifetimeTacos, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("LifetimeCannonShots"), LifetimeCannonShots, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("LifetimeCatches"), LifetimeCatches, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
@@ -55,6 +62,70 @@ void UBRGameInstance::LoadLook()
 	GConfig->GetInt(LookSection, TEXT("HairStyle"), Look.HairStyle, GGameUserSettingsIni);
 	GConfig->GetFloat(LookSection, TEXT("HairColor"), Look.HairColor, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("FacialHair"), Look.FacialHair, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("HatChoice"), Look.HatChoice, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("LifetimeTacos"), LifetimeTacos, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("LifetimeCannonShots"), LifetimeCannonShots, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("LifetimeCatches"), LifetimeCatches, GGameUserSettingsIni);
+	if (Look.HatChoice >= 0 && !IsHatUnlocked(static_cast<EBRHat>(Look.HatChoice)))
+	{
+		Look.HatChoice = -1;
+	}
+}
+
+void UBRGameInstance::BankRoundStats(const ABRPlayerState* PS)
+{
+	if (!PS)
+	{
+		return;
+	}
+	TArray<EBRHat> Before;
+	for (int32 i = 1; i <= static_cast<int32>(EBRHat::CannonHelmet); ++i)
+	{
+		if (!IsHatUnlocked(static_cast<EBRHat>(i)))
+		{
+			Before.Add(static_cast<EBRHat>(i));
+		}
+	}
+	LifetimeTacos += PS->StatTacos;
+	LifetimeKnockdowns += PS->StatKnockdowns;
+	LifetimeCannonShots += PS->StatCannonShots;
+	LifetimeCatches += PS->StatCatches;
+	SaveLook();
+	for (EBRHat Hat : Before)
+	{
+		if (IsHatUnlocked(Hat) && GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 12.f, FColor::Yellow,
+				FString::Printf(TEXT("UNLOCKED: %s (%s). Pick it in Customize."), *BR::HatName(Hat), *BR::HatSkill(Hat)));
+		}
+	}
+}
+
+bool UBRGameInstance::IsHatUnlocked(EBRHat Hat) const
+{
+	switch (Hat)
+	{
+	case EBRHat::Sombrero:     return LifetimeTacos >= 30;
+	case EBRHat::HardHat:      return LifetimeKnockdowns >= 25;
+	case EBRHat::CannonHelmet: return LifetimeCannonShots >= 10;
+	default:                   return true;
+	}
+}
+
+FString UBRGameInstance::HatUnlockText(EBRHat Hat) const
+{
+	if (IsHatUnlocked(Hat))
+	{
+		return FString();
+	}
+	switch (Hat)
+	{
+	case EBRHat::Sombrero:     return FString::Printf(TEXT("Eat 30 tacos (%d/30)"), LifetimeTacos);
+	case EBRHat::HardHat:      return FString::Printf(TEXT("Knock out 25 people (%d/25)"), LifetimeKnockdowns);
+	case EBRHat::CannonHelmet: return FString::Printf(TEXT("Get shot from the cannon 10 times (%d/10)"), LifetimeCannonShots);
+	default:                   return FString();
+	}
 }
 
 void UBRGameInstance::Init()

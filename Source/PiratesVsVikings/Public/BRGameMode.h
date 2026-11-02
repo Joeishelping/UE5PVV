@@ -121,6 +121,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") float ContrabandNPCChance = 0.1f;
 	/** Unemployed share of Runners (they have to rummage through trash). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") float UnemployedChance = 0.25f;
+	/** Chance (0..1) an NPC wears a poncho, so disguised Runners blend in. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") float NPCPonchoChance = 0.25f;
 
 	/** Townsfolk strolling around the Runner village. 0 = none. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") int32 VillagerCount = 12;

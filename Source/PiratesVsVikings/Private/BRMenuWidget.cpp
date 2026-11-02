@@ -258,8 +258,11 @@ void UBRMenuWidget::BuildCustomize(UVerticalBox* Box)
 	EarSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnEarChanged);
 
 	// Hair + facial hair.
-	AddRow(CustomizeBox, MakePickerRow(TEXT("Hair"), HairLabel, false), 2.f);
-	AddRow(CustomizeBox, MakePickerRow(TEXT("Beard"), FacialHairLabel, true), 2.f);
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Hair"), HairLabel, 0), 2.f);
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Beard"), FacialHairLabel, 1), 2.f);
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Hat"), HatLabel, 2), 2.f);
+	HatLockedText = MakeText(TEXT(""), 12, FLinearColor(0.7f, 0.7f, 0.7f));
+	AddRow(CustomizeBox, HatLockedText, 2.f);
 	AddRow(CustomizeBox, MakeSliderRow(TEXT("Hair color"), Look.HairColor, HairColorSlider, HairColorSwatch), 2.f);
 	HairColorSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnHairColorChanged);
 
@@ -293,7 +296,7 @@ void UBRMenuWidget::BuildCustomize(UVerticalBox* Box)
 	RefreshPickers();
 }
 
-UHorizontalBox* UBRMenuWidget::MakePickerRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, bool bFacial)
+UHorizontalBox* UBRMenuWidget::MakePickerRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, int32 Which)
 {
 	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	USizeBox* LabelBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
@@ -303,7 +306,12 @@ UHorizontalBox* UBRMenuWidget::MakePickerRow(const FString& Label, TObjectPtr<UT
 	LabelBox->AddChild(Text);
 	UButton* Prev = MakeButton(TEXT("<"), Neutral);
 	UButton* Next = MakeButton(TEXT(">"), Neutral);
-	if (bFacial)
+	if (Which == 2)
+	{
+		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHatPrev);
+		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHatNext);
+	}
+	else if (Which == 1)
 	{
 		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFacialPrev);
 		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFacialNext);
@@ -341,7 +349,52 @@ void UBRMenuWidget::RefreshPickers()
 	};
 	if (HairLabel) HairLabel->SetText(FText::FromString(Describe(GI->Look.HairStyle, Me ? Me->GetHairStyleCount() : 0, TEXT("Bald"))));
 	if (FacialHairLabel) FacialHairLabel->SetText(FText::FromString(Describe(GI->Look.FacialHair, Me ? Me->GetFacialHairCount() : 0, TEXT("Clean shaven"))));
+	if (HatLabel)
+	{
+		const FString HatText = GI->Look.HatChoice < 0 ? FString(TEXT("Team default"))
+			: GI->Look.HatChoice == 0 ? FString(TEXT("No hat"))
+			: FString::Printf(TEXT("%s: %s"), *BR::HatName(static_cast<EBRHat>(GI->Look.HatChoice)), *BR::HatSkill(static_cast<EBRHat>(GI->Look.HatChoice)));
+		HatLabel->SetText(FText::FromString(HatText));
+	}
+	if (HatLockedText)
+	{
+		FString Locked;
+		for (int32 i = 1; i <= static_cast<int32>(EBRHat::CannonHelmet); ++i)
+		{
+			const FString Need = GI->HatUnlockText(static_cast<EBRHat>(i));
+			if (!Need.IsEmpty())
+			{
+				Locked += FString::Printf(TEXT("%sLOCKED %s: %s"), Locked.IsEmpty() ? TEXT("") : TEXT("\n"), *BR::HatName(static_cast<EBRHat>(i)), *Need);
+			}
+		}
+		HatLockedText->SetText(FText::FromString(Locked));
+	}
 }
+
+void UBRMenuWidget::StepHat(int32 Step)
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	if (!GI)
+	{
+		return;
+	}
+	// Options: -1 team default, 0 no hat, then every unlocked hat.
+	TArray<int32> Options = { -1, 0 };
+	for (int32 i = 1; i <= static_cast<int32>(EBRHat::CannonHelmet); ++i)
+	{
+		if (GI->IsHatUnlocked(static_cast<EBRHat>(i)))
+		{
+			Options.Add(i);
+		}
+	}
+	const int32 Current = FMath::Max(0, Options.IndexOfByKey(GI->Look.HatChoice));
+	GI->Look.HatChoice = Options[((Current + Step) % Options.Num() + Options.Num()) % Options.Num()];
+	RefreshPickers();
+	SendLook();
+}
+
+void UBRMenuWidget::OnHatPrev() { StepHat(-1); }
+void UBRMenuWidget::OnHatNext() { StepHat(1); }
 
 void UBRMenuWidget::StepStyle(bool bFacial, int32 Step)
 {

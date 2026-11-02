@@ -34,7 +34,20 @@ enum class EBRItem : uint8
 	Shovel			UMETA(DisplayName = "Shovel"),
 	Trumpet			UMETA(DisplayName = "Mariachi Trumpet"),
 	TacoPlatter		UMETA(DisplayName = "Taco Platter"),
-	Drugs			UMETA(DisplayName = "Drug Package")
+	Drugs			UMETA(DisplayName = "Drug Package"),
+	Poncho			UMETA(DisplayName = "Disguise Poncho")
+};
+
+/** Hats: each one gives a skill. Get knocked out and it may fly off - anyone can pick it up. */
+UENUM(BlueprintType)
+enum class EBRHat : uint8
+{
+	None,
+	CowboyHat		UMETA(DisplayName = "Cowboy Hat"),
+	Sombrero		UMETA(DisplayName = "Sombrero"),
+	PatrolCap		UMETA(DisplayName = "Patrol Cap"),
+	HardHat			UMETA(DisplayName = "Hard Hat"),
+	CannonHelmet	UMETA(DisplayName = "Cannonball Helmet")
 };
 
 UENUM(BlueprintType)
@@ -67,6 +80,9 @@ enum class EBRTrap : uint8
 namespace BR
 {
 	PIRATESVSVIKINGS_API FString ItemName(EBRItem Item);
+	PIRATESVSVIKINGS_API FString HatName(EBRHat Hat);
+	/** What the hat does, e.g. "+12% speed". */
+	PIRATESVSVIKINGS_API FString HatSkill(EBRHat Hat);
 	/** Your team names from Project Settings -> Game -> Border Run. */
 	PIRATESVSVIKINGS_API FString RunnerName();
 	PIRATESVSVIKINGS_API FString WardenName();
@@ -106,6 +122,8 @@ struct FBRLook
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float HairColor = 0.f;
 	/** 0 = clean shaven, 1.. = Facial Hair Styles list on the character Blueprint (mustaches, beards). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 FacialHair = 0;
+	/** Hat you start with: -1 = your team's normal hat, otherwise an EBRHat you've unlocked. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 HatChoice = -1;
 
 	/** False until someone picked a look (then the character keeps its Blueprint colours). */
 	UPROPERTY() bool bSet = false;

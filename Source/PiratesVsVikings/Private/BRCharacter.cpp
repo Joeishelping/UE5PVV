@@ -79,6 +79,11 @@ ABRCharacter::ABRCharacter()
 	OutfitFace = MakeOutfit(TEXT("OutfitFace"));
 	Hair = MakeOutfit(TEXT("Hair"));
 	FacialHair = MakeOutfit(TEXT("FacialHair"));
+	DisguiseOutfit = MakeOutfit(TEXT("DisguiseOutfit"));
+	HeldItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldItemMesh"));
+	HeldItemMesh->SetupAttachment(GetMesh());
+	HeldItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HeldItemMesh->SetVisibility(false);
 
 	// Greybox gun (pointing along +X, grip down). Restyled per weapon at runtime.
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -125,6 +130,9 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bOnShoulders);
 	DOREPLIFETIME(ABRCharacter, bDiving);
 	DOREPLIFETIME(ABRCharacter, HeldProp);
+	DOREPLIFETIME(ABRCharacter, WornHat);
+	DOREPLIFETIME(ABRCharacter, bDisguised);
+	DOREPLIFETIME(ABRCharacter, HeldItem);
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -148,11 +156,25 @@ void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 	Random.HairColor = HairRoll < 0.5f ? 0.f : (HairRoll < 0.9f ? FMath::FRandRange(.06f, .3f) : FMath::FRandRange(.8f, .95f)); // own colour, dark/brown, or grey
 	Random.bSet = true;
 	Look = Random;
+	if (HatMeshes.Num() > 0)
+	{
+		TArray<EBRHat> Hats;
+		HatMeshes.GetKeys(Hats);
+		Hats.Add(EBRHat::None);
+		WornHat = Hats[FMath::RandRange(0, Hats.Num() - 1)];
+		bHatAssigned = true;
+	}
 }
 
 void ABRCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
+	if (!bHatAssigned && !bIsNPC)
+	{
+		const ABRPlayerState* HatPS = GetBRPlayerState();
+		const int32 Choice = HatPS && HatPS->bHasLook ? HatPS->Look.HatChoice : -1;
+		SetHat(Choice >= 0 ? static_cast<EBRHat>(Choice) : DefaultHat);
+	}
 	if (const ABRPlayerState* PS = GetBRPlayerState(); PS && PS->bHasLook)
 	{
 		SetLook(PS->Look);
@@ -189,7 +211,10 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 	}
 	bFlying = false;
 	ClearRestraint(); // the zip-ties snap on impact
-	ApplyKnockdown(nullptr, -GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 150.f)); // tumble
+	if (WornHat != EBRHat::CannonHelmet)
+	{
+		ApplyKnockdown(nullptr, -GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 150.f)); // tumble
+	}
 }
 
 void ABRCharacter::SetInCannon(bool bIn)
@@ -263,9 +288,9 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor), BR::ClothColor(L.PantsColor), ClothMaterialSlot);
 	TintOutfit(Hair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	TintOutfit(FacialHair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
-	if (OutfitHead)
+	if (OutfitHead && HatMeshes.Num() == 0)
 	{
-		OutfitHead->SetHiddenInGame(!L.bHat);
+		OutfitHead->SetHiddenInGame(!L.bHat); // hat system off: the Hat checkbox shows/hides your Blueprint hat
 	}
 	PendingFace = L;
 	bFacePending = true; // applied in Tick once the body is ready
@@ -562,7 +587,7 @@ void ABRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	for (USkeletalMeshComponent* Outfit : { OutfitTop.Get(), OutfitBottom.Get(), OutfitHead.Get(), OutfitFace.Get(), Hair.Get(), FacialHair.Get() })
+	for (USkeletalMeshComponent* Outfit : { OutfitTop.Get(), OutfitBottom.Get(), OutfitHead.Get(), OutfitFace.Get(), Hair.Get(), FacialHair.Get(), DisguiseOutfit.Get() })
 	{
 		// Clothes copy every bone of the body (incl. physics/ragdoll) and sit exactly on it.
 		Outfit->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
@@ -582,6 +607,13 @@ void ABRCharacter::BeginPlay()
 	}
 	FaceReadyTime = GetWorld()->GetTimeSeconds() + 1.f;
 	ApplyLook(Look);
+	if (HeldItemMesh && GetMesh() && GetMesh()->DoesSocketExist(TEXT("hand_r")))
+	{
+		HeldItemMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("hand_r"));
+		HeldItemMesh->SetRelativeTransform(HeldItemOffset);
+	}
+	OnRep_Hat();
+	OnRep_Disguise();
 }
 
 ABRPlayerState* ABRCharacter::GetBRPlayerState() const
@@ -671,6 +703,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	if (bAiming)
 	{
 		Move->MaxWalkSpeed = FMath::Min(Move->MaxWalkSpeed, WalkSpeed * 0.6f);
+	}
+	if (WornHat == EBRHat::CowboyHat)
+	{
+		Multiplier *= 1.12f; // Cowboy Hat: rodeo legs
 	}
 	Move->MaxWalkSpeed *= Multiplier;
 	Move->MaxWalkSpeedCrouched = 220.f * Multiplier;
@@ -783,6 +819,7 @@ void ABRCharacter::Input_NextItem()
 	const ABRPlayerState* PS = GetBRPlayerState();
 	const int32 Count = PS ? FMath::Max(1, PS->Inventory.Num()) : 1;
 	SelectedSlot = (SelectedSlot + 1) % Count;
+	Server_SelectSlot(SelectedSlot);
 }
 
 void ABRCharacter::Input_PrevItem()
@@ -790,6 +827,7 @@ void ABRCharacter::Input_PrevItem()
 	const ABRPlayerState* PS = GetBRPlayerState();
 	const int32 Count = PS ? FMath::Max(1, PS->Inventory.Num()) : 1;
 	SelectedSlot = (SelectedSlot - 1 + Count) % Count;
+	Server_SelectSlot(SelectedSlot);
 }
 
 void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
@@ -1226,6 +1264,10 @@ void ABRCharacter::Multicast_Ate_Implementation()
 void ABRCharacter::OnAttackStartedNative()
 {
 	PlayOneShot(PunchAnim);
+	if (HasAuthority())
+	{
+		BlowDisguise(); // nobody in a poncho throws punches
+	}
 	// Physics fists: throw one arm forward (alternating), on every screen.
 	bPunchLeft = !bPunchLeft;
 	if (bWobbleOn && GetMesh())
@@ -1453,7 +1495,8 @@ void ABRCharacter::OnDroneFinished()
 void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector_NetQuantizeNormal Direction)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (!IsWarden() || Now - LastScanTime < 1.5f || FVector::Dist(Start, GetActorLocation()) > 900.f)
+	const bool bCap = WornHat == EBRHat::PatrolCap;
+	if (!IsWarden() || Now - LastScanTime < (bCap ? 0.75f : 1.5f) || FVector::Dist(Start, GetActorLocation()) > 900.f)
 	{
 		return;
 	}
@@ -1467,7 +1510,7 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	// One person at a time, up close (walk up to the truck window).
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRScan), false, this);
 	FHitResult Hit;
-	const float Range = 450.f;
+	const float Range = bCap ? 680.f : 450.f;
 	const FVector From = GetActorLocation() + FVector(0.f, 0.f, 40.f);
 	if (!GetWorld()->SweepSingleByObjectType(Hit, From, From + FVector(Direction) * Range, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(60.f), Params))
 	{
@@ -1486,7 +1529,7 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	{
 		Notify(LOCTEXT("ScanWarden", "SCAN: that's a fellow agent."));
 	}
-	else if (!Target->IsNPC())
+	else if (!Target->IsNPC() && !Target->IsDisguised())
 	{
 		Target->Spot(8.f);
 		Notify(LOCTEXT("ScanRunner", "SCAN: RUNNER! (tagged) - order them out / zip-tie them!"));
@@ -1693,6 +1736,10 @@ void ABRCharacter::TickShake(float DeltaSeconds)
 
 void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 {
+	if (HasAuthority())
+	{
+		BlowDisguise();
+	}
 	if (IsLocallyControlled())
 	{
 		AddShake(0.5f);
@@ -1780,6 +1827,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickWander(DeltaSeconds);
 		TickFollow(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
+		TickOutfitState();
 	}
 	TickShake(DeltaSeconds);
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
@@ -1810,7 +1858,8 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		// Hunger (Runner players only - Wardens are government-fed, NPCs eat at home).
 		if (IsRunner() && !bIsNPC && GetBRPlayerState() && GetCondition() != EPVVCondition::Detained && GS->Phase != EBRPhase::Ended)
 		{
-			const float Drain = HungerPerSecond * (IsSprinting() ? 1.8f : 1.f) * (bInRiver ? 2.f : 1.f) * (GS->IsNight() ? 0.8f : 1.f);
+			const float Drain = HungerPerSecond * (IsSprinting() ? 1.8f : 1.f) * (bInRiver ? 2.f : 1.f) * (GS->IsNight() ? 0.8f : 1.f)
+				* (WornHat == EBRHat::Sombrero ? 0.6f : 1.f);
 			const float Before = Hunger;
 			Hunger = FMath::Max(0.f, Hunger - Drain * DeltaSeconds);
 			if ((Before >= WeakHunger) != (Hunger >= WeakHunger))
@@ -1847,7 +1896,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		if (Now >= NextVisibilityUpdate)
 		{
 			NextVisibilityUpdate = Now + 0.25f;
-			float V = GS->IsNight() ? 0.3f : 1.f;
+			float V = GS->IsNight() ? 0.3f : (WornHat == EBRHat::Sombrero ? 0.85f : 1.f);
 			if (bIsCrouched) V *= 0.5f;
 			if (IsSprinting()) V *= 1.5f;
 			if (GS->Weather == EBRWeather::Sandstorm) V *= 0.5f;
@@ -2094,6 +2143,7 @@ void ABRCharacter::Server_Grab_Implementation()
 		return;
 	}
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	BlowDisguise();
 
 	// Holding something? Throw it.
 	if (HeldProp)
@@ -2189,6 +2239,7 @@ void ABRCharacter::Server_Dive_Implementation()
 	}
 	LastDiveTime = Now;
 	bDiving = true;
+	BlowDisguise();
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	LaunchCharacter(Forward * DiveSpeed + FVector(0.f, 0.f, 320.f), true, true);
 }
@@ -2353,6 +2404,177 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 			}
 		}
 	}
+}
+
+// -------------------------------------------------------------------------------------------
+// Hats, disguise, held items
+
+void ABRCharacter::SetHat(EBRHat Hat)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	WornHat = Hat;
+	bHatAssigned = true;
+	OnRep_Hat();
+	ForceNetUpdate();
+}
+
+void ABRCharacter::OnRep_Hat()
+{
+	UpdateMovementSpeed();
+	if (HatMeshes.Num() == 0 || !OutfitHead)
+	{
+		return; // hat system not set up: keep the Blueprint's OutfitHead
+	}
+	USkeletalMesh* HatMesh = WornHat == EBRHat::None ? nullptr : HatMeshes.FindRef(WornHat).Get();
+	OutfitHead->SetSkeletalMeshAsset(HatMesh);
+	OutfitHead->SetLeaderPoseComponent(GetMesh(), true);
+	OutfitHead->SetHiddenInGame(HatMesh == nullptr);
+}
+
+void ABRCharacter::KnockOffHat()
+{
+	if (!HasAuthority() || WornHat == EBRHat::None)
+	{
+		return;
+	}
+	const FVector Head = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation();
+	FHitResult Ground;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRHatDrop), false, this);
+	const FVector Drop = Head + FVector(FMath::FRandRange(-120.f, 120.f), FMath::FRandRange(-120.f, 120.f), 0.f);
+	const FVector At = GetWorld()->LineTraceSingleByChannel(Ground, Drop, Drop - FVector(0.f, 0.f, 600.f), ECC_Visibility, Params) ? Ground.ImpactPoint : GetActorLocation();
+	const FTransform T(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At);
+	if (ABRHatPickup* Pickup = GetWorld()->SpawnActorDeferred<ABRHatPickup>(ABRHatPickup::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Pickup->Hat = WornHat;
+		Pickup->HatMesh = HatMeshes.FindRef(WornHat).Get();
+		Pickup->FinishSpawning(T);
+	}
+	SetHat(EBRHat::None);
+}
+
+float ABRCharacter::GetDamageTakenMultiplier() const
+{
+	return WornHat == EBRHat::HardHat ? 0.6f : 1.f;
+}
+
+void ABRCharacter::Server_SelectSlot_Implementation(int32 Slot)
+{
+	ServerSelectedSlot = Slot;
+}
+
+void ABRCharacter::BlowDisguise()
+{
+	if (!HasAuthority() || !bDisguised || bIsNPC)
+	{
+		return;
+	}
+	if (ABRPlayerState* PS = GetBRPlayerState())
+	{
+		PS->RemoveItem(EBRItem::Poncho);
+	}
+	bDisguised = false;
+	OnRep_Disguise();
+	Notify(LOCTEXT("PonchoRipped", "Your poncho ripped - disguise BLOWN!"));
+}
+
+void ABRCharacter::OnRep_Disguise()
+{
+	if (!DisguiseOutfit)
+	{
+		return;
+	}
+	USkeletalMesh* Poncho = bDisguised ? PonchoMesh.Get() : nullptr;
+	DisguiseOutfit->SetSkeletalMeshAsset(Poncho);
+	DisguiseOutfit->SetLeaderPoseComponent(GetMesh(), true);
+	DisguiseOutfit->SetHiddenInGame(Poncho == nullptr);
+}
+
+void ABRCharacter::TickOutfitState()
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	if (bIsNPC || !PS)
+	{
+		return;
+	}
+	// Poncho: you look like a villager (scanners say "papers in order") until you sprint, fight or get hit.
+	const bool bShouldDisguise = IsRunner() && PS->HasItem(EBRItem::Poncho);
+	if (bShouldDisguise && IsSprinting())
+	{
+		BlowDisguise();
+	}
+	else if (bShouldDisguise != bDisguised)
+	{
+		bDisguised = bShouldDisguise;
+		OnRep_Disguise();
+		if (bDisguised)
+		{
+			Notify(LOCTEXT("PonchoOn", "Disguised! You look like a local. Don't sprint, fight or get bumped."));
+		}
+	}
+	// Show the selected item in your hand.
+	EBRItem Want = PS->Inventory.IsValidIndex(ServerSelectedSlot) ? PS->Inventory[ServerSelectedSlot] : EBRItem::None;
+	switch (Want)
+	{
+	case EBRItem::Trumpet: case EBRItem::Taco: case EBRItem::TacoPlatter: case EBRItem::Drugs:
+	case EBRItem::GasCan: case EBRItem::WireCutters: case EBRItem::Shovel: break;
+	default: Want = EBRItem::None; break;
+	}
+	if (bAiming || HeldProp || GetCurrentBoat() || bInCannon)
+	{
+		Want = EBRItem::None;
+	}
+	if (Want != HeldItem)
+	{
+		HeldItem = Want;
+		OnRep_HeldItem();
+	}
+}
+
+void ABRCharacter::OnRep_HeldItem()
+{
+	if (!HeldItemMesh)
+	{
+		return;
+	}
+	if (HeldItem == EBRItem::None)
+	{
+		HeldItemMesh->SetVisibility(false);
+		return;
+	}
+	UStaticMesh* Mesh = HeldItemMeshes.FindRef(HeldItem).Get();
+	FVector Scale(1.f);
+	FRotator Turn = FRotator::ZeroRotator;
+	FLinearColor Color(1.f, 1.f, 1.f);
+	if (!Mesh)
+	{
+		// No model assigned: a simple stand-in shape.
+		const TCHAR* Shape = TEXT("/Engine/BasicShapes/Cube.Cube");
+		switch (HeldItem)
+		{
+		case EBRItem::Trumpet: Shape = TEXT("/Engine/BasicShapes/Cone.Cone"); Scale = FVector(.12f, .12f, .35f); Turn = FRotator(-90.f, 0.f, 0.f); Color = FLinearColor(1.f, .75f, .2f); break;
+		case EBRItem::Taco: Shape = TEXT("/Engine/BasicShapes/Sphere.Sphere"); Scale = FVector(.22f, .1f, .14f); Color = FLinearColor(1.f, .8f, .3f); break;
+		case EBRItem::TacoPlatter: Shape = TEXT("/Engine/BasicShapes/Cylinder.Cylinder"); Scale = FVector(.45f, .45f, .04f); Color = FLinearColor(.95f, .95f, .9f); break;
+		case EBRItem::Drugs: Scale = FVector(.22f, .16f, .1f); Color = FLinearColor(.9f, .9f, .85f); break;
+		case EBRItem::GasCan: Scale = FVector(.22f, .12f, .3f); Color = FLinearColor(.8f, .1f, .05f); break;
+		case EBRItem::WireCutters: Scale = FVector(.28f, .04f, .04f); Color = FLinearColor(.3f, .3f, .32f); break;
+		case EBRItem::Shovel: Shape = TEXT("/Engine/BasicShapes/Cylinder.Cylinder"); Scale = FVector(.04f, .04f, 1.f); Color = FLinearColor(.45f, .3f, .15f); break;
+		default: break;
+		}
+		Mesh = LoadObject<UStaticMesh>(nullptr, Shape);
+	}
+	HeldItemMesh->SetStaticMesh(Mesh);
+	HeldItemMesh->SetRelativeTransform(FTransform(Turn, HeldItemOffset.GetLocation(), Scale) * FTransform(HeldItemOffset.GetRotation()));
+	if (!HeldItemMeshes.Contains(HeldItem))
+	{
+		if (UMaterialInstanceDynamic* MID = HeldItemMesh->CreateDynamicMaterialInstance(0))
+		{
+			MID->SetVectorParameterValue(TEXT("Color"), Color);
+		}
+	}
+	HeldItemMesh->SetVisibility(true);
 }
 
 #undef LOCTEXT_NAMESPACE
