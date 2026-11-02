@@ -11,6 +11,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
@@ -161,7 +162,41 @@ void ABRStation::BeginPlay()
 {
 	ComponentColors.Add(TEXT("Counter"), Color);
 	Super::BeginPlay();
-	Label->SetText(FText::FromString(Title));
+	if (HasAuthority())
+	{
+		if (BoatSpawn.IsNearlyZero())
+		{
+			BoatSpawn = GetActorTransform().TransformPosition(BoatSpawnOffset);
+		}
+		if (Kind == EBRStationKind::Bet && !Pit)
+		{
+			float Best = MAX_flt;
+			for (TActorIterator<ABRCockfightPit> It(GetWorld()); It; ++It)
+			{
+				const float D = FVector::DistSquared(It->GetActorLocation(), GetActorLocation());
+				if (D < Best)
+				{
+					Best = D;
+					Pit = *It;
+				}
+			}
+		}
+	}
+	FString Text = Title;
+	if (Text.IsEmpty())
+	{
+		// Make a sign from the settings.
+		switch (Kind)
+		{
+		case EBRStationKind::BuyItem: Text = FString::Printf(TEXT("%s $%d"), *BR::ItemName(Item).ToUpper(), Price); break;
+		case EBRStationKind::SellItem: Text = FString::Printf(TEXT("WE BUY %s ($%d)"), *BR::ItemName(Item).ToUpper(), Price); break;
+		case EBRStationKind::Job: Text = Price > 0 ? FString::Printf(TEXT("WORK HERE ($%d)"), Price) : FString(TEXT("Dig through junk")); break;
+		case EBRStationKind::BuyBoat: Text = FString::Printf(TEXT("BOATS $%d"), Price); break;
+		case EBRStationKind::Bet: Text = FString::Printf(TEXT("%s %s"), BetSide == 0 ? TEXT("RED") : TEXT("BLUE"), Price > 0 ? *FString::Printf(TEXT("$%d"), Price) : TEXT("ALL IN")); break;
+		default: break;
+		}
+	}
+	Label->SetText(FText::FromString(Text));
 }
 
 bool ABRStation::IsOpen() const
@@ -324,8 +359,9 @@ void ABRSpikeFence::OnHurtOverlap(UPrimitiveComponent* OverlappedComp, AActor* O
 	{
 		return;
 	}
-	const float Side = FMath::Sign(Victim->GetActorLocation().X - GetActorLocation().X);
-	Victim->ReceiveMeleeHit(nullptr, 35.f, FVector(Side * 700.f, 0.f, 300.f));
+	const FVector Across = GetActorForwardVector().GetSafeNormal2D();
+	const float Side = FMath::Sign(FVector::DotProduct(Victim->GetActorLocation() - GetActorLocation(), Across));
+	Victim->ReceiveMeleeHit(nullptr, 35.f, Across * Side * 700.f + FVector(0.f, 0.f, 300.f));
 	Tell(Victim, LOCTEXT("Ouch", "OUCH! Razor wire. Use wire cutters (or go around)."));
 }
 
@@ -463,8 +499,12 @@ void ABRLadder::OnInteract_Implementation(APVVCharacter* Interactor)
 		Destroy();
 		return;
 	}
-	const float Side = FMath::Sign(Interactor->GetActorLocation().X - GetActorLocation().X);
-	const FVector Dest(GetActorLocation().X - Side * 250.f, Interactor->GetActorLocation().Y, Interactor->GetActorLocation().Z + 30.f);
+	// Over to the other side of the wall (the ladder faces across it).
+	const FVector Across = GetActorForwardVector().GetSafeNormal2D();
+	const FVector ToMe = Interactor->GetActorLocation() - GetActorLocation();
+	const float Side = FMath::Sign(FVector::DotProduct(ToMe, Across));
+	const FVector Along = ToMe - Across * FVector::DotProduct(ToMe, Across);
+	const FVector Dest = GetActorLocation() + Along * FVector(1.f, 1.f, 0.f) - Across * Side * 250.f + FVector(0.f, 0.f, ToMe.Z + 30.f);
 	Interactor->TeleportTo(Dest, Interactor->GetActorRotation());
 }
 
@@ -905,6 +945,25 @@ void ABRCockfightPit::BeginPlay()
 {
 	Super::BeginPlay();
 	SetupRoosterLooks();
+	if (HasAuthority() && bSpawnBetCounters)
+	{
+		struct FBetSpot { FVector Offset; int32 Side; int32 Amount; };
+		const FBetSpot Spots[] = { {FVector(-550.f, -250.f, 0.f), 0, 20}, {FVector(-550.f, 250.f, 0.f), 0, 0},
+			{FVector(550.f, -250.f, 0.f), 1, 20}, {FVector(550.f, 250.f, 0.f), 1, 0} };
+		for (const FBetSpot& Spot : Spots)
+		{
+			const FTransform T(GetActorRotation(), GetActorTransform().TransformPositionNoScale(Spot.Offset));
+			if (ABRStation* S = GetWorld()->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+			{
+				S->Kind = EBRStationKind::Bet;
+				S->BetSide = Spot.Side;
+				S->Price = Spot.Amount;
+				S->Pit = this;
+				S->Color = Spot.Side == 0 ? RedTeamColor : BlueTeamColor;
+				S->FinishSpawning(T);
+			}
+		}
+	}
 	if (HasAuthority())
 	{
 		const ABRGameState* GS = BRGame(this);

@@ -2,12 +2,14 @@
 #include "BRCar.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
+#include "BRMapKit.h"
 #include "BRDog.h"
 #include "BRGameState.h"
 #include "BRHUD.h"
 #include "BRPlayerController.h"
 #include "BRPlayerState.h"
 #include "BRWorldActors.h"
+#include "PVVPlayerStart.h"
 #include "PVVLake.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -47,27 +49,31 @@ FString ABRGameMode::NameOf(const APVVCharacter* Character) const
 
 void ABRGameMode::StartMatchFlow()
 {
-	if (!TActorIterator<APVVLake>(GetWorld()))
+	UWorld* World = GetWorld();
+	for (TActorIterator<ABRDesertArena> It(World); It; ++It)
 	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Arena = *It;
+		break;
+	}
+	// Your own map (Map Kit pieces placed)? Then the built-in desert is only used for sky, day/night, weather and music.
+	const bool bCustomMap = BRMap::IsCustomMap(World);
+	if (!Arena && (bCustomMap || !TActorIterator<APVVLake>(World)))
+	{
 		UClass* MapClass = ArenaClass ? ArenaClass.Get() : ABRDesertArena::StaticClass();
-		Arena = GetWorld()->SpawnActor<ABRDesertArena>(MapClass, FTransform(ArenaLocation), Params);
+		const FTransform At = bCustomMap ? FTransform::Identity : FTransform(ArenaLocation);
+		Arena = World->SpawnActorDeferred<ABRDesertArena>(MapClass, At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (Arena)
 		{
-			Arena->SpawnGameplayActors(RunnerTruckClass, WardenTruckClass, DogClass);
-			SpawnVillagers();
+			Arena->bBuildTestMap = !bCustomMap;
+			Arena->FinishSpawning(At);
 		}
+	}
+	if (Arena && Arena->bBuildTestMap)
+	{
+		Arena->SpawnGameplayActors(RunnerTruckClass, WardenTruckClass, DogClass);
 		RelocateExistingPlayers();
 	}
-	else
-	{
-		for (TActorIterator<ABRDesertArena> It(GetWorld()); It; ++It)
-		{
-			Arena = *It;
-			break;
-		}
-	}
+	SpawnVillagers();
 
 	if (ABRGameState* GS = GetBRGameState())
 	{
@@ -189,10 +195,6 @@ void ABRGameMode::CheckWinConditions()
 
 void ABRGameMode::TickRunners(ABRGameState* GS)
 {
-	if (!Arena)
-	{
-		return;
-	}
 	TArray<APVVCharacter*> ToLaunch;
 	for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
 	{
@@ -217,8 +219,8 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 			continue;
 		}
 
-		const float X = C->GetActorLocation().X;
-		if (!PS->bHasCrossedLine && X > Arena->GetLineX())
+		const FVector Where = C->GetActorLocation();
+		if (!PS->bHasCrossedLine && BRMap::HasCrossedLine(GetWorld(), Where))
 		{
 			PS->bHasCrossedLine = true;
 			if (ABRCharacter* BRC = Cast<ABRCharacter>(C))
@@ -227,7 +229,7 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 			}
 		}
 		const bool bFree = C->GetCondition() == EPVVCondition::Normal && !C->GetCarrier();
-		if (!PS->bReachedSafety && bFree && X > Arena->GetSafeX())
+		if (!PS->bReachedSafety && bFree && BRMap::IsInSafeZone(GetWorld(), Where))
 		{
 			PS->bReachedSafety = true;
 			++GS->RunnersSafe;
@@ -307,15 +309,44 @@ void ABRGameMode::NotifyDetained(APVVCharacter* Victim, APVVCharacter* Captor)
 void ABRGameMode::LaunchFromPen(APVVCharacter* Prisoner)
 {
 	ABRPlayerState* PS = Prisoner ? Cast<ABRPlayerState>(Prisoner->GetPVVPlayerState()) : nullptr;
-	if (!PS || !Arena || !Arena->GetCatapult())
+	if (!PS)
 	{
 		return;
+	}
+	ABRCatapult* Catapult = (Arena && Arena->bBuildTestMap) ? Arena->GetCatapult() : BRMap::FindCatapult(GetWorld());
+	FVector Landing;
+	if (!BRMap::GetCatapultLanding(GetWorld(), Landing))
+	{
+		if (Arena && Arena->bBuildTestMap)
+		{
+			Landing = Arena->GetCatapultLanding();
+		}
+		else
+		{
+			// No landing marker: throw them back toward the Runner spawn.
+			Landing = Prisoner->GetActorLocation();
+			for (TActorIterator<APVVPlayerStart> It(GetWorld()); It; ++It)
+			{
+				if (It->Faction == BR::Runners)
+				{
+					Landing = It->GetActorLocation();
+					break;
+				}
+			}
+		}
 	}
 	PS->RemoveIllegalItems();
 	PS->bHasCrossedLine = false;
 	PS->bIsAggressor = false;
 	PS->SentenceSeconds = 0;
-	Arena->GetCatapult()->Launch(Prisoner, Arena->GetCatapultLanding());
+	if (Catapult)
+	{
+		Catapult->Launch(Prisoner, Landing);
+	}
+	else
+	{
+		Prisoner->TeleportTo(Landing, Prisoner->GetActorRotation()); // no catapult placed: just send them home
+	}
 	Announce(FText::Format(LOCTEXT("Catapult", "{0} has been RETURNED TO SENDER via catapult!"), FText::FromString(NameOf(Prisoner))));
 }
 
@@ -399,9 +430,20 @@ void ABRGameMode::OnVehicleSearched(APVVCharacter* Warden, int32 RunnersFound)
 
 void ABRGameMode::SpawnNPCTruck()
 {
-	if (!Arena)
+	// Route: your Road Points, or the built-in map's road.
+	TArray<FVector> Route;
+	int32 CheckpointIndex = INDEX_NONE;
+	FTransform Spawn;
+	ABRCheckpointGate* RouteGate = nullptr;
+	if (!BRMap::GetRoadRoute(GetWorld(), Route, CheckpointIndex, Spawn, RouteGate))
 	{
-		return;
+		if (!Arena || !Arena->bBuildTestMap)
+		{
+			return; // custom map without Road Points = no NPC traffic
+		}
+		Arena->GetNPCRoute(Route, CheckpointIndex);
+		Spawn = Arena->GetNPCSpawn();
+		RouteGate = Arena->GetGate();
 	}
 	int32 Alive = 0;
 	for (TActorIterator<ABRTruck> It(GetWorld()); It; ++It)
@@ -413,7 +455,6 @@ void ABRGameMode::SpawnNPCTruck()
 		return;
 	}
 
-	const FTransform Spawn = Arena->GetNPCSpawn();
 	UClass* TruckClass = NPCTruckClass ? NPCTruckClass.Get() : ABRTruck::StaticClass();
 	ABRTruck* Truck = GetWorld()->SpawnActorDeferred<ABRTruck>(TruckClass, Spawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!Truck)
@@ -429,10 +470,7 @@ void ABRGameMode::SpawnNPCTruck()
 	Truck->bInfiniteFuel = true;
 	Truck->FinishSpawning(Spawn);
 
-	TArray<FVector> Route;
-	int32 CheckpointIndex = INDEX_NONE;
-	Arena->GetNPCRoute(Route, CheckpointIndex);
-	Truck->StartNPCRoute(Route, CheckpointIndex, Arena->GetGate());
+	Truck->StartNPCRoute(Route, CheckpointIndex, RouteGate);
 
 	// Look-alike NPCs (driver first). Empty seats are where Runners hide.
 	const int32 Count = FMath::Clamp(FMath::RandRange(NPCsPerTruck.X, NPCsPerTruck.Y), 1, 4);
@@ -475,12 +513,17 @@ ABRCharacter* ABRGameMode::SpawnNPC(const FTransform& Where)
 
 void ABRGameMode::SpawnVillagers()
 {
-	if (!Arena || VillagerCount <= 0)
+	if (VillagerCount <= 0)
 	{
 		return;
 	}
+	// Your Villager Spots, or the built-in town.
 	TArray<FVector> Spots;
-	Arena->GetVillageSpots(Spots);
+	BRMap::GetVillagerSpots(GetWorld(), Spots);
+	if (Spots.Num() == 0 && Arena && Arena->bBuildTestMap)
+	{
+		Arena->GetVillageSpots(Spots);
+	}
 	if (Spots.Num() == 0)
 	{
 		return;

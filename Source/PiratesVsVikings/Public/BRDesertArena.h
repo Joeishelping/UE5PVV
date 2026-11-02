@@ -40,6 +40,15 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	/**
+	 * On = build the built-in test map (desert, river, wall, town...).
+	 * Off = only the sky, day/night, weather and ambient music (for your own map built with the Map Kit).
+	 */
+	UPROPERTY(EditAnywhere, Category = "BR|Map") bool bBuildTestMap = true;
+
+	/** The built-in river only counts while the test map is on. */
+	virtual bool ContainsPoint(const FVector& WorldLocation) const override { return bBuildTestMap; }
+
 	/** Server: shops, fences, wall, catapult, pen, cars, player starts. */
 	void SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass, TSubclassOf<ABRTruck> WardenTruckClass, TSubclassOf<ABRDog> DogClass);
 
@@ -97,6 +106,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "BR|Music") float AmbientVolume = 0.45f;
 
 private:
+	bool bGameplaySpawned = false;
 	float DisplayedTime = -1.f;
 	int32 AmbientIndex = -1;
 

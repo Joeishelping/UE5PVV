@@ -188,6 +188,26 @@ void ABRDesertArena::BeginPlay()
 
 	TArray<UStaticMeshComponent*> Meshes;
 	GetComponents<UStaticMeshComponent>(Meshes);
+	if (!bBuildTestMap)
+	{
+		// Map Kit mode: throw away the built-in desert, keep the sky / weather / music.
+		for (UStaticMeshComponent* Mesh : Meshes)
+		{
+			Mesh->DestroyComponent();
+		}
+		Meshes.Reset();
+		TArray<UTextRenderComponent*> Signs;
+		GetComponents<UTextRenderComponent>(Signs);
+		for (UTextRenderComponent* SignText : Signs)
+		{
+			SignText->DestroyComponent();
+		}
+		if (RiverBed)
+		{
+			RiverBed->DestroyComponent();
+			RiverBed = nullptr;
+		}
+	}
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
 		if (const TObjectPtr<UMaterialInterface>* Material = BlockMaterials.Find(Mesh->GetFName()); Material && *Material)
@@ -368,10 +388,11 @@ FVector ABRDesertArena::GetCatapultLanding() const
 void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass, TSubclassOf<ABRTruck> WardenTruckClass, TSubclassOf<ABRDog> DogClass)
 {
 	UWorld* World = GetWorld();
-	if (!HasAuthority() || !World)
+	if (!HasAuthority() || !World || !bBuildTestMap || bGameplaySpawned)
 	{
 		return;
 	}
+	bGameplaySpawned = true;
 	const FVector O = GetActorLocation();
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -429,23 +450,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 		World->SpawnActor<ABRVillage>(VillageClass ? VillageClass.Get() : ABRVillage::StaticClass(), At(0.f, 0.f, 0.f), Params);
 	}
 	UClass* PitClass = CockfightPitClass ? CockfightPitClass.Get() : ABRCockfightPit::StaticClass();
-	if (ABRCockfightPit* Pit = World->SpawnActor<ABRCockfightPit>(PitClass, At(-9000.f, 2200.f, Ground), Params))
-	{
-		auto Bet = [&](float X, float Y, int32 Side, int32 Amount, const FString& Title)
-		{
-			const FTransform T = At(X, Y, Ground);
-			if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
-			{
-				S->Kind = EBRStationKind::Bet; S->BetSide = Side; S->Price = Amount; S->Pit = Pit; S->Title = Title;
-				S->Color = Side == 0 ? FLinearColor(0.8f, 0.1f, 0.05f) : FLinearColor(0.1f, 0.25f, 0.85f);
-				S->FinishSpawning(T);
-			}
-		};
-		Bet(-9550.f, 1950.f, 0, 20, TEXT("RED $20"));
-		Bet(-9550.f, 2450.f, 0, 0, TEXT("RED ALL IN"));
-		Bet(-8450.f, 1950.f, 1, 20, TEXT("BLUE $20"));
-		Bet(-8450.f, 2450.f, 1, 0, TEXT("BLUE ALL IN"));
-	}
+	World->SpawnActor<ABRCockfightPit>(PitClass, At(-9000.f, 2200.f, Ground), Params); // spawns its own betting counters
 
 	// --- Warden base
 	World->SpawnActor<APVVDetentionZone>(APVVDetentionZone::StaticClass(), At(7000.f, 4000.f, Ground + 150.f), Params);

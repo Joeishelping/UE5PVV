@@ -1,6 +1,7 @@
 #include "BRCharacter.h"
 #include "BRCar.h"
 #include "BRDesertArena.h"
+#include "BRMapKit.h"
 #include "BRDrone.h"
 #include "BRGameMode.h"
 #include "BRGameState.h"
@@ -1233,11 +1234,10 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	ABRGameState* GS = GetBRGameState();
-	ABRDesertArena* MyArena = FindArena();
 	const FVector Location = GetActorLocation();
 	const bool bFree = !GetCurrentBoat() && !GetCarrier();
-	const bool bInRiver = MyArena && bFree && MyArena->IsInRiver(Location);
-	const bool bDeep = bInRiver && MyArena->IsDeepWater(Location);
+	const bool bInRiver = bFree && BRMap::IsInRiver(GetWorld(), Location);
+	const bool bDeep = bInRiver && BRMap::IsDeepWater(GetWorld(), Location);
 	if (bDeep != bInDeepWater)
 	{
 		bInDeepWater = bDeep;
@@ -1331,7 +1331,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		if (bInRiver && CanMove())
 		{
 			const float Strength = RiverCurrent * (bDeep ? 1.4f : 1.f) * (GS && GS->Weather == EBRWeather::Rain ? 1.5f : 1.f);
-			AddMovementInput(MyArena->GetRiverFlowDirection(), Strength);
+			AddMovementInput(BRMap::RiverFlow(GetWorld(), Location), Strength);
 		}
 	}
 

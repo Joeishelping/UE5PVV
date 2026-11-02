@@ -147,13 +147,10 @@ void APVVBoat::ApplyWaterForces(float DeltaSeconds)
 		return;
 	}
 
-	if (!Lake.IsValid())
+	// The water under this boat (rivers you placed, or the built-in map).
+	if (APVVLake* Here = APVVLake::FindWaterAt(GetWorld(), Hull->GetComponentLocation()))
 	{
-		for (TActorIterator<APVVLake> It(GetWorld()); It; ++It)
-		{
-			Lake = *It;
-			break;
-		}
+		Lake = Here;
 	}
 
 	const FVector Origin = Hull->GetComponentLocation();

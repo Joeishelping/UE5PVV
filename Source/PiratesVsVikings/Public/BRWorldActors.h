@@ -59,17 +59,25 @@ public:
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
 	// Set before FinishSpawning (replicated so clients can show prompts).
-	UPROPERTY(Replicated) EBRStationKind Kind = EBRStationKind::BuyItem;
-	UPROPERTY(Replicated) EBRItem Item = EBRItem::None;
-	UPROPERTY(Replicated) int32 Price = 10;
-	UPROPERTY(Replicated) float WorkSeconds = 0.f;
-	UPROPERTY(Replicated) float CooldownSeconds = 0.f;
-	UPROPERTY(Replicated) bool bNightOnly = false;
-	UPROPERTY(Replicated) FString Title;
-	UPROPERTY(Replicated) FLinearColor Color = FLinearColor(0.6f, 0.6f, 0.6f);
-	/** Bet stations: which rooster (0 = RED, 1 = BLUE) and the pit. Price 0 = ALL IN. */
-	UPROPERTY(Replicated) int32 BetSide = 0;
-	UPROPERTY(Replicated) TObjectPtr<ABRCockfightPit> Pit;
+	// --- Place one in your level and set these in Details -------------------------------
+	/** Buy an item, sell an item, work a job for cash, buy a boat, or bet on the cockfight. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") EBRStationKind Kind = EBRStationKind::BuyItem;
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") EBRItem Item = EBRItem::None;
+	/** Cost (buy/boat/bet), or pay (job/sell). Bets: 0 = ALL IN. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") int32 Price = 10;
+	/** Jobs: seconds of holding E. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") float WorkSeconds = 0.f;
+	/** Seconds before it can be used again. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") float CooldownSeconds = 0.f;
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") bool bNightOnly = false;
+	/** Sign text. Leave empty to make one automatically (e.g. "LADDER $60"). */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") FString Title;
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") FLinearColor Color = FLinearColor(0.6f, 0.6f, 0.6f);
+	/** Bet stations: which rooster (0 = RED, 1 = BLUE). Leave Pit empty to use the nearest pit. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") int32 BetSide = 0;
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") TObjectPtr<ABRCockfightPit> Pit;
+	/** Boat stations: where the boat appears (drag the diamond in the viewport; should be on the water). */
+	UPROPERTY(EditAnywhere, Category = "BR|Station", meta = (MakeEditWidget = "true")) FVector BoatSpawnOffset = FVector(600.f, 0.f, 0.f);
 	FVector BoatSpawn = FVector::ZeroVector;
 
 protected:
@@ -284,6 +292,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float BettingSeconds = 40.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float FightSeconds = 12.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float ResultSeconds = 6.f;
+	/** Puts 4 betting counters around the pit automatically (RED $20 / ALL IN, BLUE $20 / ALL IN). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") bool bSpawnBetCounters = true;
 
 	/** Your own rooster model (e.g. from Fab). Replaces the greybox birds; the coloured collar + RED/BLUE sign stay. */
 	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") TObjectPtr<UStaticMesh> RoosterModel;

@@ -2,6 +2,7 @@
 #include "BRAudio.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
+#include "BRMapKit.h"
 #include "BRGameMode.h"
 #include "BRGameState.h"
 #include "BRPlayerController.h"
@@ -135,15 +136,7 @@ bool ABRCar::GetSurfaceZ(const FVector& Point, float& OutZ) const
 
 bool ABRCar::IsFlooded() const
 {
-	if (!CachedArena.IsValid())
-	{
-		for (TActorIterator<ABRDesertArena> It(GetWorld()); It; ++It)
-		{
-			CachedArena = *It;
-			break;
-		}
-	}
-	return CachedArena.IsValid() && CachedArena->IsDeepWater(GetActorLocation());
+	return BRMap::IsDeepWater(GetWorld(), GetActorLocation());
 }
 
 float ABRCar::GetDriveScale() const

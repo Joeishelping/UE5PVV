@@ -2,6 +2,7 @@
 #include "AIController.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
+#include "BRMapKit.h"
 #include "BRGameState.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -83,8 +84,6 @@ void ABRDog::Think()
 {
 	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
 	const bool bHunting = GS && GS->Phase == EBRPhase::Invasion;
-	ABRDesertArena* Arena = nullptr;
-	for (TActorIterator<ABRDesertArena> It(GetWorld()); It; ++It) { Arena = *It; break; }
 
 	ABRCharacter* Best = nullptr;
 	float BestDist = MAX_flt;
@@ -97,7 +96,7 @@ void ABRDog::Think()
 			{
 				continue;
 			}
-			if (Arena && Arena->IsInRiver(C->GetActorLocation()))
+			if (BRMap::IsInRiver(GetWorld(), C->GetActorLocation()))
 			{
 				continue; // water hides your scent
 			}

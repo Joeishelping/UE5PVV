@@ -23,6 +23,11 @@ public:
 
 	virtual void BeginPlay() override;
 
+	/** Is this point over/in this body of water? (Plain lakes: everywhere.) */
+	virtual bool ContainsPoint(const FVector& WorldLocation) const { return true; }
+	/** The water at this spot (first lake that contains it), or nullptr. */
+	static APVVLake* FindWaterAt(const UWorld* World, const FVector& WorldLocation);
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PVV|Water")
 	TObjectPtr<USceneComponent> Root;

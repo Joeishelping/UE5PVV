@@ -1007,14 +1007,10 @@ void APVVCharacter::Server_InteractStop_Implementation()
 void APVVCharacter::UpdateWading()
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (!CachedLake.IsValid() && Now >= NextLakeSearchTime)
+	if (Now >= NextLakeSearchTime)
 	{
-		NextLakeSearchTime = Now + 1.f;
-		for (TActorIterator<APVVLake> It(GetWorld()); It; ++It)
-		{
-			CachedLake = *It;
-			break;
-		}
+		NextLakeSearchTime = Now + 0.25f;
+		CachedLake = APVVLake::FindWaterAt(GetWorld(), GetActorLocation());
 	}
 
 	const float FeetZ = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();

@@ -3,6 +3,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 
 APVVLake::APVVLake()
 {
@@ -19,6 +21,22 @@ APVVLake::APVVLake()
 	{
 		Surface->SetStaticMesh(PlaneMesh.Object);
 	}
+}
+
+APVVLake* APVVLake::FindWaterAt(const UWorld* World, const FVector& WorldLocation)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<APVVLake> It(World); It; ++It)
+	{
+		if (It->ContainsPoint(WorldLocation))
+		{
+			return *It;
+		}
+	}
+	return nullptr;
 }
 
 void APVVLake::BeginPlay()
