@@ -29,7 +29,8 @@ enum class EBRItem : uint8
 	Taco			UMETA(DisplayName = "Taco"),
 	Scrap			UMETA(DisplayName = "Scrap"),
 	IllegalGun		UMETA(DisplayName = "Illegal Gun"),
-	CarKey			UMETA(DisplayName = "Car Key")
+	CarKey			UMETA(DisplayName = "Car Key"),
+	CannonSuit		UMETA(DisplayName = "Cannonball Suit")
 };
 
 UENUM(BlueprintType)

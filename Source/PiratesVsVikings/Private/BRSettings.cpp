@@ -44,6 +44,7 @@ namespace BR
 		case EBRItem::Scrap:       return TEXT("Scrap");
 		case EBRItem::IllegalGun:  return TEXT("Illegal Gun");
 		case EBRItem::CarKey:      return TEXT("Car Key");
+		case EBRItem::CannonSuit:  return TEXT("Cannonball Suit");
 		default:                   return TEXT("");
 		}
 	}

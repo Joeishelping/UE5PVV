@@ -37,6 +37,9 @@ public:
 	void OnVehicleSearched(APVVCharacter* Warden, int32 RunnersFound);
 	void ChangeApproval(float Delta);
 
+	/** Server: fling a Runner back across the border with this catapult (Warden = who loaded them, or null for the pen). */
+	void CatapultRunner(APVVCharacter* Prisoner, class ABRCatapult* Catapult, APVVCharacter* Warden);
+
 protected:
 	virtual void StartMatchFlow() override;
 	virtual void CheckWinConditions() override;
@@ -51,7 +54,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") int32 PrepSeconds = 600;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") int32 InvasionSeconds = 1200;
 	/** Holding-pen time before the catapult. Repeat offenders get RepeatOffenderSeconds more each time. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") int32 SentenceSeconds = 300;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") int32 SentenceSeconds = 90;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") int32 RepeatOffenderSeconds = 60;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Timers") float RunnerRespawnSeconds = 12.f;
 
@@ -107,6 +110,7 @@ private:
 	void RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner);
 	void SpawnNPCTruck();
 	void SpawnVillagers();
+	bool bWarnedNoRoad = false;
 	UClass* GetNPCClass() const;
 	class ABRCharacter* SpawnNPC(const FTransform& Where);
 	void SendHomeLater(APVVCharacter* Character, float Seconds);

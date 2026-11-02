@@ -15,6 +15,7 @@ class USphereComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 class UStaticMesh;
+class USoundBase;
 
 /** Shared helpers for the greybox world pieces. */
 UCLASS(Abstract)
@@ -176,15 +177,27 @@ private:
 };
 
 // ===========================================================================================
-/** Launches released detainees back over the wall. No damage, maximum comedy. */
-UCLASS()
-class PIRATESVSVIKINGS_API ABRCatapult : public ABRGreyboxActor
+/**
+ * Launches Runners back over the border. No damage, maximum comedy.
+ * Wardens: carry a zip-tied Runner here and hold E. Also fires detainees automatically when their pen time is up.
+ */
+UCLASS(meta = (DisplayName = "BR Catapult"))
+class PIRATESVSVIKINGS_API ABRCatapult : public ABRGreyboxActor, public IPVVInteractable
 {
 	GENERATED_BODY()
 
 public:
 	ABRCatapult();
 	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 1.5f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	/** Random spread around the landing spot (cm) so people don't stack up. */
+	UPROPERTY(EditAnywhere, Category = "BR|Catapult") float LandingSpread = 700.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Catapult") TObjectPtr<USoundBase> LaunchSound;
 
 	/** Server: fling this detainee at Target. */
 	void Launch(APVVCharacter* Passenger, const FVector& Target);
@@ -331,6 +344,57 @@ private:
 	void PayOut();
 	void BuildRooster(USceneComponent* Parent, const TCHAR* Prefix, const FLinearColor& Accent);
 	void SetupRoosterLooks();
+};
+
+// ===========================================================================================
+/**
+ * Human cannon. A Runner with a Cannonball Suit (buy it at a Station) climbs in (hold E),
+ * aims with the mouse and presses E to FIRE themselves over the border. Very loud.
+ * Wardens can plug it (hold E) to put it out of action for a while.
+ */
+UCLASS(meta = (DisplayName = "BR Human Cannon"))
+class PIRATESVSVIKINGS_API ABRCannon : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRCannon();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override;
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	/** Launch speed (cm/s). 4200 = about 180 m at 45 degrees. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") float LaunchSpeed = 4200.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") float MinPitch = 15.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") float MaxPitch = 70.f;
+	/** How far left/right it can turn from where you placed it (degrees). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") float YawRange = 60.f;
+	/** Seconds a Warden's plug keeps it out of action. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") float PluggedSeconds = 90.f;
+	/** Usable during Prep too (off = only once the Line is open). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") bool bUsableDuringPrep = false;
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") TObjectPtr<USoundBase> FireSound;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> BarrelPivot;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Muzzle;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Sign;
+
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Boom();
+
+private:
+	UPROPERTY(Replicated) TObjectPtr<APVVCharacter> Loaded;
+	UPROPERTY(Replicated) FRotator Aim = FRotator(45.f, 0.f, 0.f);
+	UPROPERTY(Replicated) float PluggedUntil = 0.f;
+	float BoomTime = -100.f;
+
+	bool IsPlugged() const;
+	void Fire();
+	void Unload();
 };
 
 // ===========================================================================================

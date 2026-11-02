@@ -416,6 +416,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Station(-12000.f, -3000.f, EBRStationKind::BuyItem, EBRItem::WireCutters, 50, TEXT("WIRE CUTTERS $50"), Shop);
 	Station(-12000.f, -2600.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS $25"), Shop);
 	Station(-11000.f, -3400.f, EBRStationKind::SellItem, EBRItem::Scrap, 25, TEXT("WE BUY SCRAP"), Shop);
+	Station(-11000.f, -3000.f, EBRStationKind::BuyItem, EBRItem::CannonSuit, 500, TEXT("CANNONBALL SUIT $500"), FLinearColor(0.8f, 0.15f, 0.1f));
 	Station(-11000.f, -2600.f, EBRStationKind::Job, EBRItem::None, 20, TEXT("Work the register"), Job, 5.f, 3.f);
 	Station(-10300.f, -4000.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS PUMP $25"), Shop);
 	Station(-11700.f, 1550.f, EBRStationKind::Job, EBRItem::None, 15, TEXT("Cook & sell tacos"), Job, 4.f, 2.f);
@@ -451,6 +452,9 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	}
 	UClass* PitClass = CockfightPitClass ? CockfightPitClass.Get() : ABRCockfightPit::StaticClass();
 	World->SpawnActor<ABRCockfightPit>(PitClass, At(-9000.f, 2200.f, Ground), Params); // spawns its own betting counters
+
+	// --- Human cannon on the near bank, aimed across the border
+	World->SpawnActor<ABRCannon>(ABRCannon::StaticClass(), At(-5800.f, 2500.f, Ground), Params);
 
 	// --- Warden base
 	World->SpawnActor<APVVDetentionZone>(APVVDetentionZone::StaticClass(), At(7000.f, 4000.f, Ground + 150.f), Params);

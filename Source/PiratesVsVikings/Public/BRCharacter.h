@@ -46,6 +46,14 @@ public:
 	void StartWandering(const FVector& Home, float Radius);
 
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void Landed(const FHitResult& Hit) override;
+
+	/** Server: fly through the air (catapult / cannon). Lands with a comedy tumble; zip-ties come off on landing. */
+	void StartFlight(const FVector& Velocity);
+	/** Server: hide inside a cannon / pop back out. */
+	void SetInCannon(bool bIn);
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsInCannon() const { return bInCannon; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsFlying() const { return bFlying; }
 
 	/** Server: set this character's customization (replicates to everyone). */
 	void SetLook(const FBRLook& NewLook);
@@ -244,6 +252,8 @@ protected:
 private:
 	UPROPERTY(Replicated) bool bIsNPC = false;
 	UPROPERTY(ReplicatedUsing = OnRep_Look) FBRLook Look;
+	UPROPERTY(ReplicatedUsing = OnRep_InCannon) bool bInCannon = false;
+	UPROPERTY(Replicated) bool bFlying = false;
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
 	bool bWandering = false;
 	FVector WanderHome = FVector::ZeroVector;
@@ -311,6 +321,7 @@ private:
 
 	UFUNCTION() void OnRep_Aiming();
 	UFUNCTION() void OnRep_Look();
+	UFUNCTION() void OnRep_InCannon();
 	void ApplyLook(const FBRLook& L);
 	void ApplySkin(const FLinearColor& Color);
 	void TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color, int32 OnlySlot = -1);

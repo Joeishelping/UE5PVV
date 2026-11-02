@@ -17,6 +17,8 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
 #define LOCTEXT_NAMESPACE "BRWorld"
@@ -569,22 +571,72 @@ void ABRCatapult::Launch(APVVCharacter* Passenger, const FVector& Target)
 		return;
 	}
 	const FVector Start = Basket->GetComponentLocation();
-	Passenger->ReleaseFromDetention(Start);
+	if (Passenger->GetCarrier())
+	{
+		Passenger->GetCarrier()->TakeCarried();
+	}
+	if (Passenger->GetCondition() == EPVVCondition::Detained)
+	{
+		Passenger->ReleaseFromDetention(Start);
+	}
+	else
+	{
+		Passenger->TeleportTo(Start, Passenger->GetActorRotation(), false, true);
+	}
 
-	// Flight time that minimises launch speed (needs Flat < ~160 m to stay under terminal velocity).
-	const FVector Delta = Target - Start;
+	// Land somewhere around the target, not all in one pile.
+	const FVector2D Spread = FVector2D(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * LandingSpread;
+	const FVector Delta = Target + FVector(Spread.X, Spread.Y, 0.f) - Start;
 	const float Flat = FVector(Delta.X, Delta.Y, 0.f).Size();
 	const float Gravity = 980.f;
 	const float T = FMath::Max(2.5f, FMath::Sqrt(2.f * Flat / Gravity));
 	FVector Velocity = FVector(Delta.X, Delta.Y, 0.f) / T;
 	Velocity.Z = Delta.Z / T + 0.5f * Gravity * T;
-	Passenger->LaunchCharacter(Velocity, true, true);
+	if (ABRCharacter* Flyer = Cast<ABRCharacter>(Passenger))
+	{
+		Flyer->StartFlight(Velocity);
+	}
+	else
+	{
+		Passenger->LaunchCharacter(Velocity, true, true);
+	}
 	Multicast_Fling();
 }
 
 void ABRCatapult::Multicast_Fling_Implementation()
 {
 	FlingTime = GetWorld()->GetTimeSeconds();
+	if (LaunchSound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, LaunchSound, GetActorLocation());
+	}
+}
+
+bool ABRCatapult::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const APVVCharacter* Prisoner = Interactor ? Interactor->GetCarriedCharacter() : nullptr;
+	return Interactor && Interactor->GetFaction() == BR::Wardens && Prisoner && Prisoner->GetFaction() == BR::Runners;
+}
+
+FText ABRCatapult::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	const APVVCharacter* Prisoner = Interactor ? Interactor->GetCarriedCharacter() : nullptr;
+	return FText::Format(LOCTEXT("Fling", "LAUNCH {0} back across the border! (hold)"),
+		FText::FromString(Prisoner ? Prisoner->GetPlayerDisplayName() : FString(TEXT("them"))));
+}
+
+void ABRCatapult::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!HasAuthority() || !Interactor)
+	{
+		return;
+	}
+	APVVCharacter* Prisoner = Interactor->TakeCarried();
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	if (Prisoner && GM)
+	{
+		GM->CatapultRunner(Prisoner, this, Interactor);
+	}
 }
 
 void ABRCatapult::Tick(float DeltaSeconds)
@@ -1173,6 +1225,217 @@ void ABRTracerFX::Init(const FVector& Start, const FVector& End, bool bLethal, b
 		{
 			MID->SetVectorParameterValue(TEXT("Color"), bHitSomeone ? FLinearColor(1.f, 0.1f, 0.1f) : Color);
 		}
+	}
+}
+
+// ===========================================================================================
+// Human cannon
+
+ABRCannon::ABRCannon()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	const FLinearColor Iron(0.12f, 0.12f, 0.14f);
+	const FLinearColor Red(0.7f, 0.1f, 0.08f);
+	const FLinearColor Gold(0.9f, 0.7f, 0.2f);
+	AddMesh(TEXT("Carriage"), CubeMesh, FVector(-40.f, 0.f, 60.f), FVector(260.f, 160.f, 70.f), Red);
+	AddMesh(TEXT("WheelL"), CylinderMesh, FVector(-30.f, -95.f, 60.f), FVector(120.f, 120.f, 20.f), Gold, FRotator(0.f, 0.f, 90.f));
+	AddMesh(TEXT("WheelR"), CylinderMesh, FVector(-30.f, 95.f, 60.f), FVector(120.f, 120.f, 20.f), Gold, FRotator(0.f, 0.f, 90.f));
+
+	BarrelPivot = CreateDefaultSubobject<USceneComponent>(TEXT("BarrelPivot"));
+	BarrelPivot->SetupAttachment(Root);
+	BarrelPivot->SetRelativeLocation(FVector(0.f, 0.f, 130.f));
+	UStaticMeshComponent* Barrel = AddMesh(TEXT("Barrel"), CylinderMesh, FVector(150.f, 0.f, 0.f), FVector(90.f, 90.f, 360.f), Iron, FRotator(-90.f, 0.f, 0.f));
+	Barrel->SetupAttachment(BarrelPivot);
+	UStaticMeshComponent* Rim = AddMesh(TEXT("Rim"), CylinderMesh, FVector(330.f, 0.f, 0.f), FVector(110.f, 110.f, 20.f), Gold, FRotator(-90.f, 0.f, 0.f), false);
+	Rim->SetupAttachment(BarrelPivot);
+	UStaticMeshComponent* Stripe = AddMesh(TEXT("Stripe"), CylinderMesh, FVector(120.f, 0.f, 0.f), FVector(96.f, 96.f, 30.f), Red, FRotator(-90.f, 0.f, 0.f), false);
+	Stripe->SetupAttachment(BarrelPivot);
+
+	Muzzle = CreateDefaultSubobject<USceneComponent>(TEXT("Muzzle"));
+	Muzzle->SetupAttachment(BarrelPivot);
+	Muzzle->SetRelativeLocation(FVector(380.f, 0.f, 0.f));
+
+	Sign = AddLabel(TEXT("Sign"), FVector(-40.f, 0.f, 330.f), 55.f, FColor(255, 200, 60));
+}
+
+void ABRCannon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRCannon, Loaded);
+	DOREPLIFETIME(ABRCannon, Aim);
+	DOREPLIFETIME(ABRCannon, PluggedUntil);
+}
+
+bool ABRCannon::IsPlugged() const
+{
+	const ABRGameState* GS = BRGame(this);
+	return GS && GS->GetServerWorldTimeSeconds() < PluggedUntil;
+}
+
+bool ABRCannon::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	if (!Interactor)
+	{
+		return false;
+	}
+	if (Loaded)
+	{
+		return Interactor == Loaded; // only the one inside can fire it
+	}
+	if (IsPlugged())
+	{
+		return false;
+	}
+	if (IsFreeWarden(Interactor))
+	{
+		return true; // plug it
+	}
+	const ABRPlayerState* PS = BRState(Interactor);
+	const ABRGameState* GS = BRGame(this);
+	const bool bPhaseOK = GS && (GS->Phase == EBRPhase::Invasion || (bUsableDuringPrep && GS->Phase == EBRPhase::Prep));
+	return IsFreeRunner(Interactor) && PS && PS->HasItem(EBRItem::CannonSuit) && bPhaseOK;
+}
+
+float ABRCannon::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
+{
+	if (Loaded && Interactor == Loaded)
+	{
+		return 0.f; // fire instantly
+	}
+	return Interactor && Interactor->GetFaction() == BR::Wardens ? 4.f : 1.5f;
+}
+
+FText ABRCannon::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	if (Loaded && Interactor == Loaded)
+	{
+		return LOCTEXT("CannonFire", "AIM with the mouse - press E to FIRE!");
+	}
+	if (Interactor && Interactor->GetFaction() == BR::Wardens)
+	{
+		return LOCTEXT("CannonPlug", "Plug the cannon (hold)");
+	}
+	return LOCTEXT("CannonLoad", "Climb into the cannon (hold) - uses your Cannonball Suit");
+}
+
+void ABRCannon::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!HasAuthority() || !Interactor)
+	{
+		return;
+	}
+	ABRGameState* GS = BRGame(this);
+	if (Loaded && Interactor == Loaded)
+	{
+		Fire();
+		return;
+	}
+	if (Interactor->GetFaction() == BR::Wardens)
+	{
+		PluggedUntil = (GS ? GS->GetServerWorldTimeSeconds() : 0.f) + PluggedSeconds;
+		Tell(Interactor, LOCTEXT("Plugged", "Cannon plugged. Nobody's flying anywhere for a while."));
+		return;
+	}
+	ABRPlayerState* PS = BRState(Interactor);
+	ABRCharacter* Runner = Cast<ABRCharacter>(Interactor);
+	if (!PS || !Runner || !PS->RemoveItem(EBRItem::CannonSuit))
+	{
+		return;
+	}
+	Loaded = Runner;
+	Aim = FRotator(45.f, 0.f, 0.f);
+	Runner->SetInCannon(true);
+	Runner->TeleportTo(BarrelPivot->GetComponentLocation(), Runner->GetActorRotation(), false, true);
+	Tell(Interactor, LOCTEXT("InCannon", "You're in the cannon! AIM with the mouse, press E to FIRE."));
+	ForceNetUpdate();
+}
+
+void ABRCannon::Fire()
+{
+	ABRCharacter* Runner = Cast<ABRCharacter>(Loaded.Get());
+	Loaded = nullptr;
+	if (!Runner)
+	{
+		return;
+	}
+	const FVector Dir = BarrelPivot->GetForwardVector();
+	Runner->SetInCannon(false);
+	Runner->TeleportTo(Muzzle->GetComponentLocation() + Dir * 60.f, FRotator(0.f, Dir.Rotation().Yaw, 0.f), false, true);
+	Runner->StartFlight(Dir * LaunchSpeed);
+	Runner->Spot(8.f); // everyone saw that
+	if (ABRGameState* GS = BRGame(this))
+	{
+		GS->Multicast_NoisePing(GetActorLocation());
+		GS->Multicast_Announce(FText::Format(LOCTEXT("CannonFired", "BOOM! {0} just fired themselves out of a cannon!"),
+			FText::FromString(Runner->GetPlayerDisplayName())));
+	}
+	Multicast_Boom();
+	ForceNetUpdate();
+}
+
+void ABRCannon::Unload()
+{
+	if (ABRCharacter* Runner = Cast<ABRCharacter>(Loaded.Get()))
+	{
+		Runner->SetInCannon(false);
+		Runner->TeleportTo(GetActorLocation() - GetActorForwardVector() * 250.f + FVector(0.f, 0.f, 100.f), Runner->GetActorRotation(), false, true);
+	}
+	Loaded = nullptr;
+}
+
+void ABRCannon::Multicast_Boom_Implementation()
+{
+	BoomTime = GetWorld()->GetTimeSeconds();
+	if (FireSound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, FireSound, Muzzle->GetComponentLocation());
+	}
+}
+
+void ABRCannon::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const ABRGameState* GS = BRGame(this);
+
+	if (HasAuthority() && Loaded)
+	{
+		// Whoever is inside aims with their mouse.
+		const ABRCharacter* Runner = Cast<ABRCharacter>(Loaded.Get());
+		if (!Runner || Runner->GetCondition() != EPVVCondition::Normal || !Runner->IsInCannon() || (GS && GS->Phase == EBRPhase::Ended))
+		{
+			Unload();
+		}
+		else
+		{
+			const AController* C = Runner->GetController();
+			const FRotator View = C ? C->GetControlRotation() : FRotator::ZeroRotator;
+			const float RelYaw = FMath::Clamp(FRotator::NormalizeAxis(View.Yaw - GetActorRotation().Yaw), -YawRange, YawRange);
+			const float Pitch = FMath::Clamp(FRotator::NormalizeAxis(View.Pitch) + 45.f, MinPitch, MaxPitch);
+			Aim = FRotator(Pitch, RelYaw, 0.f);
+			Loaded->SetActorLocation(BarrelPivot->GetComponentLocation());
+		}
+	}
+
+	// Barrel follows the aim (smoothly on every screen) and kicks back when it fires.
+	const FRotator Current = BarrelPivot->GetRelativeRotation();
+	const FRotator Target = Loaded ? Aim : FRotator(30.f, 0.f, 0.f);
+	BarrelPivot->SetRelativeRotation(FMath::RInterpTo(Current, Target, DeltaSeconds, 6.f));
+	const float Kick = FMath::Clamp(1.f - (GetWorld()->GetTimeSeconds() - BoomTime) / 0.4f, 0.f, 1.f);
+	BarrelPivot->SetRelativeLocation(FVector(-60.f * Kick, 0.f, 130.f));
+
+	if (Sign)
+	{
+		FString Text = TEXT("HUMAN CANNON\nneeds a Cannonball Suit");
+		if (GS && GS->GetServerWorldTimeSeconds() < PluggedUntil)
+		{
+			const int32 Left = FMath::CeilToInt(PluggedUntil - GS->GetServerWorldTimeSeconds());
+			Text = FString::Printf(TEXT("PLUGGED BY BORDER PATROL\n%d:%02d"), Left / 60, Left % 60);
+		}
+		else if (Loaded)
+		{
+			Text = TEXT("LOADED!");
+		}
+		Sign->SetText(FText::FromString(Text));
 	}
 }
 

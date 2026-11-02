@@ -96,6 +96,8 @@ public:
 	void Restrain(APVVCharacter* Captor);
 	/** Back to Normal from Restrained. Rescuer null = struggled free. */
 	void Release(APVVCharacter* Rescuer);
+	/** Back to Normal from Restrained without any announcement (e.g. landing after the catapult). */
+	void ClearRestraint();
 
 	void StartCarrying(APVVCharacter* Prisoner);
 	/** Detaches the carried prisoner (left where they are) and returns them. */

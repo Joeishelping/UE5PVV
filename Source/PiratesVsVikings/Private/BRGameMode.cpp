@@ -13,6 +13,7 @@
 #include "PVVLake.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Engine/Engine.h"
 #include "TimerManager.h"
 
 #define LOCTEXT_NAMESPACE "BRGameMode"
@@ -308,12 +309,18 @@ void ABRGameMode::NotifyDetained(APVVCharacter* Victim, APVVCharacter* Captor)
 
 void ABRGameMode::LaunchFromPen(APVVCharacter* Prisoner)
 {
+	ABRCatapult* Catapult = (Arena && Arena->bBuildTestMap) ? Arena->GetCatapult() : BRMap::FindCatapult(GetWorld());
+	CatapultRunner(Prisoner, Catapult, nullptr);
+}
+
+void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult, APVVCharacter* Warden)
+{
 	ABRPlayerState* PS = Prisoner ? Cast<ABRPlayerState>(Prisoner->GetPVVPlayerState()) : nullptr;
-	if (!PS)
+	const ABRCharacter* NPC = Cast<ABRCharacter>(Prisoner);
+	if (!Prisoner || (!PS && !(NPC && NPC->IsNPC())))
 	{
 		return;
 	}
-	ABRCatapult* Catapult = (Arena && Arena->bBuildTestMap) ? Arena->GetCatapult() : BRMap::FindCatapult(GetWorld());
 	FVector Landing;
 	if (!BRMap::GetCatapultLanding(GetWorld(), Landing))
 	{
@@ -335,19 +342,51 @@ void ABRGameMode::LaunchFromPen(APVVCharacter* Prisoner)
 			}
 		}
 	}
-	PS->RemoveIllegalItems();
-	PS->bHasCrossedLine = false;
-	PS->bIsAggressor = false;
-	PS->SentenceSeconds = 0;
+
+	if (NPC && NPC->IsNPC())
+	{
+		ChangeApproval(-HarassmentPenalty);
+		Announce(FText::Format(LOCTEXT("TouristYeet", "{0} catapulted an innocent citizen! Approval -{1}"),
+			FText::FromString(NameOf(Warden)), FMath::RoundToInt(HarassmentPenalty)));
+	}
+	else
+	{
+		if (Warden)
+		{
+			if (PS->bHasCrossedLine)
+			{
+				ChangeApproval(GoodCatchBonus);
+			}
+			else
+			{
+				ChangeApproval(-WrongfulArrestPenalty);
+				Announce(FText::Format(LOCTEXT("WrongfulYeet", "{0} never even crossed the Line! Approval -{1}"),
+					FText::FromString(NameOf(Prisoner)), FMath::RoundToInt(WrongfulArrestPenalty)));
+			}
+		}
+		PS->RemoveIllegalItems();
+		PS->bHasCrossedLine = false;
+		PS->bIsAggressor = false;
+		PS->SentenceSeconds = 0;
+	}
+
 	if (Catapult)
 	{
 		Catapult->Launch(Prisoner, Landing);
 	}
 	else
 	{
-		Prisoner->TeleportTo(Landing, Prisoner->GetActorRotation()); // no catapult placed: just send them home
+		if (Prisoner->GetCarrier())
+		{
+			Prisoner->GetCarrier()->TakeCarried();
+		}
+		Prisoner->ReleaseFromDetention(Landing); // no catapult placed: just send them home
+		Prisoner->TeleportTo(Landing, Prisoner->GetActorRotation());
+		Prisoner->ClearRestraint();
 	}
-	Announce(FText::Format(LOCTEXT("Catapult", "{0} has been RETURNED TO SENDER via catapult!"), FText::FromString(NameOf(Prisoner))));
+	Announce(Warden
+		? FText::Format(LOCTEXT("CatapultBy", "{1} sent {0} flying back across the border!"), FText::FromString(NameOf(Prisoner)), FText::FromString(NameOf(Warden)))
+		: FText::Format(LOCTEXT("Catapult", "{0} has been RETURNED TO SENDER via catapult!"), FText::FromString(NameOf(Prisoner))));
 }
 
 void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter)
@@ -439,6 +478,11 @@ void ABRGameMode::SpawnNPCTruck()
 	{
 		if (!Arena || !Arena->bBuildTestMap)
 		{
+			if (!bWarnedNoRoad && GEngine)
+			{
+				bWarnedNoRoad = true;
+				GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Orange, TEXT("No NPC trucks: this map needs at least 2 BR Road Points (Order 0, 1, 2...)."));
+			}
 			return; // custom map without Road Points = no NPC traffic
 		}
 		Arena->GetNPCRoute(Route, CheckpointIndex);
@@ -452,6 +496,11 @@ void ABRGameMode::SpawnNPCTruck()
 	}
 	if (Alive >= MaxNPCTrucks)
 	{
+		if (MaxNPCTrucks <= 0 && !bWarnedNoRoad && GEngine)
+		{
+			bWarnedNoRoad = true;
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Orange, TEXT("No NPC trucks: BP_BRGameMode -> Max NPC Trucks is 0."));
+		}
 		return;
 	}
 
@@ -515,6 +564,10 @@ void ABRGameMode::SpawnVillagers()
 {
 	if (VillagerCount <= 0)
 	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Orange, TEXT("No villagers: BP_BRGameMode -> Villager Count is 0."));
+		}
 		return;
 	}
 	// Your Villager Spots, or the built-in town.
@@ -523,6 +576,10 @@ void ABRGameMode::SpawnVillagers()
 	if (Spots.Num() == 0 && Arena && Arena->bBuildTestMap)
 	{
 		Arena->GetVillageSpots(Spots);
+	}
+	if (Spots.Num() == 0 && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Orange, TEXT("No villagers: this map has no BR Villager Spot. Place some in your town (Place Actors -> search 'BR Villager Spot')."));
 	}
 	if (Spots.Num() == 0)
 	{

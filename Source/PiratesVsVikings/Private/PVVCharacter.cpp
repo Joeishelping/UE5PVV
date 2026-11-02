@@ -553,6 +553,17 @@ void APVVCharacter::Restrain(APVVCharacter* Captor)
 	}
 }
 
+void APVVCharacter::ClearRestraint()
+{
+	if (!HasAuthority() || Condition != EPVVCondition::Restrained)
+	{
+		return;
+	}
+	StruggleProgress = 0.f;
+	Balance = MaxBalance * 0.5f;
+	SetState(EPVVCondition::Normal);
+}
+
 void APVVCharacter::Release(APVVCharacter* Rescuer)
 {
 	if (!HasAuthority() || Condition != EPVVCondition::Restrained)

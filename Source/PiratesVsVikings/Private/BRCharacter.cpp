@@ -105,6 +105,8 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, SlowUntil);
 	DOREPLIFETIME(ABRCharacter, SlowFactor);
 	DOREPLIFETIME(ABRCharacter, Look);
+	DOREPLIFETIME(ABRCharacter, bInCannon);
+	DOREPLIFETIME(ABRCharacter, bFlying);
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -136,6 +138,56 @@ void ABRCharacter::PossessedBy(AController* NewController)
 	if (const ABRPlayerState* PS = GetBRPlayerState(); PS && PS->bHasLook)
 	{
 		SetLook(PS->Look);
+	}
+}
+
+void ABRCharacter::StartFlight(const FVector& Velocity)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	bFlying = true;
+	GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	LaunchCharacter(Velocity, true, true);
+	ForceNetUpdate();
+}
+
+void ABRCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	if (!HasAuthority() || !bFlying)
+	{
+		return;
+	}
+	bFlying = false;
+	ClearRestraint(); // the zip-ties snap on impact
+	ApplyKnockdown(nullptr, -GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 150.f)); // tumble
+}
+
+void ABRCharacter::SetInCannon(bool bIn)
+{
+	if (!HasAuthority() || bInCannon == bIn)
+	{
+		return;
+	}
+	bInCannon = bIn;
+	OnRep_InCannon();
+	ForceNetUpdate();
+}
+
+void ABRCharacter::OnRep_InCannon()
+{
+	SetActorHiddenInGame(bInCannon);
+	SetActorEnableCollision(!bInCannon);
+	if (bInCannon)
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+	}
+	else
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 	}
 }
 
