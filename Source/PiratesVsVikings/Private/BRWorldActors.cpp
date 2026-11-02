@@ -197,6 +197,8 @@ void ABRStation::BeginPlay()
 		}
 	}
 	Label->SetText(FText::FromString(Text));
+	Label->SetHiddenInGame(!bShowSign);
+	Counter->SetHiddenInGame(!bShowCounter);
 }
 
 bool ABRStation::IsOpen() const

@@ -78,6 +78,10 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") TObjectPtr<ABRCockfightPit> Pit;
 	/** Boat stations: where the boat appears (drag the diamond in the viewport; should be on the water). */
 	UPROPERTY(EditAnywhere, Category = "BR|Station", meta = (MakeEditWidget = "true")) FVector BoatSpawnOffset = FVector(600.f, 0.f, 0.f);
+	/** Untick to hide the grey counter box (e.g. it sits inside your own shop counter model). It still works when you walk up to it. */
+	UPROPERTY(EditAnywhere, Category = "BR|Station") bool bShowCounter = true;
+	/** Untick to hide the floating sign (if your building already has one). */
+	UPROPERTY(EditAnywhere, Category = "BR|Station") bool bShowSign = true;
 	FVector BoatSpawn = FVector::ZeroVector;
 
 protected:
