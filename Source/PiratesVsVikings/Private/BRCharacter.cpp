@@ -603,6 +603,7 @@ void ABRCharacter::EnsureDefaultInput()
 	WeaponModeAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	ScanAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrapAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	TrumpetAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 
 	UInputMappingContext* IMC = DefaultMappingContext;
 	PVVInput::Map(IMC, AimAction, EKeys::RightMouseButton);
@@ -622,6 +623,8 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, ScanAction, EKeys::Gamepad_DPad_Left);
 	PVVInput::Map(IMC, TrapAction, EKeys::B);
 	PVVInput::Map(IMC, TrapAction, EKeys::Gamepad_LeftShoulder);
+	PVVInput::Map(IMC, TrumpetAction, EKeys::G);
+	PVVInput::Map(IMC, TrumpetAction, EKeys::Gamepad_RightShoulder);
 	// Fire is the existing Attack action (left mouse / gamepad X) while aiming; also right trigger.
 	PVVInput::Map(IMC, AttackAction, EKeys::Gamepad_RightTrigger);
 }
@@ -644,6 +647,7 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (ReloadAction) Input->BindAction(ReloadAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Reload);
 	if (CrouchAction) Input->BindAction(CrouchAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Crouch);
 	if (EatAction) Input->BindAction(EatAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Eat);
+	if (TrumpetAction) Input->BindAction(TrumpetAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Trumpet);
 	if (DroneAction) Input->BindAction(DroneAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drone);
 	if (WeaponModeAction) Input->BindAction(WeaponModeAction, ETriggerEvent::Started, this, &ABRCharacter::Input_WeaponMode);
 	if (ScanAction) Input->BindAction(ScanAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Scan);
@@ -663,6 +667,71 @@ void ABRCharacter::Input_Crouch()
 }
 
 void ABRCharacter::Input_Eat() { Server_Eat(); }
+void ABRCharacter::Input_Trumpet() { Server_PlayTrumpet(); }
+
+bool ABRCharacter::IsDancing() const
+{
+	const ABRGameState* GS = GetBRGameState();
+	return GS && GS->GetServerWorldTimeSeconds() < DanceUntil;
+}
+
+void ABRCharacter::ForceDance(float Seconds)
+{
+	const ABRGameState* GS = GetBRGameState();
+	if (!HasAuthority() || !GS)
+	{
+		return;
+	}
+	DanceUntil = GS->GetServerWorldTimeSeconds() + Seconds;
+	bAiming = false;
+	ApplySlow(Seconds, 0.f); // feet are busy dancing
+	Notify(LOCTEXT("Dancing", "The mariachi got you! You can't stop DANCING!"));
+	ForceNetUpdate();
+}
+
+void ABRCharacter::Server_PlayTrumpet_Implementation()
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!PS || !PS->HasItem(EBRItem::Trumpet) || GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || bInCannon)
+	{
+		return;
+	}
+	if (Now - LastTrumpetTime < TrumpetCooldown)
+	{
+		Notify(FText::Format(LOCTEXT("TrumpetTired", "Catch your breath... ({0} s)"), FMath::CeilToInt(TrumpetCooldown - (Now - LastTrumpetTime))));
+		return;
+	}
+	LastTrumpetTime = Now;
+	int32 Dancers = 0;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* Other = *It;
+		if (Other != this && Other->IsWarden() && Other->GetCondition() == EPVVCondition::Normal && !Other->GetCurrentBoat()
+			&& FVector::Dist(Other->GetActorLocation(), GetActorLocation()) < TrumpetRange)
+		{
+			Other->ForceDance(DanceSeconds);
+			++Dancers;
+		}
+	}
+	Spot(4.f); // a trumpet solo is not stealthy
+	if (ABRGameState* GS = GetBRGameState())
+	{
+		GS->Multicast_NoisePing(GetActorLocation());
+	}
+	Multicast_Trumpet();
+	Notify(Dancers > 0
+		? FText::Format(LOCTEXT("TrumpetHit", "AY AY AY! {0} Border Patrol dancing - RUN!"), Dancers)
+		: LOCTEXT("TrumpetMiss", "Beautiful solo. Nobody was close enough to dance."));
+}
+
+void ABRCharacter::Multicast_Trumpet_Implementation()
+{
+	if (TrumpetSound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, TrumpetSound, GetActorLocation());
+	}
+}
 void ABRCharacter::Input_Drone() { Server_LaunchDrone(); }
 void ABRCharacter::Input_WeaponMode() { Server_ToggleWeaponMode(); }
 void ABRCharacter::Input_Trap() { Server_PlaceTrap(); }
@@ -772,7 +841,7 @@ void ABRCharacter::Input_AimStop()
 
 void ABRCharacter::Server_SetAiming_Implementation(bool bNewAiming)
 {
-	bAiming = bNewAiming && HasWeapon();
+	bAiming = bNewAiming && HasWeapon() && !IsDancing();
 	ApplyAimRotationMode();
 	UpdateMovementSpeed();
 }
@@ -873,7 +942,7 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 {
 	ABRPlayerState* PS = GetBRPlayerState();
 	ABRGameState* GS = GetBRGameState();
-	if (!CanAttack() || !PS || !GS || !HasWeapon() || bReloading || FVector::Dist(Start, GetActorLocation()) > 900.f)
+	if (!CanAttack() || !PS || !GS || !HasWeapon() || bReloading || IsDancing() || FVector::Dist(Start, GetActorLocation()) > 900.f)
 	{
 		return;
 	}
@@ -997,6 +1066,7 @@ void ABRCharacter::TickAnimationSlots()
 	else if (bInDeepWater) Wanted = Pick(SwimAnim, Locomotion);
 	else if (Move && Move->IsFalling()) Wanted = Pick(FallAnim, Locomotion);
 	else if (GetHoldProgress() > 0.f) Wanted = Pick(WorkAnim, Locomotion);
+	else if (IsDancing() && DanceAnim) Wanted = DanceAnim.Get();
 	else if (bAiming) Wanted = (Speed > 15.f && AimWalkAnim) ? AimWalkAnim.Get() : Pick(AimAnim, Locomotion);
 	else if (bIsCrouched) Wanted = Speed > 15.f ? Pick(CrouchWalkAnim, Locomotion) : Pick(CrouchIdleAnim, Locomotion);
 	else Wanted = Locomotion;

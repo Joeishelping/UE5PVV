@@ -30,7 +30,9 @@ enum class EBRItem : uint8
 	Scrap			UMETA(DisplayName = "Scrap"),
 	IllegalGun		UMETA(DisplayName = "Illegal Gun"),
 	CarKey			UMETA(DisplayName = "Car Key"),
-	CannonSuit		UMETA(DisplayName = "Cannonball Suit")
+	CannonSuit		UMETA(DisplayName = "Cannonball Suit"),
+	Shovel			UMETA(DisplayName = "Shovel"),
+	Trumpet			UMETA(DisplayName = "Mariachi Trumpet")
 };
 
 UENUM(BlueprintType)

@@ -80,6 +80,14 @@ Day/night, weather and ambient music are added to your map automatically.
 
 ---
 
+### Fun stuff
+| Piece | What to do |
+|---|---|
+| **BR Human Cannon** | Point its arrow over the border. Runners need a **Cannonball Suit** (a BR Station selling Item = Cannonball Suit, Price 500). Climb in (hold E), aim with the mouse, press E to fire. Border Patrol can plug it. |
+| **BR Tunnel** | Put it on the Mexico side. Drag the **diamond** (Exit Offset) to where people should come out, past the Wall. Runners need a **Shovel** (a Station selling Item = Shovel) to dig it open (25 s), then anyone can crawl through once the Line is open. Border Patrol can cave it in from either end. |
+| **BR Pinata** | Put it in the plaza. Runners whack it (E) and the 10th whack wins cash or a random item. It comes back after 2.5 minutes. |
+| **Mariachi Trumpet** | Sell it at a Station (Item = Mariachi Trumpet). A Runner who owns one presses **G** near Border Patrol and they dance for 4 seconds. Put your music in **BP_Runner → BR Mariachi → Trumpet Sound** and a dance animation in **BR Animations → Dance Anim**. |
+
 ## Step 4: Test checklist
 1. Play → you spawn at your team's Player Start.
 2. During Prep, try to walk across the Border Line. You should be blocked.

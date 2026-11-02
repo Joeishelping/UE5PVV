@@ -417,6 +417,8 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Station(-12000.f, -2600.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS $25"), Shop);
 	Station(-11000.f, -3400.f, EBRStationKind::SellItem, EBRItem::Scrap, 25, TEXT("WE BUY SCRAP"), Shop);
 	Station(-11000.f, -3000.f, EBRStationKind::BuyItem, EBRItem::CannonSuit, 500, TEXT("CANNONBALL SUIT $500"), FLinearColor(0.8f, 0.15f, 0.1f));
+	Station(-11500.f, -3300.f, EBRStationKind::BuyItem, EBRItem::Shovel, 80, TEXT("SHOVEL $80"), Shop);
+	Station(-11500.f, -2700.f, EBRStationKind::BuyItem, EBRItem::Trumpet, 120, TEXT("MARIACHI TRUMPET $120"), FLinearColor(0.9f, 0.6f, 0.1f));
 	Station(-11000.f, -2600.f, EBRStationKind::Job, EBRItem::None, 20, TEXT("Work the register"), Job, 5.f, 3.f);
 	Station(-10300.f, -4000.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS PUMP $25"), Shop);
 	Station(-11700.f, 1550.f, EBRStationKind::Job, EBRItem::None, 15, TEXT("Cook & sell tacos"), Job, 4.f, 2.f);
@@ -452,6 +454,19 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	}
 	UClass* PitClass = CockfightPitClass ? CockfightPitClass.Get() : ABRCockfightPit::StaticClass();
 	World->SpawnActor<ABRCockfightPit>(PitClass, At(-9000.f, 2200.f, Ground), Params); // spawns its own betting counters
+
+	// --- Pinata in the plaza, tunnels under the border (exit past the Wall)
+	World->SpawnActor<ABRPinata>(ABRPinata::StaticClass(), At(-10450.f, 1250.f, Ground), Params);
+	if (ABRTunnel* T1 = World->SpawnActorDeferred<ABRTunnel>(ABRTunnel::StaticClass(), At(-5900.f, -5200.f, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		T1->ExitOffset = FVector(WallX + 900.f - (-5900.f), -400.f, 0.f);
+		T1->FinishSpawning(At(-5900.f, -5200.f, Ground));
+	}
+	if (ABRTunnel* T2 = World->SpawnActorDeferred<ABRTunnel>(ABRTunnel::StaticClass(), At(-6200.f, 6000.f, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		T2->ExitOffset = FVector(WallX + 900.f - (-6200.f), 500.f, 0.f);
+		T2->FinishSpawning(At(-6200.f, 6000.f, Ground));
+	}
 
 	// --- Human cannon on the near bank, aimed across the border
 	World->SpawnActor<ABRCannon>(ABRCannon::StaticClass(), At(-5800.f, 2500.f, Ground), Params);

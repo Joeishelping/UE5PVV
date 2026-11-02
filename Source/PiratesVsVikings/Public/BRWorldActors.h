@@ -398,6 +398,81 @@ private:
 };
 
 // ===========================================================================================
+/** Pinata: Runners whack it (hold E). After enough whacks it bursts: cash or a random item for whoever broke it. Comes back later. */
+UCLASS(meta = (DisplayName = "BR Pinata"))
+class PIRATESVSVIKINGS_API ABRPinata : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRPinata();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.4f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	/** Whacks needed to burst it (from anyone - steal the last hit!). */
+	UPROPERTY(EditAnywhere, Category = "BR|Pinata") int32 WhacksToBreak = 10;
+	UPROPERTY(EditAnywhere, Category = "BR|Pinata") float RespawnSeconds = 150.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Pinata") int32 MinCash = 20;
+	UPROPERTY(EditAnywhere, Category = "BR|Pinata") int32 MaxCash = 120;
+	UPROPERTY(EditAnywhere, Category = "BR|Pinata") TObjectPtr<USoundBase> WhackSound;
+	UPROPERTY(EditAnywhere, Category = "BR|Pinata") TObjectPtr<USoundBase> BurstSound;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Swing;
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Whack(bool bBurst);
+
+private:
+	UPROPERTY(Replicated) int32 Whacks = 0;
+	UPROPERTY(Replicated) float BackAt = 0.f;
+	float WhackTime = -100.f;
+	bool IsBroken() const;
+};
+
+/**
+ * Tunnel. Soft dirt on the near side: a Runner with a Shovel digs it open (hold E, slow but quiet).
+ * Then any Runner can crawl through (hold E) and pop out at the far end (drag the diamond to place it).
+ * Border Patrol can cave it in (hold E) from either end.
+ */
+UCLASS(meta = (DisplayName = "BR Tunnel"))
+class PIRATESVSVIKINGS_API ABRTunnel : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRTunnel();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override;
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	/** Where you come out (relative to the entrance). Drag the diamond in the viewport. */
+	UPROPERTY(EditAnywhere, Category = "BR|Tunnel", meta = (MakeEditWidget = "true")) FVector ExitOffset = FVector(9000.f, 0.f, 0.f);
+	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float DigSeconds = 25.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float CrawlSeconds = 2.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float CaveInSeconds = 3.f;
+	/** The shovel breaks after digging one tunnel. */
+	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") bool bShovelBreaks = true;
+
+protected:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> ExitPoint;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Sign;
+
+private:
+	UPROPERTY(Replicated) bool bOpen = false;
+	int32 AppliedState = -1;
+	bool IsNearExit(const APVVCharacter* C) const;
+};
+
+// ===========================================================================================
 /**
  * Village life for the Runner town: colourful houses, a church, plaza with fountain, market stalls,
  * papel picado flags, lamps that light up at night, cacti, palms, laundry, a wrecked car and wandering chickens.

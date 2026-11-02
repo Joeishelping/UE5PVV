@@ -277,6 +277,18 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 			PS->WireCutterCharges += 2;
 			Tell(Interactor, LOCTEXT("BoughtCutters", "Bought: Wire Cutters (good for 2 cuts - and they're LOUD)"));
 		}
+		else if (Item == EBRItem::Trumpet)
+		{
+			Tell(Interactor, LOCTEXT("BoughtTrumpet", "Bought: Mariachi Trumpet. Press G near Border Patrol - they can't stop dancing!"));
+		}
+		else if (Item == EBRItem::Shovel)
+		{
+			Tell(Interactor, LOCTEXT("BoughtShovel", "Bought: Shovel. Find soft dirt and dig a tunnel under the border (hold E)."));
+		}
+		else if (Item == EBRItem::CannonSuit)
+		{
+			Tell(Interactor, LOCTEXT("BoughtSuit", "Bought: Cannonball Suit. Climb into the Human Cannon once the Line opens!"));
+		}
 		else
 		{
 			Tell(Interactor, FText::Format(LOCTEXT("Bought", "Bought: {0}"), FText::FromString(BR::ItemName(Item))));
@@ -1436,6 +1448,280 @@ void ABRCannon::Tick(float DeltaSeconds)
 			Text = TEXT("LOADED!");
 		}
 		Sign->SetText(FText::FromString(Text));
+	}
+}
+
+// ===========================================================================================
+// Pinata
+
+ABRPinata::ABRPinata()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	const FLinearColor Wood(0.45f, 0.28f, 0.12f);
+	AddMesh(TEXT("PostL"), CubeMesh, FVector(0.f, -220.f, 200.f), FVector(20.f, 20.f, 400.f), Wood);
+	AddMesh(TEXT("PostR"), CubeMesh, FVector(0.f, 220.f, 200.f), FVector(20.f, 20.f, 400.f), Wood);
+	AddMesh(TEXT("Bar"), CubeMesh, FVector(0.f, 0.f, 400.f), FVector(20.f, 460.f, 20.f), Wood);
+
+	Swing = CreateDefaultSubobject<USceneComponent>(TEXT("Swing"));
+	Swing->SetupAttachment(Root);
+	Swing->SetRelativeLocation(FVector(0.f, 0.f, 390.f));
+	auto Piece = [&](const TCHAR* Name, UStaticMesh* Mesh, const FVector& At, const FVector& Size, const FLinearColor& Color)
+	{
+		UStaticMeshComponent* C = AddMesh(Name, Mesh, At, Size, Color, FRotator::ZeroRotator, false);
+		C->SetupAttachment(Swing);
+	};
+	// A paper donkey in loud colours, hanging from a rope.
+	Piece(TEXT("Rope"), CubeMesh, FVector(0.f, 0.f, -60.f), FVector(3.f, 3.f, 120.f), FLinearColor(0.85f, 0.8f, 0.6f));
+	Piece(TEXT("Body"), CubeMesh, FVector(0.f, 0.f, -150.f), FVector(110.f, 60.f, 60.f), FLinearColor(1.f, 0.2f, 0.6f));
+	Piece(TEXT("Stripe1"), CubeMesh, FVector(-30.f, 0.f, -150.f), FVector(15.f, 64.f, 64.f), FLinearColor(1.f, 0.85f, 0.1f));
+	Piece(TEXT("Stripe2"), CubeMesh, FVector(30.f, 0.f, -150.f), FVector(15.f, 64.f, 64.f), FLinearColor(0.1f, 0.75f, 0.95f));
+	Piece(TEXT("Neck"), CubeMesh, FVector(60.f, 0.f, -110.f), FVector(30.f, 35.f, 60.f), FLinearColor(0.2f, 0.85f, 0.3f));
+	Piece(TEXT("Head"), CubeMesh, FVector(80.f, 0.f, -80.f), FVector(55.f, 35.f, 35.f), FLinearColor(1.f, 0.5f, 0.1f));
+	Piece(TEXT("EarL"), ConeMesh, FVector(70.f, -12.f, -50.f), FVector(10.f, 10.f, 35.f), FLinearColor(1.f, 0.2f, 0.6f));
+	Piece(TEXT("EarR"), ConeMesh, FVector(70.f, 12.f, -50.f), FVector(10.f, 10.f, 35.f), FLinearColor(1.f, 0.2f, 0.6f));
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const FString Name = FString::Printf(TEXT("Leg%d"), i);
+		Piece(*Name, CubeMesh, FVector(i < 2 ? 35.f : -35.f, i % 2 ? 18.f : -18.f, -205.f), FVector(15.f, 15.f, 50.f), FLinearColor(0.6f, 0.2f, 0.9f));
+	}
+	Piece(TEXT("Tail"), CubeMesh, FVector(-65.f, 0.f, -140.f), FVector(30.f, 8.f, 8.f), FLinearColor(1.f, 0.85f, 0.1f));
+}
+
+void ABRPinata::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRPinata, Whacks);
+	DOREPLIFETIME(ABRPinata, BackAt);
+}
+
+bool ABRPinata::IsBroken() const
+{
+	const ABRGameState* GS = BRGame(this);
+	return GS && GS->GetServerWorldTimeSeconds() < BackAt;
+}
+
+bool ABRPinata::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	return IsFreeRunner(Interactor) && !IsBroken();
+}
+
+FText ABRPinata::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return FText::Format(LOCTEXT("Whack", "WHACK the pinata! ({0}/{1})"), Whacks, WhacksToBreak);
+}
+
+void ABRPinata::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRPlayerState* PS = BRState(Interactor);
+	ABRGameState* GS = BRGame(this);
+	if (!HasAuthority() || !PS || !GS || IsBroken())
+	{
+		return;
+	}
+	++Whacks;
+	if (Whacks < WhacksToBreak)
+	{
+		Multicast_Whack(false);
+		return;
+	}
+
+	// BURST! Whoever lands the last hit gets the prize.
+	Whacks = 0;
+	BackAt = GS->GetServerWorldTimeSeconds() + RespawnSeconds;
+	FString Prize;
+	const EBRItem Items[] = { EBRItem::Taco, EBRItem::Taco, EBRItem::GasCan, EBRItem::WireCutters, EBRItem::Ladder,
+		EBRItem::Shovel, EBRItem::Trumpet, EBRItem::CannonSuit };
+	const EBRItem Item = Items[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+	if (FMath::FRand() < 0.4f && PS->HasFreeSlot() && (Item != EBRItem::CannonSuit || FMath::FRand() < 0.3f))
+	{
+		PS->AddItem(Item);
+		if (Item == EBRItem::WireCutters)
+		{
+			PS->WireCutterCharges += 2;
+		}
+		Prize = BR::ItemName(Item);
+	}
+	else
+	{
+		const int32 Cash = FMath::RandRange(MinCash, MaxCash);
+		PS->AddMoney(Cash);
+		Prize = FString::Printf(TEXT("$%d"), Cash);
+	}
+	GS->Multicast_Announce(FText::Format(LOCTEXT("PinataBurst", "{0} smashed the pinata and got {1}!"),
+		FText::FromString(Interactor->GetPlayerDisplayName()), FText::FromString(Prize)));
+	Multicast_Whack(true);
+}
+
+void ABRPinata::Multicast_Whack_Implementation(bool bBurst)
+{
+	WhackTime = GetWorld()->GetTimeSeconds();
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	if (USoundBase* Sound = bBurst ? BurstSound.Get() : WhackSound.Get())
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, Swing->GetComponentLocation());
+	}
+}
+
+void ABRPinata::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const bool bBroken = IsBroken();
+	if (Swing->IsVisible() == bBroken)
+	{
+		Swing->SetVisibility(!bBroken, true);
+	}
+	// Gentle sway, big swing right after a whack.
+	const float T = GetWorld()->GetTimeSeconds();
+	const float Hit = FMath::Clamp(1.f - (T - WhackTime) / 1.5f, 0.f, 1.f);
+	Swing->SetRelativeRotation(FRotator(0.f, T * 15.f, FMath::Sin(T * 1.3f) * 5.f + FMath::Sin(T * 9.f) * 35.f * Hit));
+}
+
+// ===========================================================================================
+// Tunnel
+
+ABRTunnel::ABRTunnel()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.25f;
+	const FLinearColor Dirt(0.45f, 0.32f, 0.2f);
+	const FLinearColor Dark(0.03f, 0.02f, 0.02f);
+	const FLinearColor Wood(0.4f, 0.26f, 0.12f);
+	AddMesh(TEXT("Mound"), SphereMesh, FVector(0.f, 0.f, 0.f), FVector(260.f, 260.f, 90.f), Dirt);
+	AddMesh(TEXT("Hole"), CylinderMesh, FVector(0.f, 0.f, 3.f), FVector(170.f, 170.f, 6.f), Dark, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("FrameL"), CubeMesh, FVector(0.f, -95.f, 60.f), FVector(15.f, 15.f, 120.f), Wood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("FrameR"), CubeMesh, FVector(0.f, 95.f, 60.f), FVector(15.f, 15.f, 120.f), Wood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("FrameTop"), CubeMesh, FVector(0.f, 0.f, 120.f), FVector(15.f, 205.f, 15.f), Wood, FRotator::ZeroRotator, false);
+
+	ExitPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ExitPoint"));
+	ExitPoint->SetupAttachment(Root);
+	ExitPoint->SetRelativeLocation(ExitOffset);
+	UStaticMeshComponent* ExitHole = AddMesh(TEXT("ExitHole"), CylinderMesh, FVector(0.f, 0.f, 3.f), FVector(150.f, 150.f, 6.f), Dark, FRotator::ZeroRotator, false);
+	ExitHole->SetupAttachment(ExitPoint);
+	UStaticMeshComponent* ExitDirt = AddMesh(TEXT("ExitDirt"), SphereMesh, FVector(0.f, 120.f, 0.f), FVector(140.f, 100.f, 50.f), Dirt, FRotator::ZeroRotator, false);
+	ExitDirt->SetupAttachment(ExitPoint);
+
+	Sign = AddLabel(TEXT("Sign"), FVector(0.f, 0.f, 200.f), 40.f, FColor(230, 200, 150));
+}
+
+void ABRTunnel::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRTunnel, bOpen);
+}
+
+void ABRTunnel::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	ExitPoint->SetRelativeLocation(ExitOffset);
+}
+
+bool ABRTunnel::IsNearExit(const APVVCharacter* C) const
+{
+	return C && FVector::Dist2D(C->GetActorLocation(), ExitPoint->GetComponentLocation()) < 450.f;
+}
+
+bool ABRTunnel::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	if (IsFreeWarden(Interactor))
+	{
+		return bOpen; // cave it in from either end
+	}
+	if (!IsFreeRunner(Interactor) || IsNearExit(Interactor))
+	{
+		return false;
+	}
+	if (bOpen)
+	{
+		const ABRGameState* GS = BRGame(this);
+		return GS && GS->Phase == EBRPhase::Invasion;
+	}
+	const ABRPlayerState* PS = BRState(Interactor);
+	return PS && PS->HasItem(EBRItem::Shovel);
+}
+
+float ABRTunnel::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
+{
+	if (Interactor && Interactor->GetFaction() == BR::Wardens)
+	{
+		return CaveInSeconds;
+	}
+	return bOpen ? CrawlSeconds : DigSeconds;
+}
+
+FText ABRTunnel::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	if (Interactor && Interactor->GetFaction() == BR::Wardens)
+	{
+		return LOCTEXT("CaveIn", "Cave in the tunnel (hold)");
+	}
+	return bOpen ? LOCTEXT("Crawl", "Crawl through the tunnel (hold)") : LOCTEXT("Dig", "Dig a tunnel with your shovel (hold - takes a while)");
+}
+
+void ABRTunnel::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!HasAuthority() || !Interactor)
+	{
+		return;
+	}
+	ABRGameState* GS = BRGame(this);
+	if (Interactor->GetFaction() == BR::Wardens)
+	{
+		bOpen = false;
+		if (GS)
+		{
+			GS->Multicast_Announce(FText::Format(LOCTEXT("CavedIn", "{0} found a tunnel and caved it in!"), FText::FromString(Interactor->GetPlayerDisplayName())));
+		}
+		return;
+	}
+	if (!bOpen)
+	{
+		ABRPlayerState* PS = BRState(Interactor);
+		if (!PS || !PS->HasItem(EBRItem::Shovel))
+		{
+			return;
+		}
+		if (bShovelBreaks)
+		{
+			PS->RemoveItem(EBRItem::Shovel);
+		}
+		bOpen = true;
+		Tell(Interactor, LOCTEXT("Dug", "Tunnel dug! When the Line is open, hold E here to crawl through."));
+		return;
+	}
+	const FVector Out = ExitPoint->GetComponentLocation() + FVector(0.f, 0.f, 120.f);
+	Interactor->TeleportTo(Out, FRotator(0.f, GetActorRotation().Yaw, 0.f));
+	Tell(Interactor, LOCTEXT("Crawled", "You crawled out the other side. Keep moving!"));
+}
+
+void ABRTunnel::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const int32 State = bOpen ? 1 : 0;
+	if (State == AppliedState)
+	{
+		return;
+	}
+	AppliedState = State;
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		const FString Name = Mesh->GetName();
+		if (Name == TEXT("Hole") || Name.StartsWith(TEXT("Frame")) || Name == TEXT("ExitHole") || Name == TEXT("ExitDirt"))
+		{
+			Mesh->SetVisibility(bOpen);
+		}
+		else if (Name == TEXT("Mound"))
+		{
+			Mesh->SetRelativeScale3D(bOpen ? FVector(2.6f, 2.6f, 0.4f) : FVector(2.6f, 2.6f, 0.9f));
+		}
+	}
+	if (Sign)
+	{
+		Sign->SetText(bOpen ? LOCTEXT("SignOpen", "TUNNEL") : LOCTEXT("SignDirt", "soft dirt...\n(dig with a shovel)"));
 	}
 }
 

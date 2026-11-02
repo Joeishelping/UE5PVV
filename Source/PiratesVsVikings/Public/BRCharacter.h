@@ -54,6 +54,9 @@ public:
 	void SetInCannon(bool bIn);
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsInCannon() const { return bInCannon; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsFlying() const { return bFlying; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDancing() const;
+	/** Server: dance uncontrollably for a while (mariachi). */
+	void ForceDance(float Seconds);
 
 	/** Server: set this character's customization (replicates to everyone). */
 	void SetLook(const FBRLook& NewLook);
@@ -171,6 +174,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> WeaponModeAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> ScanAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrapAction;
+	/** G: play the mariachi trumpet (Runners with a trumpet). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrumpetAction;
+
+	// --- Mariachi trumpet ---------------------------------------------------------------
+	/** Border Patrol within this range (cm) can't stop dancing. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float TrumpetRange = 1300.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float DanceSeconds = 4.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float TrumpetCooldown = 25.f;
+	/** Your mariachi music (drag a sound in). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") TObjectPtr<USoundBase> TrumpetSound;
+	/** Dancing animation for whoever got hit by the music (Mixamo "Samba Dancing"). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> DanceAnim;
 
 	// --- Tuning -----------------------------------------------------------------------
 
@@ -254,6 +269,8 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_Look) FBRLook Look;
 	UPROPERTY(ReplicatedUsing = OnRep_InCannon) bool bInCannon = false;
 	UPROPERTY(Replicated) bool bFlying = false;
+	UPROPERTY(Replicated) float DanceUntil = 0.f;
+	float LastTrumpetTime = -100.f;
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
 	bool bWandering = false;
 	FVector WanderHome = FVector::ZeroVector;
@@ -345,6 +362,9 @@ private:
 	void Input_Reload();
 	void Input_Crouch();
 	void Input_Eat();
+	void Input_Trumpet();
+	UFUNCTION(Server, Reliable) void Server_PlayTrumpet();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Trumpet();
 	void Input_Drone();
 	void Input_WeaponMode();
 	void Input_Scan();
