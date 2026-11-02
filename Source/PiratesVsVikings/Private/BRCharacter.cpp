@@ -590,7 +590,7 @@ void ABRCharacter::OnAttackStartedNative()
 bool ABRCharacter::UsesAnimationSlots() const
 {
 	const USkeletalMeshComponent* MeshComp = GetMesh();
-	return MeshComp && MeshComp->GetSkeletalMeshAsset() && !MeshComp->GetAnimClass() && (IdleAnim || WalkAnim || RunAnim);
+	return MeshComp && MeshComp->GetSkeletalMeshAsset() && !MeshComp->AnimClass && (IdleAnim || WalkAnim || RunAnim);
 }
 
 void ABRCharacter::PlayOneShot(UAnimSequenceBase* Anim)
@@ -618,7 +618,7 @@ void ABRCharacter::TickAnimationSlots()
 	const float Speed = GetVelocity().Size2D();
 	const UCharacterMovementComponent* Move = GetCharacterMovement();
 	auto Pick = [](UAnimSequenceBase* Preferred, UAnimSequenceBase* Fallback) { return Preferred ? Preferred : Fallback; };
-	UAnimSequenceBase* Locomotion = Speed > RunAnimAboveSpeed ? Pick(RunAnim, WalkAnim) : (Speed > 15.f ? Pick(WalkAnim, IdleAnim) : IdleAnim);
+	UAnimSequenceBase* Locomotion = Speed > RunAnimAboveSpeed ? Pick(RunAnim, WalkAnim) : (Speed > 15.f ? Pick(WalkAnim, IdleAnim) : IdleAnim.Get());
 
 	UAnimSequenceBase* Wanted = nullptr;
 	if (GetCarrier()) Wanted = Pick(CarriedAnim, IdleAnim);
