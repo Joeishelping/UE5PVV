@@ -107,7 +107,11 @@ void ABRCharacter::BeginPlay()
 
 	for (USkeletalMeshComponent* Outfit : { OutfitTop.Get(), OutfitBottom.Get(), OutfitHead.Get(), OutfitFace.Get() })
 	{
-		Outfit->SetLeaderPoseComponent(GetMesh());
+		// Clothes copy every bone of the body (incl. physics/ragdoll) and sit exactly on it.
+		Outfit->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		Outfit->SetRelativeTransform(FTransform::Identity);
+		Outfit->SetLeaderPoseComponent(GetMesh(), true);
+		Outfit->bUseBoundsFromLeaderPoseComponent = true;
 	}
 	DefaultArmLength = CameraBoom->TargetArmLength;
 	DefaultSocketOffset = CameraBoom->SocketOffset;

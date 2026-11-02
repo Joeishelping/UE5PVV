@@ -34,24 +34,33 @@ public:
 
 	ABRPlayerState* GetBRPlayerState() const;
 	ABRGameState* GetBRGameState() const;
-	bool IsRunner() const { return GetFaction() == BR::Runners; }
-	bool IsWarden() const { return GetFaction() == BR::Wardens; }
-	bool IsNPC() const { return bIsNPC; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsRunner() const { return GetFaction() == BR::Runners; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsWarden() const { return GetFaction() == BR::Wardens; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsNPC() const { return bIsNPC; }
 
 	/** Call before FinishSpawning: a computer-controlled look-alike passenger. */
 	void InitAsNPC();
 
-	float GetHunger() const { return Hunger; }
-	float GetVisibility() const { return Visibility; }
-	float GetBreath() const { return Breath; }
-	bool IsLethalMode() const { return bLethalMode; }
-	bool IsAiming() const { return bAiming; }
-	bool IsReloading() const { return bReloading; }
-	bool IsSlowed() const;
-	bool IsSpotted() const;
-	bool HasWeapon() const;
-	int32 GetAmmo() const;
-	int32 GetMagSize() const;
+	// --- Read these from an Animation Blueprint (Try Get Pawn Owner -> Cast to BRCharacter) ---
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") float GetHunger() const { return Hunger; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") float GetVisibility() const { return Visibility; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") float GetBreath() const { return Breath; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsLethalMode() const { return bLethalMode; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsAiming() const { return bAiming; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsReloading() const { return bReloading; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsSlowed() const;
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsSpotted() const;
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool HasWeapon() const;
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") int32 GetAmmo() const;
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") int32 GetMagSize() const;
+	/** 0 = no gun, 1 = taser, 2 = pistol, 3 = revolver. */
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") int32 GetWeaponType() const { return GunStyle < 0 ? 0 : GunStyle; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsKnockedDown() const { return GetCondition() == EPVVCondition::KnockedDown; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsRestrained() const { return GetCondition() == EPVVCondition::Restrained; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsSeated() const { return GetCurrentBoat() != nullptr; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsBeingCarried() const { return GetCarrier() != nullptr; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsCarryingSomeone() const { return GetCarriedCharacter() != nullptr; }
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsInDeepWater() const { return bInDeepWater; }
 	FString GetWeaponName() const;
 
 	/** Server: short message on this player's screen. */
