@@ -765,7 +765,6 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, ReloadAction, EKeys::R);
 	PVVInput::Map(IMC, ReloadAction, EKeys::Gamepad_FaceButton_Top);
 	PVVInput::Map(IMC, CrouchAction, EKeys::C);
-	PVVInput::Map(IMC, CrouchAction, EKeys::LeftControl);
 	PVVInput::Map(IMC, CrouchAction, EKeys::Gamepad_RightThumbstick);
 	PVVInput::Map(IMC, EatAction, EKeys::F);
 	PVVInput::Map(IMC, EatAction, EKeys::Gamepad_DPad_Down);
@@ -784,6 +783,8 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, GrabAction, EKeys::Z);
 	PVVInput::Map(IMC, GrabAction, EKeys::Gamepad_FaceButton_Right);
 	PVVInput::Map(IMC, DiveAction, EKeys::LeftAlt);
+	PVVInput::Map(IMC, DiveAction, EKeys::LeftControl);
+	PVVInput::Map(IMC, DiveAction, EKeys::ThumbMouseButton);
 	PVVInput::Map(IMC, DiveAction, EKeys::Gamepad_LeftThumbstick);
 	PVVInput::Map(IMC, EmoteAction, EKeys::T);
 	PVVInput::Map(IMC, CashAction, EKeys::H);
@@ -1300,13 +1301,39 @@ void ABRCharacter::OnAttackStartedNative()
 	bPunchLeft = !bPunchLeft;
 	if (bWobbleOn && GetMesh())
 	{
-		const FVector Dir = (GetActorForwardVector() + FVector(0.f, 0.f, 0.15f)).GetSafeNormal();
 		const FName Hand = bPunchLeft ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
 		const FName Fore = bPunchLeft ? FName(TEXT("lowerarm_l")) : FName(TEXT("lowerarm_r"));
+		const FName Upper = bPunchLeft ? FName(TEXT("upperarm_l")) : FName(TEXT("upperarm_r"));
+		const FName Clavicle = bPunchLeft ? FName(TEXT("clavicle_l")) : FName(TEXT("clavicle_r"));
 		if (GetMesh()->GetBoneIndex(Hand) != INDEX_NONE)
 		{
+			// Aim the fist at whoever is in front of you (a little help, like Gang Beasts' auto-aim).
+			const FVector Shoulder = GetMesh()->GetBoneLocation(Upper);
+			FVector Dir = (GetActorForwardVector() + FVector(0.f, 0.f, 0.1f)).GetSafeNormal();
+			float Best = 280.f;
+			for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
+			{
+				const APVVCharacter* Other = *It;
+				const FVector Chest = Other->GetActorLocation() + FVector(0.f, 0.f, 45.f);
+				const float D = FVector::Dist(Chest, Shoulder);
+				if (Other != this && D < Best && FVector::DotProduct((Chest - Shoulder).GetSafeNormal2D(), GetActorForwardVector()) > 0.5f)
+				{
+					Best = D;
+					Dir = (Chest - Shoulder).GetSafeNormal();
+				}
+			}
+			// Let the arm go loose for a moment so it really flies out, then fling it.
+			FPhysicalAnimationData Loose;
+			Loose.bIsLocalSimulation = false;
+			Loose.OrientationStrength = 20.f;
+			Loose.AngularVelocityStrength = 2.f;
+			PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(Clavicle, Loose, true);
+			PunchArmRestoreAt = GetWorld()->GetTimeSeconds() + 0.28f;
 			GetMesh()->AddImpulse(Dir * PunchImpulse, Hand, true);
-			GetMesh()->AddImpulse(Dir * PunchImpulse * 0.6f, Fore, true);
+			GetMesh()->AddImpulse(Dir * PunchImpulse * 0.7f, Fore, true);
+			GetMesh()->AddImpulse(Dir * PunchImpulse * 0.35f, Upper, true);
+			// Twist the shoulders into it.
+			GetMesh()->AddImpulseToAllBodiesBelow(Dir * 220.f, TEXT("spine_03"), true, false);
 		}
 	}
 	if (PunchSwingSound && GetNetMode() != NM_DedicatedServer)
@@ -1342,10 +1369,13 @@ bool ABRCharacter::HandlePunchHit()
 
 void ABRCharacter::Server_Mash_Implementation()
 {
-	if (GetCondition() != EPVVCondition::KnockedDown || GetCarrier())
+	const float Now = GetWorld()->GetTimeSeconds();
+	// Stay down at least a moment, and only count presses a human could make (the physics body needs time to settle).
+	if (GetCondition() != EPVVCondition::KnockedDown || GetCarrier() || Now - KnockedDownAt < 1.2f || Now - LastMashTime < 0.1f)
 	{
 		return;
 	}
+	LastMashTime = Now;
 	if (++MashCount >= MashToWake)
 	{
 		MashCount = 0;
@@ -1670,8 +1700,8 @@ void ABRCharacter::ApplyMuscles(float ArmMuscle)
 	{
 		FPhysicalAnimationData Data;
 		Data.bIsLocalSimulation = false;
-		Data.OrientationStrength = Strength * WobbleStrength;
-		Data.AngularVelocityStrength = Strength * WobbleStrength * 0.1f;
+		Data.OrientationStrength = Strength * WobbleStrength * DizzyScale;
+		Data.AngularVelocityStrength = Strength * WobbleStrength * DizzyScale * 0.1f;
 		Data.PositionStrength = 0.f;
 		Data.VelocityStrength = 0.f;
 		return Data;
@@ -1692,6 +1722,11 @@ void ABRCharacter::ApplyMuscles(float ArmMuscle)
 	}
 }
 
+float ABRCharacter::CurrentArmMuscle() const
+{
+	return bArmsStiff ? (bAiming ? AimArmStrength : DriveArmStrength) : ArmStrength;
+}
+
 void ABRCharacter::TickWobble()
 {
 	if (!bWobbleOn || !GetMesh())
@@ -1704,8 +1739,21 @@ void ABRCharacter::TickWobble()
 		bArmsStiff = WantsStiffArms();
 		ApplyMuscles(bArmsStiff ? (bAiming ? AimArmStrength : DriveArmStrength) : ArmStrength);
 	}
-	// Drunken sway: little random shoves to the upper body.
 	const float Now = GetWorld()->GetTimeSeconds();
+	// The punching arm goes back to normal after the swing.
+	if (PunchArmRestoreAt > 0.f && Now >= PunchArmRestoreAt)
+	{
+		PunchArmRestoreAt = -1.f;
+		ApplyMuscles(CurrentArmMuscle());
+	}
+	// Getting beaten up makes you woozy: weaker muscles, floppier body (Gang Beasts).
+	const float WantDizzy = GetCondition() == EPVVCondition::Normal ? FMath::Lerp(0.3f, 1.f, GetBalanceFraction()) : 1.f;
+	if (FMath::Abs(WantDizzy - DizzyScale) > 0.08f && PunchArmRestoreAt < 0.f)
+	{
+		DizzyScale = WantDizzy;
+		ApplyMuscles(CurrentArmMuscle());
+	}
+	// Drunken sway: little random shoves to the upper body.
 	if (Now >= NextSwayTime && GetCondition() == EPVVCondition::Normal && !bAiming && !IsDriving())
 	{
 		NextSwayTime = Now + FMath::FRandRange(0.5f, 1.4f);
@@ -1824,6 +1872,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 			AddShake(1.f);
 		}
 		MashCount = 0;
+		KnockedDownAt = GetWorld()->GetTimeSeconds();
 		if (KnockoutSound && GetNetMode() != NM_DedicatedServer)
 		{
 			UGameplayStatics::PlaySoundAtLocation(this, KnockoutSound, GetActorLocation());
@@ -2301,7 +2350,8 @@ void ABRCharacter::Server_Dive_Implementation()
 	BlowDisguise();
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	const float MaskBoost = WornHat == EBRHat::LuchaMask ? 1.4f : 1.f; // Lucha Mask: flying dives
-	LaunchCharacter(Forward * DiveSpeed * MaskBoost + FVector(0.f, 0.f, 320.f), true, true);
+	LaunchCharacter(Forward * DiveSpeed * MaskBoost + FVector(0.f, 0.f, 350.f), true, true);
+	Multicast_DiveLunge();
 }
 
 void ABRCharacter::ClimbOnto(ABRCharacter* Base)
@@ -2393,7 +2443,7 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 		TArray<FOverlapResult> Hits;
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRTackle), false, this);
 		const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
-		GetWorld()->OverlapMultiByObjectType(Hits, GetActorLocation() + Forward * 70.f, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(75.f), Params);
+		GetWorld()->OverlapMultiByObjectType(Hits, GetActorLocation() + Forward * 90.f, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(110.f), Params);
 		for (const FOverlapResult& H : Hits)
 		{
 			APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
@@ -2412,8 +2462,10 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 		}
 	}
 
-	// Physics punch: did the fist connect?
-	if (Now < PunchUntil && !bPunchConnected && GetMesh())
+	TickHands(DeltaSeconds);
+
+	// (Old fist check, only used when the hands can't be tracked.)
+	if (!bHandsTracked && Now < PunchUntil && !bPunchConnected && GetMesh())
 	{
 		const FName Hand = bPunchLeft ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
 		TArray<FOverlapResult> Hits;
@@ -2432,38 +2484,115 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 			}
 		}
 	}
+}
 
-	// Flailing wobbly hands smack whoever they hit.
-	if (SlapSpeed > 0.f && bWobbleOn && GetCondition() == EPVVCondition::Normal && Now - LastSlapTime > 0.35f && GetMesh())
+// -------------------------------------------------------------------------------------------
+// Hands: any fast-moving hand hits whoever it touches (Gang Beasts)
+
+void ABRCharacter::TickHands(float DeltaSeconds)
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon || bOnShoulders
+		|| Body->GetBoneIndex(TEXT("hand_l")) == INDEX_NONE || DeltaSeconds <= 0.f)
 	{
-		for (const TCHAR* BoneName : { TEXT("hand_l"), TEXT("hand_r") })
+		bHandsTracked = false;
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	const FName Hands[2] = { FName(TEXT("hand_l")), FName(TEXT("hand_r")) };
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const FVector Pos = Body->GetBoneLocation(Hands[i]);
+		if (!bHandsTracked)
 		{
-			const FName Bone(BoneName);
-			if (GetMesh()->GetBoneIndex(Bone) == INDEX_NONE)
+			LastHandPos[i] = Pos;
+			continue;
+		}
+		const FVector HandVel = (Pos - LastHandPos[i]) / DeltaSeconds - GetVelocity();
+		LastHandPos[i] = Pos;
+		const bool bPunching = Now < PunchUntil && (i == 0) == bPunchLeft;
+		const float Speed = HandVel.Size();
+		if (Now < HandReadyAt[i] || (Speed < SlapSpeed && !bPunching) || Speed > 6000.f)
+		{
+			continue; // too slow (or a teleport)
+		}
+		TArray<FOverlapResult> Hits;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRHand), false, this);
+		GetWorld()->OverlapMultiByObjectType(Hits, Pos, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(bPunching ? 34.f : 22.f), Params);
+		for (const FOverlapResult& H : Hits)
+		{
+			APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
+			if (!Victim || Victim == this || Victim == GetCarriedCharacter() || Victim->GetCarrier() || Victim->GetCondition() != EPVVCondition::Normal)
 			{
 				continue;
 			}
-			const FVector HandVel = GetMesh()->GetPhysicsLinearVelocity(Bone) - GetVelocity();
-			if (HandVel.Size() < SlapSpeed)
+			const float Hard = FMath::Clamp((Speed - SlapSpeed) / 900.f, 0.f, 1.f);
+			float Damage = FMath::Lerp(HandHitMinDamage, HandHitMaxDamage, Hard);
+			if (bPunching)
 			{
-				continue;
+				Damage = FMath::Max(Damage, AttackDamage);
 			}
-			TArray<FOverlapResult> Hits;
-			FCollisionQueryParams Params(SCENE_QUERY_STAT(BRSlap), false, this);
-			GetWorld()->OverlapMultiByObjectType(Hits, GetMesh()->GetBoneLocation(Bone), FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(35.f), Params);
-			for (const FOverlapResult& H : Hits)
+			FName HitBone = TEXT("spine_03");
+			if (const USkeletalMeshComponent* VictimBody = Victim->GetMesh(); VictimBody && VictimBody->GetBoneIndex(TEXT("head")) != INDEX_NONE
+				&& FVector::Dist(VictimBody->GetBoneLocation(TEXT("head")), Pos) < 40.f)
 			{
-				APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
-				if (Victim && Victim != this && Victim != GetCarriedCharacter() && !Victim->GetCarrier())
-				{
-					LastSlapTime = Now;
-					const float Power = FMath::Clamp(HandVel.Size() / SlapSpeed, 1.f, 2.f);
-					Victim->ReceiveMeleeHit(this, SlapDamage * Power, HandVel.GetSafeNormal2D() * SlapPush * Power + FVector(0.f, 0.f, 120.f));
-					Multicast_Sfx(0);
-					return;
-				}
+				Damage *= HeadHitMultiplier; // right on the chin
+				HitBone = TEXT("head");
+			}
+			const FVector Dir = HandVel.GetSafeNormal();
+			const FVector Push = Dir.GetSafeNormal2D() * FMath::Lerp(120.f, bPunching ? 520.f : 380.f, Hard) + FVector(0.f, 0.f, 80.f);
+			Victim->ReceiveMeleeHit(this, Damage, Push);
+			if (ABRCharacter* BRVictim = Cast<ABRCharacter>(Victim))
+			{
+				BRVictim->Multicast_BodyHit(HitBone, Dir * HitReaction * FMath::Lerp(0.5f, 1.3f, Hard));
+			}
+			Multicast_Sfx(bPunching || Hard > 0.4f ? 3 : 0);
+			HandReadyAt[i] = Now + 0.3f;
+			if (bPunching)
+			{
+				bPunchConnected = true;
+				PunchUntil = -1.f;
+			}
+			break;
+		}
+	}
+	bHandsTracked = true;
+}
+
+void ABRCharacter::Multicast_DiveLunge_Implementation()
+{
+	// Superman: throw the upper body and arms forward so the dive reads from far away.
+	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
+	{
+		const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+		GetMesh()->AddImpulseToAllBodiesBelow(Forward * 700.f - FVector(0.f, 0.f, 150.f), TEXT("spine_02"), true, true);
+		for (const TCHAR* Hand : { TEXT("hand_l"), TEXT("hand_r") })
+		{
+			if (GetMesh()->GetBoneIndex(Hand) != INDEX_NONE)
+			{
+				GetMesh()->AddImpulse(Forward * 1400.f, Hand, true);
 			}
 		}
+	}
+	if (TackleSound && GetNetMode() != NM_DedicatedServer && IsLocallyControlled())
+	{
+		AddShake(0.3f);
+	}
+}
+
+void ABRCharacter::Multicast_BodyHit_Implementation(FName Bone, FVector_NetQuantize Impulse)
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!bWobbleOn || !Body || Body->GetBoneIndex(Bone) == INDEX_NONE)
+	{
+		return;
+	}
+	// The part that got hit snaps back; the rest of the upper body follows a bit.
+	Body->AddImpulse(Impulse, Bone, true);
+	Body->AddImpulseToAllBodiesBelow(Impulse * 0.35f, TEXT("spine_02"), true, true);
+	if (IsLocallyControlled())
+	{
+		AddShake(0.35f);
 	}
 }
 

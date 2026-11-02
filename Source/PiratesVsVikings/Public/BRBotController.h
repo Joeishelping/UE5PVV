@@ -50,6 +50,7 @@ private:
 	FVector SidestepDir = FVector::ZeroVector;
 	float NextThink = 0.f;
 	float NextAttack = 0.f;
+	float NextMash = 0.f;
 	FVector PatrolPoint = FVector::ZeroVector;
 	float PatrolUntil = 0.f;
 	FVector MoveDir = FVector::ZeroVector;

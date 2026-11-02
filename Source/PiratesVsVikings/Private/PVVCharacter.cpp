@@ -486,7 +486,7 @@ void APVVCharacter::ReceiveMeleeHit(APVVCharacter* Attacker, float Damage, const
 
 	if (!CurrentBoat)
 	{
-		LaunchCharacter(Impulse, true, true);
+		LaunchCharacter(Impulse, false, false); // adds to how you're moving, so hits stack up instead of freezing you
 	}
 }
 

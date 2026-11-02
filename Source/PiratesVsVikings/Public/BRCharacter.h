@@ -243,11 +243,19 @@ protected:
 
 	// --- Brawling (Gang Beasts style) ------------------------------------------------------
 	/** Flailing hands faster than this (cm/s, relative to you) smack people they hit. 0 = off. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 650.f;
+	/** Any hand moving faster than this (cm/s, compared to your body) hits whoever it touches - Gang Beasts style. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 420.f;
+	/** Balance damage for the slowest / fastest hand hit (a full punch always does at least Attack Damage). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HandHitMinDamage = 5.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HandHitMaxDamage = 22.f;
+	/** Hits to the head do this much more. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HeadHitMultiplier = 1.6f;
+	/** How hard a hit snaps the body part it lands on (bigger = more dramatic reactions). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HitReaction = 700.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapDamage = 12.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapPush = 350.f;
 	/** How hard a punch throws your arm forward (physics fists). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchImpulse = 900.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchImpulse = 2200.f;
 	/** Seconds after the wind-up during which your fist can connect. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchWindow = 0.3f;
 	/** Jump presses to shake off a knockout early. */
@@ -262,8 +270,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ThrowSpeed = 1300.f;
 	/** Seconds you can hold someone who isn't zip-tied before they wriggle free. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float GrabHoldSeconds = 3.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveSpeed = 1100.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveCooldown = 3.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveSpeed = 1300.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveCooldown = 2.f;
 	/** How high you leap off a friend's shoulders (cm/s up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ShoulderLeap = 1100.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> SlapSound;
@@ -414,6 +422,19 @@ private:
 	bool bPunchLeft = false;
 	bool bPunchConnected = false;
 	int32 MashCount = 0;
+	float KnockedDownAt = -100.f;
+	float LastMashTime = -100.f;
+	// Hand hits.
+	FVector LastHandPos[2];
+	float HandReadyAt[2] = { 0.f, 0.f };
+	bool bHandsTracked = false;
+	void TickHands(float DeltaSeconds);
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_BodyHit(FName Bone, FVector_NetQuantize Impulse);
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_DiveLunge();
+	// Woozy: muscles get weaker as your balance runs out.
+	float DizzyScale = 1.f;
+	float PunchArmRestoreAt = -1.f;
+	float CurrentArmMuscle() const;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UTextRenderComponent> KOStars;
 	/** Floating text over your head: emote bubbles and the bounty "$ WANTED $". */
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UTextRenderComponent> HeadTag;

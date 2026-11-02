@@ -59,17 +59,20 @@ void ABRBotController::Tick(float DeltaSeconds)
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
 
-	// Struggle / wake up as fast as a button-masher would.
-	if (C->GetCondition() == EPVVCondition::Restrained)
+	// Struggle / wake up like a person mashing a key (about 5 presses a second, not every frame).
+	if (C->GetCondition() == EPVVCondition::Restrained || C->GetCondition() == EPVVCondition::KnockedDown)
 	{
-		C->BotStruggle();
-		return;
-	}
-	if (C->GetCondition() == EPVVCondition::KnockedDown)
-	{
-		if (FMath::FRand() < 0.4f)
+		if (Now >= NextMash)
 		{
-			C->BotMash();
+			NextMash = Now + FMath::FRandRange(0.15f, 0.25f);
+			if (C->GetCondition() == EPVVCondition::Restrained)
+			{
+				C->BotStruggle();
+			}
+			else
+			{
+				C->BotMash();
+			}
 		}
 		return;
 	}
