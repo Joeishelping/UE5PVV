@@ -61,6 +61,18 @@ namespace BR
 		return FMath::Lerp(FLinearColor::FromSRGBColor(Stops[A]), FLinearColor::FromSRGBColor(Stops[A + 1]), T - A);
 	}
 
+	FLinearColor HairColor(float Slider)
+	{
+		static const FColor Stops[] = {
+			FColor(20, 16, 14), FColor(60, 38, 24), FColor(110, 70, 40), FColor(170, 120, 70), FColor(230, 200, 130),
+			FColor(170, 60, 25), FColor(160, 160, 160), FColor(240, 240, 240), FColor(230, 60, 140), FColor(40, 90, 230), FColor(40, 200, 90)
+		};
+		constexpr int32 Num = UE_ARRAY_COUNT(Stops);
+		const float T = FMath::Clamp((Slider - 0.05f) / 0.95f, 0.f, 1.f) * (Num - 1);
+		const int32 A = FMath::Min(FMath::FloorToInt(T), Num - 2);
+		return FMath::Lerp(FLinearColor::FromSRGBColor(Stops[A]), FLinearColor::FromSRGBColor(Stops[A + 1]), T - A);
+	}
+
 	FLinearColor ClothColor(float Slider)
 	{
 		// 0.05 .. 0.9 = rainbow, 0.9 .. 1 = white -> black.

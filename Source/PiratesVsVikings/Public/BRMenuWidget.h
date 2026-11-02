@@ -42,6 +42,14 @@ private:
 	UPROPERTY() TObjectPtr<UBorder> SkinSwatch;
 	UPROPERTY() TObjectPtr<UBorder> ShirtSwatch;
 	UPROPERTY() TObjectPtr<UBorder> PantsSwatch;
+	UPROPERTY() TObjectPtr<USlider> HeadSlider;
+	UPROPERTY() TObjectPtr<USlider> NoseSlider;
+	UPROPERTY() TObjectPtr<USlider> LipSlider;
+	UPROPERTY() TObjectPtr<USlider> EarSlider;
+	UPROPERTY() TObjectPtr<USlider> HairColorSlider;
+	UPROPERTY() TObjectPtr<UBorder> HairColorSwatch;
+	UPROPERTY() TObjectPtr<UTextBlock> HairLabel;
+	UPROPERTY() TObjectPtr<UTextBlock> FacialHairLabel;
 
 	void BuildLayout();
 	UTextBlock* MakeText(const FString& Text, int32 Size, const FLinearColor& Color);
@@ -62,6 +70,18 @@ private:
 	UFUNCTION() void OnHatChanged(bool bChecked);
 	UFUNCTION() void OnSliderReleased();
 	UFUNCTION() void OnRandomLook();
+	UFUNCTION() void OnHeadChanged(float Value);
+	UFUNCTION() void OnNoseChanged(float Value);
+	UFUNCTION() void OnLipChanged(float Value);
+	UFUNCTION() void OnEarChanged(float Value);
+	UFUNCTION() void OnHairColorChanged(float Value);
+	UFUNCTION() void OnHairPrev();
+	UFUNCTION() void OnHairNext();
+	UFUNCTION() void OnFacialPrev();
+	UFUNCTION() void OnFacialNext();
+	void StepStyle(bool bFacial, int32 Step);
+	UHorizontalBox* MakePickerRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, bool bFacial);
+	void RefreshPickers();
 
 	UFUNCTION() void OnRunner();
 	UFUNCTION() void OnWarden();

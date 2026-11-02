@@ -10,6 +10,7 @@ class ABRGameState;
 class ABRPlayerState;
 class UInputAction;
 class UPhysicalAnimationComponent;
+class USkeletalMesh;
 class USkeletalMeshComponent;
 class USoundBase;
 class UAnimSequenceBase;
@@ -51,6 +52,8 @@ public:
 	/** Local only: show a look immediately (menu preview while dragging sliders). */
 	void PreviewLook(const FBRLook& NewLook);
 	UFUNCTION(BlueprintPure, Category = "BR|Look") FBRLook GetLook() const { return Look; }
+	int32 GetHairStyleCount() const { return HairStyles.Num(); }
+	int32 GetFacialHairCount() const { return FacialHairStyles.Num(); }
 
 	// --- Read these from an Animation Blueprint (Try Get Pawn Owner -> Cast to BRCharacter) ---
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") float GetHunger() const { return Hunger; }
@@ -139,6 +142,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Outfit") TObjectPtr<USkeletalMeshComponent> OutfitBottom;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Outfit") TObjectPtr<USkeletalMeshComponent> OutfitHead;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Outfit") TObjectPtr<USkeletalMeshComponent> OutfitFace;
+	/** Filled from Hair Styles / Facial Hair Styles (menu choice). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Outfit") TObjectPtr<USkeletalMeshComponent> Hair;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Outfit") TObjectPtr<USkeletalMeshComponent> FacialHair;
 
 	/** The gun in your hand (greybox parts; set CustomGunMesh to use a real model instead). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Weapons") TObjectPtr<USceneComponent> WeaponRoot;
@@ -221,6 +227,11 @@ protected:
 	/** Vector parameters on the shirt (OutfitTop) / pants (OutfitBottom) materials that get the colour. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> ShirtColorParameters = { TEXT("ShirtColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> PantsColorParameters = { TEXT("PantsColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> HairColorParameters = { TEXT("HairColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
+	/** Hairstyles players can pick in the menu (SK_Hair_... meshes, skeleton = your body's). Empty = keep the Hair component as set. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> HairStyles;
+	/** Mustaches and beards (SK_Face_... meshes). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> FacialHairStyles;
 
 	// --- NPC villagers ----------------------------------------------------------------
 	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float WanderSpeed = 160.f;
@@ -296,7 +307,9 @@ private:
 	UFUNCTION() void OnRep_Look();
 	void ApplyLook(const FBRLook& L);
 	void ApplySkin(const FLinearColor& Color);
-	void TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, float Slider);
+	void TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color);
+	void PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectPtr<USkeletalMesh>>& Styles, int32 Index);
+	void ApplyFaceShape(const FBRLook& L);
 	void TickWander(float DeltaSeconds);
 	bool WantsStiffArms() const;
 	UFUNCTION() void OnRep_Slow();

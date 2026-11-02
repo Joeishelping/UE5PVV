@@ -15,6 +15,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -57,6 +58,8 @@ ABRCharacter::ABRCharacter()
 	OutfitBottom = MakeOutfit(TEXT("OutfitBottom"));
 	OutfitHead = MakeOutfit(TEXT("OutfitHead"));
 	OutfitFace = MakeOutfit(TEXT("OutfitFace"));
+	Hair = MakeOutfit(TEXT("Hair"));
+	FacialHair = MakeOutfit(TEXT("FacialHair"));
 
 	// Greybox gun (pointing along +X, grip down). Restyled per weapon at runtime.
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -109,6 +112,13 @@ void ABRCharacter::InitAsNPC()
 	Random.ShirtColor = FMath::FRandRange(0.06f, 1.f);
 	Random.PantsColor = FMath::RandBool() ? 0.f : FMath::FRandRange(0.06f, 1.f);
 	Random.bHat = FMath::RandBool();
+	Random.HeadSize = FMath::FRandRange(.3f, .7f);
+	Random.NoseSize = FMath::FRandRange(.2f, .8f);
+	Random.LipSize = FMath::FRandRange(.25f, .75f);
+	Random.EarSize = FMath::FRandRange(.25f, .75f);
+	Random.HairStyle = FMath::RandRange(0, HairStyles.Num());
+	Random.FacialHair = FMath::RandBool() ? 0 : FMath::RandRange(0, FacialHairStyles.Num());
+	Random.HairColor = FMath::RandRange(0, 3) == 0 ? 0.f : FMath::FRandRange(.05f, .6f);
 	Random.bSet = true;
 	Look = Random;
 }
@@ -158,13 +168,58 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	{
 		return;
 	}
+	PickStyle(Hair, HairStyles, L.HairStyle);
+	PickStyle(FacialHair, FacialHairStyles, L.FacialHair);
 	ApplySkin(BR::SkinColor(L.SkinTone));
-	TintOutfit(OutfitTop, ShirtColorParameters, L.ShirtColor);
-	TintOutfit(OutfitBottom, PantsColorParameters, L.PantsColor);
+	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor), BR::ClothColor(L.ShirtColor));
+	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor), BR::ClothColor(L.PantsColor));
+	TintOutfit(Hair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
+	TintOutfit(FacialHair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	if (OutfitHead)
 	{
 		OutfitHead->SetHiddenInGame(!L.bHat);
 	}
+	ApplyFaceShape(L);
+}
+
+void ABRCharacter::PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectPtr<USkeletalMesh>>& Styles, int32 Index)
+{
+	if (!Part || Styles.Num() == 0)
+	{
+		return; // no list on the Blueprint: leave the component as you set it
+	}
+	USkeletalMesh* Wanted = nullptr;
+	if (Index > 0)
+	{
+		Wanted = Styles[(Index - 1) % Styles.Num()].Get();
+	}
+	if (Part->GetSkeletalMeshAsset() != Wanted)
+	{
+		Part->SetSkeletalMeshAsset(Wanted);
+		Part->SetLeaderPoseComponent(GetMesh(), true);
+	}
+}
+
+void ABRCharacter::ApplyFaceShape(const FBRLook& L)
+{
+	// Each slider drives a pair of shape keys: left half = "_Small", right half = "_Big", middle = normal.
+	auto Pair = [this](const TCHAR* Small, const TCHAR* Big, float Slider)
+	{
+		const float SmallWeight = FMath::Clamp((0.5f - Slider) * 2.f, 0.f, 1.f);
+		const float BigWeight = FMath::Clamp((Slider - 0.5f) * 2.f, 0.f, 1.f);
+		for (USkeletalMeshComponent* Part : { GetMesh(), OutfitHead.Get(), OutfitFace.Get(), Hair.Get(), FacialHair.Get() })
+		{
+			if (Part && Part->GetSkeletalMeshAsset())
+			{
+				Part->SetMorphTarget(Small, SmallWeight, false);
+				Part->SetMorphTarget(Big, BigWeight, false);
+			}
+		}
+	};
+	Pair(TEXT("Head_Small"), TEXT("Head_Big"), L.HeadSize);
+	Pair(TEXT("Nose_Small"), TEXT("Nose_Big"), L.NoseSize);
+	Pair(TEXT("Lips_Small"), TEXT("Lips_Big"), L.LipSize);
+	Pair(TEXT("Ears_Small"), TEXT("Ears_Big"), L.EarSize);
 }
 
 void ABRCharacter::ApplySkin(const FLinearColor& Color)
@@ -207,14 +262,12 @@ void ABRCharacter::ApplySkin(const FLinearColor& Color)
 	}
 }
 
-void ABRCharacter::TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, float Slider)
+void ABRCharacter::TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, bool bOriginal, const FLinearColor& Color)
 {
 	if (!Part || !Part->GetSkeletalMeshAsset())
 	{
 		return;
 	}
-	const bool bOriginal = BR::IsOriginalCloth(Slider);
-	const FLinearColor Color = BR::ClothColor(Slider);
 	for (int32 Index = 0; Index < Part->GetNumMaterials(); ++Index)
 	{
 		UMaterialInterface* Material = Part->GetMaterial(Index);
@@ -293,7 +346,7 @@ void ABRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	for (USkeletalMeshComponent* Outfit : { OutfitTop.Get(), OutfitBottom.Get(), OutfitHead.Get(), OutfitFace.Get() })
+	for (USkeletalMeshComponent* Outfit : { OutfitTop.Get(), OutfitBottom.Get(), OutfitHead.Get(), OutfitFace.Get(), Hair.Get(), FacialHair.Get() })
 	{
 		// Clothes copy every bone of the body (incl. physics/ragdoll) and sit exactly on it.
 		Outfit->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);

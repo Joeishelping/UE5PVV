@@ -58,6 +58,13 @@ void ABRPlayerController::Server_SetLook_Implementation(const FBRLook& NewLook)
 	Look.SkinTone = FMath::Clamp(Look.SkinTone, 0.f, 1.f);
 	Look.ShirtColor = FMath::Clamp(Look.ShirtColor, 0.f, 1.f);
 	Look.PantsColor = FMath::Clamp(Look.PantsColor, 0.f, 1.f);
+	Look.HeadSize = FMath::Clamp(Look.HeadSize, 0.f, 1.f);
+	Look.NoseSize = FMath::Clamp(Look.NoseSize, 0.f, 1.f);
+	Look.LipSize = FMath::Clamp(Look.LipSize, 0.f, 1.f);
+	Look.EarSize = FMath::Clamp(Look.EarSize, 0.f, 1.f);
+	Look.HairColor = FMath::Clamp(Look.HairColor, 0.f, 1.f);
+	Look.HairStyle = FMath::Clamp(Look.HairStyle, 0, 64);
+	Look.FacialHair = FMath::Clamp(Look.FacialHair, 0, 64);
 	if (ABRPlayerState* PS = GetPlayerState<ABRPlayerState>())
 	{
 		PS->Look = Look;

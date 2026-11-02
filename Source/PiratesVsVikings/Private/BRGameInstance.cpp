@@ -28,6 +28,13 @@ void UBRGameInstance::SaveLook() const
 	GConfig->SetFloat(LookSection, TEXT("ShirtColor"), Look.ShirtColor, GGameUserSettingsIni);
 	GConfig->SetFloat(LookSection, TEXT("PantsColor"), Look.PantsColor, GGameUserSettingsIni);
 	GConfig->SetBool(LookSection, TEXT("Hat"), Look.bHat, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("HeadSize"), Look.HeadSize, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("NoseSize"), Look.NoseSize, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("LipSize"), Look.LipSize, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("EarSize"), Look.EarSize, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("HairStyle"), Look.HairStyle, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("HairColor"), Look.HairColor, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("FacialHair"), Look.FacialHair, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
@@ -41,6 +48,13 @@ void UBRGameInstance::LoadLook()
 	GConfig->GetFloat(LookSection, TEXT("ShirtColor"), Look.ShirtColor, GGameUserSettingsIni);
 	GConfig->GetFloat(LookSection, TEXT("PantsColor"), Look.PantsColor, GGameUserSettingsIni);
 	GConfig->GetBool(LookSection, TEXT("Hat"), Look.bHat, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("HeadSize"), Look.HeadSize, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("NoseSize"), Look.NoseSize, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("LipSize"), Look.LipSize, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("EarSize"), Look.EarSize, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("HairStyle"), Look.HairStyle, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("HairColor"), Look.HairColor, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("FacialHair"), Look.FacialHair, GGameUserSettingsIni);
 }
 
 void UBRGameInstance::Init()

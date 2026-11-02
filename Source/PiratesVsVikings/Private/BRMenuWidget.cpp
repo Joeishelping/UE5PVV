@@ -10,6 +10,7 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/CheckBox.h"
 #include "Components/Slider.h"
+#include "Components/ScrollBox.h"
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -183,6 +184,7 @@ void UBRMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	{
 		StatusLine->SetText(FText::FromString(GI->StatusText));
 	}
+	RefreshPickers();
 	if (CustomizeBox)
 	{
 		CustomizeBox->SetVisibility(GI->PreferredTeam != EPVVFaction::None ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -244,6 +246,23 @@ void UBRMenuWidget::BuildCustomize(UVerticalBox* Box)
 	ShirtSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnShirtChanged);
 	PantsSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnPantsChanged);
 
+	// Face shape (middle = normal).
+	TObjectPtr<UBorder> NoSwatch;
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Head"), Look.HeadSize, HeadSlider, NoSwatch), 2.f);
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Nose"), Look.NoseSize, NoseSlider, NoSwatch), 2.f);
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Lips"), Look.LipSize, LipSlider, NoSwatch), 2.f);
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Ears"), Look.EarSize, EarSlider, NoSwatch), 2.f);
+	HeadSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnHeadChanged);
+	NoseSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnNoseChanged);
+	LipSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnLipChanged);
+	EarSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnEarChanged);
+
+	// Hair + facial hair.
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Hair"), HairLabel, false), 2.f);
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Beard"), FacialHairLabel, true), 2.f);
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Hair color"), Look.HairColor, HairColorSlider, HairColorSwatch), 2.f);
+	HairColorSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnHairColorChanged);
+
 	UHorizontalBox* Extras = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	HatBox = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass());
 	HatBox->SetIsChecked(Look.bHat);
@@ -260,12 +279,96 @@ void UBRMenuWidget::BuildCustomize(UVerticalBox* Box)
 	}
 	if (UHorizontalBoxSlot* S = Extras->AddChildToHorizontalBox(Random)) { S->SetVerticalAlignment(VAlign_Center); }
 	AddRow(CustomizeBox, Extras, 2.f);
-	AddRow(CustomizeBox, MakeText(TEXT("Shirt/Pants slider all the way left = the outfit's own colour."), 12, FLinearColor(0.6f, 0.6f, 0.6f)), 2.f);
+	AddRow(CustomizeBox, MakeText(TEXT("Colour sliders all the way left = original colour. Face sliders: middle = normal."), 12, FLinearColor(0.6f, 0.6f, 0.6f)), 2.f);
 
 	CustomizeBox->SetVisibility(GI && GI->PreferredTeam != EPVVFaction::None ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	AddRow(Box, CustomizeBox, 4.f);
+	// Scrolls if the screen is small.
+	USizeBox* Limit = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	Limit->SetMaxDesiredHeight(380.f);
+	UScrollBox* Scroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
+	Scroll->AddChild(CustomizeBox);
+	Limit->AddChild(Scroll);
+	AddRow(Box, Limit, 4.f);
 	RefreshSwatches();
+	RefreshPickers();
 }
+
+UHorizontalBox* UBRMenuWidget::MakePickerRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, bool bFacial)
+{
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	USizeBox* LabelBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	LabelBox->SetWidthOverride(110.f);
+	UTextBlock* Text = MakeText(Label, 16, FLinearColor::White);
+	Text->SetJustification(ETextJustify::Left);
+	LabelBox->AddChild(Text);
+	UButton* Prev = MakeButton(TEXT("<"), Neutral);
+	UButton* Next = MakeButton(TEXT(">"), Neutral);
+	if (bFacial)
+	{
+		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFacialPrev);
+		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFacialNext);
+	}
+	else
+	{
+		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHairPrev);
+		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHairNext);
+	}
+	OutValue = MakeText(TEXT(""), 16, FLinearColor(1.f, 0.85f, 0.3f));
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(LabelBox)) { S->SetVerticalAlignment(VAlign_Center); }
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Prev)) { S->SetVerticalAlignment(VAlign_Center); }
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(OutValue))
+	{
+		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		S->SetVerticalAlignment(VAlign_Center);
+	}
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(Next)) { S->SetVerticalAlignment(VAlign_Center); }
+	return Row;
+}
+
+void UBRMenuWidget::RefreshPickers()
+{
+	const UBRGameInstance* GI = GetBRGameInstance();
+	const ABRPlayerController* PC = GetBRController();
+	const ABRCharacter* Me = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (!GI)
+	{
+		return;
+	}
+	auto Describe = [](int32 Index, int32 Count, const TCHAR* None)
+	{
+		if (Index <= 0) return FString(None);
+		return Count > 0 ? FString::Printf(TEXT("Style %d / %d"), (Index - 1) % Count + 1, Count) : FString::Printf(TEXT("Style %d"), Index);
+	};
+	if (HairLabel) HairLabel->SetText(FText::FromString(Describe(GI->Look.HairStyle, Me ? Me->GetHairStyleCount() : 0, TEXT("Bald"))));
+	if (FacialHairLabel) FacialHairLabel->SetText(FText::FromString(Describe(GI->Look.FacialHair, Me ? Me->GetFacialHairCount() : 0, TEXT("Clean shaven"))));
+}
+
+void UBRMenuWidget::StepStyle(bool bFacial, int32 Step)
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	const ABRPlayerController* PC = GetBRController();
+	const ABRCharacter* Me = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (!GI)
+	{
+		return;
+	}
+	const int32 Count = Me ? (bFacial ? Me->GetFacialHairCount() : Me->GetHairStyleCount()) : 16;
+	int32& Index = bFacial ? GI->Look.FacialHair : GI->Look.HairStyle;
+	const int32 Options = FMath::Max(1, Count) + 1; // + "none"
+	Index = ((Index + Step) % Options + Options) % Options;
+	RefreshPickers();
+	SendLook();
+}
+
+void UBRMenuWidget::OnHairPrev() { StepStyle(false, -1); }
+void UBRMenuWidget::OnHairNext() { StepStyle(false, 1); }
+void UBRMenuWidget::OnFacialPrev() { StepStyle(true, -1); }
+void UBRMenuWidget::OnFacialNext() { StepStyle(true, 1); }
+void UBRMenuWidget::OnHeadChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.HeadSize = Value; PreviewLook(); } }
+void UBRMenuWidget::OnNoseChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.NoseSize = Value; PreviewLook(); } }
+void UBRMenuWidget::OnLipChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.LipSize = Value; PreviewLook(); } }
+void UBRMenuWidget::OnEarChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.EarSize = Value; PreviewLook(); } }
+void UBRMenuWidget::OnHairColorChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.HairColor = Value; PreviewLook(); } }
 
 void UBRMenuWidget::RefreshSwatches()
 {
@@ -278,6 +381,7 @@ void UBRMenuWidget::RefreshSwatches()
 	if (SkinSwatch) SkinSwatch->SetBrushColor(BR::SkinColor(GI->Look.SkinTone));
 	if (ShirtSwatch) ShirtSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.ShirtColor) ? Original : BR::ClothColor(GI->Look.ShirtColor));
 	if (PantsSwatch) PantsSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.PantsColor) ? Original : BR::ClothColor(GI->Look.PantsColor));
+	if (HairColorSwatch) HairColorSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.HairColor) ? Original : BR::HairColor(GI->Look.HairColor));
 }
 
 void UBRMenuWidget::PreviewLook()
@@ -334,6 +438,21 @@ void UBRMenuWidget::OnRandomLook()
 	GI->Look.ShirtColor = FMath::FRand();
 	GI->Look.PantsColor = FMath::FRand();
 	GI->Look.bHat = FMath::RandBool();
+	GI->Look.HeadSize = FMath::FRandRange(.25f, .75f);
+	GI->Look.NoseSize = FMath::FRand();
+	GI->Look.LipSize = FMath::FRand();
+	GI->Look.EarSize = FMath::FRand();
+	GI->Look.HairColor = FMath::FRand();
+	const ABRPlayerController* PC = GetBRController();
+	const ABRCharacter* Me = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	GI->Look.HairStyle = FMath::RandRange(0, Me ? Me->GetHairStyleCount() : 0);
+	GI->Look.FacialHair = FMath::RandBool() ? 0 : FMath::RandRange(0, Me ? Me->GetFacialHairCount() : 0);
+	if (HeadSlider) HeadSlider->SetValue(GI->Look.HeadSize);
+	if (NoseSlider) NoseSlider->SetValue(GI->Look.NoseSize);
+	if (LipSlider) LipSlider->SetValue(GI->Look.LipSize);
+	if (EarSlider) EarSlider->SetValue(GI->Look.EarSize);
+	if (HairColorSlider) HairColorSlider->SetValue(GI->Look.HairColor);
+	RefreshPickers();
 	if (SkinSlider) SkinSlider->SetValue(GI->Look.SkinTone);
 	if (ShirtSlider) ShirtSlider->SetValue(GI->Look.ShirtColor);
 	if (PantsSlider) PantsSlider->SetValue(GI->Look.PantsColor);

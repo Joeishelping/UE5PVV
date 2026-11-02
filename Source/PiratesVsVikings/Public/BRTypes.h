@@ -69,6 +69,8 @@ namespace BR
 	/** Slider 0..1 -> clothing colour. Below 0.05 = keep the outfit's own colour. */
 	PIRATESVSVIKINGS_API FLinearColor ClothColor(float Slider);
 	inline bool IsOriginalCloth(float Slider) { return Slider < 0.05f; }
+	/** Slider 0..1 -> natural hair colours, then dyed ones. Below 0.05 = keep the hair's own colour. */
+	PIRATESVSVIKINGS_API FLinearColor HairColor(float Slider);
 	inline bool IsIllegal(EBRItem Item) { return Item == EBRItem::IllegalGun; }
 }
 
@@ -84,9 +86,20 @@ struct FBRLook
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float ShirtColor = 0.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float PantsColor = 0.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") bool bHat = true;
+
+	// Face shape (your Blender shape keys / Unreal morph targets). 0 = small, 0.5 = normal, 1 = big.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float HeadSize = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float NoseSize = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float LipSize = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float EarSize = 0.5f;
+
+	/** 0 = no hair, 1.. = Hair Styles list on the character Blueprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 HairStyle = 1;
+	/** 0 = the hair's own colour, otherwise black -> brown -> blonde -> red -> grey -> dyed colours. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float HairColor = 0.f;
+	/** 0 = clean shaven, 1.. = Facial Hair Styles list on the character Blueprint (mustaches, beards). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 FacialHair = 0;
+
 	/** False until someone picked a look (then the character keeps its Blueprint colours). */
 	UPROPERTY() bool bSet = false;
-
-	bool operator==(const FBRLook& O) const { return SkinTone == O.SkinTone && ShirtColor == O.ShirtColor && PantsColor == O.PantsColor && bHat == O.bHat; }
-	bool operator!=(const FBRLook& O) const { return !(*this == O); }
 };
