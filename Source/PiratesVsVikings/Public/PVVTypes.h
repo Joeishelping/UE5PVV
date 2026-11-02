@@ -11,16 +11,8 @@ enum class EPVVFaction : uint8
 	Vikings		UMETA(DisplayName = "Wardens")	// defenders (Vikings in the original mode)
 };
 
-/** Faction name for on-screen text (UMETA DisplayName is stripped from packaged games). */
-inline FText PVVFactionName(EPVVFaction Faction)
-{
-	switch (Faction)
-	{
-	case EPVVFaction::Pirates: return NSLOCTEXT("PVV", "Runners", "Runners");
-	case EPVVFaction::Vikings: return NSLOCTEXT("PVV", "Wardens", "Border Patrol");
-	default:                   return NSLOCTEXT("PVV", "Unassigned", "Unassigned");
-	}
-}
+/** Team name for on-screen text. Change them in Project Settings -> Game -> Border Run. */
+PIRATESVSVIKINGS_API FText PVVFactionName(EPVVFaction Faction);
 
 /** What a character is currently able to do. Carrying / seating are tracked separately. */
 UENUM(BlueprintType)

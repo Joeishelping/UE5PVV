@@ -780,8 +780,91 @@ ABRCockfightPit::ABRCockfightPit()
 	RoosterRed->SetupAttachment(Root);
 	RoosterBlue = CreateDefaultSubobject<USceneComponent>(TEXT("RoosterBlue"));
 	RoosterBlue->SetupAttachment(Root);
-	BuildRooster(RoosterRed, TEXT("Red"), FLinearColor(0.75f, 0.1f, 0.05f));
-	BuildRooster(RoosterBlue, TEXT("Blue"), FLinearColor(0.1f, 0.25f, 0.85f));
+	BuildRooster(RoosterRed, TEXT("Red"), FLinearColor(0.85f, 0.05f, 0.03f));
+	BuildRooster(RoosterBlue, TEXT("Blue"), FLinearColor(0.05f, 0.2f, 0.95f));
+
+	// Team corners: red half / blue half of the floor + a flag on each side.
+	AddMesh(TEXT("Team_FloorRed"), CubeMesh, FVector(-150.f, 0.f, 5.f), FVector(290.f, 580.f, 2.f), FLinearColor(0.55f, 0.08f, 0.05f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Team_FloorBlue"), CubeMesh, FVector(150.f, 0.f, 5.f), FVector(290.f, 580.f, 2.f), FLinearColor(0.06f, 0.12f, 0.5f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Team_PostRed"), CylinderMesh, FVector(-345.f, -300.f, 160.f), FVector(10.f, 10.f, 320.f), Plank, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Team_FlagRed"), CubeMesh, FVector(-345.f, -255.f, 285.f), FVector(4.f, 90.f, 60.f), FLinearColor(0.85f, 0.05f, 0.03f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Team_PostBlue"), CylinderMesh, FVector(345.f, -300.f, 160.f), FVector(10.f, 10.f, 320.f), Plank, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Team_FlagBlue"), CubeMesh, FVector(345.f, -255.f, 285.f), FVector(4.f, 90.f, 60.f), FLinearColor(0.05f, 0.2f, 0.95f), FRotator::ZeroRotator, false);
+
+	// Big RED / BLUE signs floating over each bird (always turned to face you).
+	RedTag = AddLabel(TEXT("RedTag"), FVector(-200.f, 0.f, 190.f), 60.f, FColor(255, 40, 30));
+	RedTag->SetText(FText::FromString(TEXT("RED")));
+	BlueTag = AddLabel(TEXT("BlueTag"), FVector(200.f, 0.f, 190.f), 60.f, FColor(60, 120, 255));
+	BlueTag->SetText(FText::FromString(TEXT("BLUE")));
+}
+
+void ABRCockfightPit::SetupRoosterLooks()
+{
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		USceneComponent* Bird = Side == 0 ? RoosterRed : RoosterBlue;
+		const FLinearColor Team = Side == 0 ? RedTeamColor : BlueTeamColor;
+		if (!Bird)
+		{
+			continue;
+		}
+		TArray<USceneComponent*> Parts;
+		Bird->GetChildrenComponents(false, Parts);
+		for (USceneComponent* Child : Parts)
+		{
+			UStaticMeshComponent* Part = Cast<UStaticMeshComponent>(Child);
+			if (!Part)
+			{
+				continue;
+			}
+			const FString Name = Part->GetName();
+			const bool bTeamPart = Name.EndsWith(TEXT("_Collar")) || Name.EndsWith(TEXT("_Tag"));
+			if (Name.EndsWith(TEXT("_Collar")))
+			{
+				Part->SetRelativeLocation(CollarLocation);
+				Part->SetRelativeScale3D(CollarSize / 100.f);
+			}
+			if (Name.EndsWith(TEXT("_Tag")))
+			{
+				Part->SetRelativeLocation(CollarLocation + FVector(CollarSize.X * 0.5f, 0.f, -CollarSize.Z));
+			}
+			if (bTeamPart || Name.EndsWith(TEXT("_Tail")) || Name.EndsWith(TEXT("_Sash")) || Name.Contains(TEXT("_Wing")))
+			{
+				Paint(Part, Team);
+			}
+			if (RoosterModel && !bTeamPart)
+			{
+				Part->SetVisibility(false); // your model replaces the greybox bird
+			}
+		}
+		if (RoosterModel && GetNetMode() != NM_DedicatedServer)
+		{
+			UStaticMeshComponent* Model = NewObject<UStaticMeshComponent>(this, Side == 0 ? TEXT("RedRoosterModel") : TEXT("BlueRoosterModel"));
+			Model->SetStaticMesh(RoosterModel);
+			Model->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Model->SetupAttachment(Bird);
+			Model->RegisterComponent();
+			Model->SetRelativeTransform(FTransform(RoosterModelRotation, RoosterModelOffset, RoosterModelScale));
+		}
+		if (UTextRenderComponent* Tag = Side == 0 ? RedTag.Get() : BlueTag.Get())
+		{
+			Tag->SetTextRenderColor(Team.ToFColor(true));
+		}
+	}
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		const FString Name = Mesh->GetName();
+		if (Name == TEXT("Team_FlagRed"))
+		{
+			Paint(Mesh, RedTeamColor);
+		}
+		else if (Name == TEXT("Team_FlagBlue"))
+		{
+			Paint(Mesh, BlueTeamColor);
+		}
+	}
 }
 
 void ABRCockfightPit::BuildRooster(USceneComponent* Parent, const TCHAR* Prefix, const FLinearColor& Accent)
@@ -799,6 +882,11 @@ void ABRCockfightPit::BuildRooster(USceneComponent* Parent, const TCHAR* Prefix,
 	Piece(TEXT("Beak"), ConeMesh, FVector(48.f, 0.f, 84.f), FVector(10.f, 10.f, 16.f), FLinearColor(1.f, 0.75f, 0.1f), FRotator(-90.f, 0.f, 0.f));
 	Piece(TEXT("Tail"), ConeMesh, FVector(-38.f, 0.f, 70.f), FVector(25.f, 15.f, 50.f), Accent, FRotator(35.f, 0.f, 0.f));
 	Piece(TEXT("Sash"), CylinderMesh, FVector(0.f, 0.f, 50.f), FVector(55.f, 55.f, 8.f), Accent);
+	// Team collar around the neck + a hanging tag, and wings in the team colour.
+	Piece(TEXT("Collar"), CylinderMesh, FVector(28.f, 0.f, 68.f), FVector(34.f, 34.f, 9.f), Accent);
+	Piece(TEXT("Tag"), SphereMesh, FVector(45.f, 0.f, 59.f), FVector(12.f, 12.f, 12.f), Accent);
+	Piece(TEXT("WingL"), SphereMesh, FVector(-5.f, -27.f, 50.f), FVector(50.f, 12.f, 32.f), Accent, FRotator(-15.f, 0.f, 0.f));
+	Piece(TEXT("WingR"), SphereMesh, FVector(-5.f, 27.f, 50.f), FVector(50.f, 12.f, 32.f), Accent, FRotator(-15.f, 0.f, 0.f));
 	Piece(TEXT("LegL"), CylinderMesh, FVector(0.f, -12.f, 12.f), FVector(5.f, 5.f, 24.f), FLinearColor(1.f, 0.75f, 0.1f));
 	Piece(TEXT("LegR"), CylinderMesh, FVector(0.f, 12.f, 12.f), FVector(5.f, 5.f, 24.f), FLinearColor(1.f, 0.75f, 0.1f));
 }
@@ -816,6 +904,7 @@ void ABRCockfightPit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 void ABRCockfightPit::BeginPlay()
 {
 	Super::BeginPlay();
+	SetupRoosterLooks();
 	if (HasAuthority())
 	{
 		const ABRGameState* GS = BRGame(this);
@@ -960,6 +1049,18 @@ void ABRCockfightPit::Tick(float DeltaSeconds)
 			Rot.Roll = 90.f; // KO'd
 		}
 		Bird->SetRelativeLocationAndRotation(Pos, Rot);
+
+		// RED / BLUE sign follows its bird and turns to face this player's camera.
+		if (UTextRenderComponent* Tag = Side == 0 ? RedTag.Get() : BlueTag.Get())
+		{
+			Tag->SetRelativeLocation(FVector(Pos.X, Pos.Y, 170.f + Pos.Z * 0.3f));
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			if (PC && PC->PlayerCameraManager)
+			{
+				const FVector ToCamera = PC->PlayerCameraManager->GetCameraLocation() - Tag->GetComponentLocation();
+				Tag->SetWorldRotation(FRotator(0.f, ToCamera.Rotation().Yaw, 0.f));
+			}
+		}
 	}
 }
 
@@ -1011,6 +1112,361 @@ void ABRTracerFX::Init(const FVector& Start, const FVector& End, bool bLethal, b
 		{
 			MID->SetVectorParameterValue(TEXT("Color"), bHitSomeone ? FLinearColor(1.f, 0.1f, 0.1f) : Color);
 		}
+	}
+}
+
+// ===========================================================================================
+// Village (decoration for the Runner town). Positions are relative to the Desert Arena origin.
+
+namespace
+{
+	constexpr float VillageFloorZ = 100.f; // desert floor height (ABRDesertArena::Ground)
+	const FLinearColor VillageWood(0.42f, 0.27f, 0.13f);
+	const FLinearColor VillageDarkWood(0.25f, 0.15f, 0.08f);
+	const FLinearColor VillageGlass(0.25f, 0.45f, 0.6f);
+	const FLinearColor VillageLeaf(0.15f, 0.45f, 0.12f);
+	const FLinearColor VillageCactus(0.2f, 0.5f, 0.2f);
+	const FLinearColor VillageFestive[] = {
+		{0.95f, 0.1f, 0.4f}, {0.1f, 0.7f, 0.9f}, {1.f, 0.8f, 0.05f}, {0.2f, 0.85f, 0.25f}, {1.f, 0.4f, 0.05f}, {0.6f, 0.2f, 0.9f}
+	};
+}
+
+ABRVillage::ABRVillage()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.05f;
+
+	// --- Colourful adobe houses (solid; doors + windows face the road).
+	House(TEXT("House1"), -7600.f, -3300.f, 700.f, 600.f, 330.f, FLinearColor(0.95f, 0.55f, 0.6f), FLinearColor(0.95f, 0.95f, 0.9f));
+	House(TEXT("House2"), -8600.f, -4600.f, 600.f, 700.f, 300.f, FLinearColor(0.25f, 0.7f, 0.65f), FLinearColor(0.95f, 0.9f, 0.6f));
+	House(TEXT("House3"), -7400.f, 1600.f, 700.f, 600.f, 340.f, FLinearColor(0.98f, 0.8f, 0.3f), FLinearColor(0.2f, 0.4f, 0.8f));
+	House(TEXT("House4"), -12900.f, 5200.f, 800.f, 700.f, 320.f, FLinearColor(0.35f, 0.5f, 0.9f), FLinearColor(0.95f, 0.95f, 0.95f));
+	House(TEXT("House5"), -11200.f, 5600.f, 700.f, 700.f, 360.f, FLinearColor(1.f, 0.55f, 0.2f), FLinearColor(0.4f, 0.2f, 0.1f));
+	House(TEXT("House6"), -15200.f, 3400.f, 600.f, 800.f, 300.f, FLinearColor(0.45f, 0.75f, 0.35f), FLinearColor(0.95f, 0.9f, 0.8f));
+	House(TEXT("House7"), -13200.f, -4800.f, 700.f, 600.f, 310.f, FLinearColor(0.7f, 0.55f, 0.9f), FLinearColor(1.f, 0.9f, 0.5f));
+	House(TEXT("House8"), -9800.f, 4300.f, 700.f, 700.f, 330.f, FLinearColor(0.8f, 0.4f, 0.25f), FLinearColor(0.95f, 0.85f, 0.6f));
+	House(TEXT("House9"), -6800.f, -2000.f, 700.f, 600.f, 300.f, FLinearColor(0.7f, 0.9f, 0.3f), FLinearColor(0.3f, 0.2f, 0.15f));
+
+	// --- Church with a bell tower.
+	const FLinearColor Chalk(0.95f, 0.92f, 0.85f);
+	AddMesh(TEXT("Church_Body"), CubeMesh, FVector(-14200.f, -3200.f, VillageFloorZ + 300.f), FVector(900.f, 700.f, 600.f), Chalk);
+	AddMesh(TEXT("Church_Roof"), CubeMesh, FVector(-14200.f, -3200.f, VillageFloorZ + 615.f), FVector(940.f, 740.f, 30.f), FLinearColor(0.7f, 0.35f, 0.2f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Church_Tower"), CubeMesh, FVector(-13850.f, -3200.f, VillageFloorZ + 550.f), FVector(260.f, 260.f, 1100.f), Chalk);
+	AddMesh(TEXT("Church_Dome"), SphereMesh, FVector(-13850.f, -3200.f, VillageFloorZ + 1120.f), FVector(240.f, 240.f, 200.f), FLinearColor(0.85f, 0.6f, 0.2f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Church_CrossV"), CubeMesh, FVector(-13850.f, -3200.f, VillageFloorZ + 1300.f), FVector(15.f, 15.f, 160.f), FLinearColor(0.2f, 0.2f, 0.2f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Church_CrossH"), CubeMesh, FVector(-13850.f, -3200.f, VillageFloorZ + 1330.f), FVector(15.f, 90.f, 15.f), FLinearColor(0.2f, 0.2f, 0.2f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Church_Bell"), ConeMesh, FVector(-13715.f, -3200.f, VillageFloorZ + 900.f), FVector(70.f, 70.f, 80.f), FLinearColor(0.75f, 0.6f, 0.15f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Church_Door"), CubeMesh, FVector(-13748.f, -3200.f, VillageFloorZ + 140.f), FVector(10.f, 160.f, 280.f), VillageDarkWood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Church_Window"), SphereMesh, FVector(-13745.f, -3200.f, VillageFloorZ + 450.f), FVector(10.f, 120.f, 120.f), FLinearColor(0.9f, 0.3f, 0.5f), FRotator::ZeroRotator, false);
+
+	// --- Plaza: stone floor, fountain, benches, palms, flags strung across.
+	AddMesh(TEXT("Plaza_Floor"), CylinderMesh, FVector(-10000.f, 700.f, VillageFloorZ + 2.f), FVector(1500.f, 1500.f, 4.f), FLinearColor(0.75f, 0.68f, 0.58f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Fountain_Base"), CylinderMesh, FVector(-10000.f, 700.f, VillageFloorZ + 30.f), FVector(420.f, 420.f, 60.f), FLinearColor(0.6f, 0.58f, 0.55f));
+	AddMesh(TEXT("Fountain_Water"), CylinderMesh, FVector(-10000.f, 700.f, VillageFloorZ + 58.f), FVector(380.f, 380.f, 6.f), FLinearColor(0.15f, 0.5f, 0.75f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Fountain_Pillar"), CylinderMesh, FVector(-10000.f, 700.f, VillageFloorZ + 140.f), FVector(50.f, 50.f, 200.f), FLinearColor(0.6f, 0.58f, 0.55f));
+	AddMesh(TEXT("Fountain_Bowl"), CylinderMesh, FVector(-10000.f, 700.f, VillageFloorZ + 240.f), FVector(160.f, 160.f, 20.f), FLinearColor(0.6f, 0.58f, 0.55f), FRotator::ZeroRotator, false);
+	Bench(-10000.f, 230.f, 0.f);
+	Bench(-10000.f, 1170.f, 0.f);
+	Bench(-10470.f, 700.f, 90.f);
+	Bench(-9530.f, 700.f, 90.f);
+	Palm(-10850.f, -150.f);
+	Palm(-9150.f, 1550.f);
+	Palm(-9150.f, -150.f);
+	Palm(-10850.f, 1550.f);
+	Picado(FVector2D(-10750.f, -50.f), FVector2D(-9250.f, 1450.f), VillageFloorZ + 430.f, 16);
+	Picado(FVector2D(-10750.f, 1450.f), FVector2D(-9250.f, -50.f), VillageFloorZ + 430.f, 16);
+	Lamp(-10750.f, -50.f);
+	Lamp(-9250.f, 1450.f);
+	Lamp(-10750.f, 1450.f);
+	Lamp(-9250.f, -50.f);
+
+	// --- Market stalls along the road.
+	Stall(-10600.f, -620.f, VillageFestive[0]);
+	Stall(-10000.f, -620.f, VillageFestive[1]);
+	Stall(-9400.f, -620.f, VillageFestive[2]);
+	Stall(-12800.f, -620.f, VillageFestive[4]);
+
+	// --- Street lamps along the road.
+	Lamp(-13600.f, -780.f);
+	Lamp(-11400.f, -780.f);
+	Lamp(-8600.f, -780.f);
+	Lamp(-6600.f, -780.f);
+
+	// --- Clutter: barrels, crates, a well, a wrecked car, laundry.
+	Barrel(-10650.f, -2300.f, FLinearColor(0.35f, 0.2f, 0.1f));
+	Barrel(-10560.f, -2180.f, FLinearColor(0.2f, 0.35f, 0.6f));
+	Barrel(-11000.f, 2400.f, FLinearColor(0.35f, 0.2f, 0.1f));
+	Barrel(-7120.f, -2880.f, FLinearColor(0.6f, 0.15f, 0.1f));
+	Barrel(-12500.f, 4750.f, FLinearColor(0.35f, 0.2f, 0.1f));
+	Crate(-10900.f, -650.f, 10.f);
+	Crate(-10880.f, -560.f, -20.f);
+	Crate(-7900.f, 1200.f, 30.f);
+	Crate(-9300.f, 4760.f, 5.f);
+	Crate(-14700.f, -2600.f, 40.f);
+
+	AddMesh(TEXT("Well_Base"), CylinderMesh, FVector(-12300.f, 1100.f, VillageFloorZ + 50.f), FVector(180.f, 180.f, 100.f), FLinearColor(0.55f, 0.5f, 0.45f));
+	AddMesh(TEXT("Well_PostL"), CubeMesh, FVector(-12300.f, 1020.f, VillageFloorZ + 170.f), FVector(12.f, 12.f, 160.f), VillageWood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Well_PostR"), CubeMesh, FVector(-12300.f, 1180.f, VillageFloorZ + 170.f), FVector(12.f, 12.f, 160.f), VillageWood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Well_Roof"), CubeMesh, FVector(-12300.f, 1100.f, VillageFloorZ + 255.f), FVector(150.f, 220.f, 12.f), FLinearColor(0.6f, 0.25f, 0.15f), FRotator(0.f, 0.f, 0.f), false);
+
+	const FLinearColor Rust(0.45f, 0.22f, 0.1f);
+	AddMesh(TEXT("Wreck_Body"), CubeMesh, FVector(-8400.f, -2500.f, VillageFloorZ + 60.f), FVector(420.f, 190.f, 80.f), Rust, FRotator(0.f, 15.f, 3.f));
+	AddMesh(TEXT("Wreck_Cab"), CubeMesh, FVector(-8450.f, -2510.f, VillageFloorZ + 140.f), FVector(180.f, 170.f, 80.f), FLinearColor(0.2f, 0.5f, 0.55f), FRotator(0.f, 15.f, 3.f));
+	AddMesh(TEXT("Wreck_Tire"), CylinderMesh, FVector(-8150.f, -2250.f, VillageFloorZ + 15.f), FVector(80.f, 80.f, 30.f), FLinearColor(0.05f, 0.05f, 0.05f), FRotator::ZeroRotator, false);
+
+	AddMesh(TEXT("Laundry_PostA"), CylinderMesh, FVector(-12400.f, 4700.f, VillageFloorZ + 110.f), FVector(10.f, 10.f, 220.f), VillageWood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Laundry_PostB"), CylinderMesh, FVector(-11650.f, 4700.f, VillageFloorZ + 110.f), FVector(10.f, 10.f, 220.f), VillageWood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Laundry_Line"), CubeMesh, FVector(-12025.f, 4700.f, VillageFloorZ + 210.f), FVector(750.f, 2.f, 2.f), FLinearColor(0.9f, 0.9f, 0.9f), FRotator::ZeroRotator, false);
+	for (int32 i = 0; i < 5; ++i)
+	{
+		const FString Name = FString::Printf(TEXT("Laundry_Cloth%d"), i);
+		AddMesh(*Name, CubeMesh, FVector(-12300.f + i * 140.f, 4700.f, VillageFloorZ + 160.f), FVector(80.f, 3.f, 90.f - (i % 2) * 30.f), VillageFestive[(i + 2) % 6], FRotator::ZeroRotator, false);
+	}
+
+	// --- Desert plants.
+	Cactus(-15500.f, -7000.f, 320.f);
+	Cactus(-12500.f, -7300.f, 260.f);
+	Cactus(-7800.f, 7300.f, 340.f);
+	Cactus(-15600.f, 7200.f, 280.f);
+	Cactus(-6200.f, -4500.f, 300.f);
+	Cactus(-10500.f, 7300.f, 250.f);
+	Cactus(-14000.f, 1300.f, 230.f);
+	Cactus(-5800.f, 5200.f, 310.f);
+	Palm(-12800.f, -2000.f);
+	Palm(-7900.f, 4800.f);
+
+	// --- Chicken yard with free-roaming chickens.
+	ChickenYard = FVector(-14000.f, 4300.f, VillageFloorZ);
+	AddMesh(TEXT("Coop_Box"), CubeMesh, FVector(-14350.f, 4150.f, VillageFloorZ + 70.f), FVector(200.f, 160.f, 140.f), VillageWood);
+	AddMesh(TEXT("Coop_Roof"), CubeMesh, FVector(-14350.f, 4150.f, VillageFloorZ + 150.f), FVector(230.f, 190.f, 15.f), FLinearColor(0.6f, 0.25f, 0.15f), FRotator(0.f, 0.f, 8.f), false);
+	for (int32 i = 0; i < 5; ++i)
+	{
+		Chicken(ChickenYard.X + FMath::Cos(i * 1.3f) * 200.f, ChickenYard.Y + FMath::Sin(i * 1.3f) * 200.f);
+	}
+}
+
+FString ABRVillage::NextName(const TCHAR* Prefix)
+{
+	return FString::Printf(TEXT("%s%d"), Prefix, ++PieceCount);
+}
+
+void ABRVillage::House(const TCHAR* Name, float X, float Y, float W, float D, float H, const FLinearColor& Wall, const FLinearColor& Trim)
+{
+	auto N = [Name](const TCHAR* Part) { return FString::Printf(TEXT("%s_%s"), Name, Part); };
+	AddMesh(*N(TEXT("Body")), CubeMesh, FVector(X, Y, VillageFloorZ + H * 0.5f), FVector(W, D, H), Wall);
+	AddMesh(*N(TEXT("Roof")), CubeMesh, FVector(X, Y, VillageFloorZ + H + 10.f), FVector(W + 60.f, D + 60.f, 20.f), Trim, FRotator::ZeroRotator, false);
+	AddMesh(*N(TEXT("Stripe")), CubeMesh, FVector(X, Y, VillageFloorZ + 20.f), FVector(W + 6.f, D + 6.f, 40.f), Trim, FRotator::ZeroRotator, false);
+	// Door, windows and a little awning on the side facing the road.
+	const float Face = Y > -1200.f ? -1.f : 1.f;
+	const float FaceY = Y + Face * (D * 0.5f + 4.f);
+	AddMesh(*N(TEXT("Door")), CubeMesh, FVector(X, FaceY, VillageFloorZ + 110.f), FVector(110.f, 8.f, 220.f), VillageDarkWood, FRotator::ZeroRotator, false);
+	AddMesh(*N(TEXT("WindowL")), CubeMesh, FVector(X - W * 0.3f, FaceY, VillageFloorZ + H * 0.6f), FVector(90.f, 8.f, 80.f), VillageGlass, FRotator::ZeroRotator, false);
+	AddMesh(*N(TEXT("WindowR")), CubeMesh, FVector(X + W * 0.3f, FaceY, VillageFloorZ + H * 0.6f), FVector(90.f, 8.f, 80.f), VillageGlass, FRotator::ZeroRotator, false);
+	AddMesh(*N(TEXT("ShutterL")), CubeMesh, FVector(X - W * 0.3f - 60.f, FaceY, VillageFloorZ + H * 0.6f), FVector(25.f, 10.f, 90.f), Trim, FRotator::ZeroRotator, false);
+	AddMesh(*N(TEXT("ShutterR")), CubeMesh, FVector(X + W * 0.3f + 60.f, FaceY, VillageFloorZ + H * 0.6f), FVector(25.f, 10.f, 90.f), Trim, FRotator::ZeroRotator, false);
+	AddMesh(*N(TEXT("Awning")), CubeMesh, FVector(X, FaceY + Face * 60.f, VillageFloorZ + 250.f), FVector(200.f, 130.f, 8.f), Trim, FRotator(0.f, 0.f, Face * -15.f), false);
+	// Flower pot by the door.
+	AddMesh(*N(TEXT("Pot")), CylinderMesh, FVector(X + 110.f, FaceY + Face * 40.f, VillageFloorZ + 25.f), FVector(45.f, 45.f, 50.f), FLinearColor(0.7f, 0.35f, 0.2f), FRotator::ZeroRotator, false);
+	AddMesh(*N(TEXT("Flowers")), SphereMesh, FVector(X + 110.f, FaceY + Face * 40.f, VillageFloorZ + 65.f), FVector(55.f, 55.f, 40.f), VillageFestive[FMath::Abs(static_cast<int32>(X + Y)) % 6], FRotator::ZeroRotator, false);
+}
+
+void ABRVillage::Stall(float X, float Y, const FLinearColor& Awning)
+{
+	const FString Id = NextName(TEXT("Stall"));
+	auto N = [&Id](const TCHAR* Part) { return FString::Printf(TEXT("%s_%s"), *Id, Part); };
+	AddMesh(*N(TEXT("Table")), CubeMesh, FVector(X, Y, VillageFloorZ + 45.f), FVector(320.f, 140.f, 90.f), VillageWood);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const FVector Corner(X + (i % 2 ? 170.f : -170.f), Y + (i / 2 ? 80.f : -80.f), VillageFloorZ + 130.f);
+		AddMesh(*FString::Printf(TEXT("%s_Post%d"), *Id, i), CylinderMesh, Corner, FVector(8.f, 8.f, 260.f), VillageDarkWood, FRotator::ZeroRotator, false);
+	}
+	AddMesh(*N(TEXT("Awning")), CubeMesh, FVector(X, Y, VillageFloorZ + 265.f), FVector(380.f, 210.f, 10.f), Awning, FRotator(0.f, 0.f, -8.f), false);
+	for (int32 i = 0; i < 6; ++i)
+	{
+		AddMesh(*FString::Printf(TEXT("%s_Goods%d"), *Id, i), SphereMesh, FVector(X - 120.f + i * 48.f, Y + ((i % 2) ? 25.f : -25.f), VillageFloorZ + 102.f),
+			FVector(34.f, 34.f, 30.f), VillageFestive[(i + static_cast<int32>(PieceCount)) % 6], FRotator::ZeroRotator, false);
+	}
+}
+
+void ABRVillage::Picado(const FVector2D& A, const FVector2D& B, float Z, int32 Count)
+{
+	const FString Id = NextName(TEXT("Picado"));
+	const FVector2D Dir = (B - A);
+	const float Len = Dir.Size();
+	const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
+	const FVector2D Mid = (A + B) * 0.5f;
+	AddMesh(*FString::Printf(TEXT("%s_String"), *Id), CubeMesh, FVector(Mid.X, Mid.Y, Z), FVector(Len, 2.f, 2.f), FLinearColor(0.9f, 0.9f, 0.9f), FRotator(0.f, Yaw, 0.f), false);
+	for (int32 i = 1; i <= Count; ++i)
+	{
+		const float T = static_cast<float>(i) / (Count + 1);
+		const FVector2D P = A + Dir * T;
+		const float Sag = FMath::Sin(T * UE_PI) * 60.f; // the string droops in the middle
+		AddMesh(*FString::Printf(TEXT("%s_Flag%d"), *Id, i), CubeMesh, FVector(P.X, P.Y, Z - Sag - 22.f), FVector(40.f, 2.f, 44.f), VillageFestive[i % 6], FRotator(0.f, Yaw, 0.f), false);
+	}
+}
+
+void ABRVillage::Cactus(float X, float Y, float H)
+{
+	const FString Id = NextName(TEXT("Cactus"));
+	AddMesh(*FString::Printf(TEXT("%s_Trunk"), *Id), CylinderMesh, FVector(X, Y, VillageFloorZ + H * 0.5f), FVector(55.f, 55.f, H), VillageCactus);
+	AddMesh(*FString::Printf(TEXT("%s_ArmL"), *Id), CylinderMesh, FVector(X, Y - 55.f, VillageFloorZ + H * 0.55f), FVector(35.f, 35.f, H * 0.35f), VillageCactus, FRotator::ZeroRotator, false);
+	AddMesh(*FString::Printf(TEXT("%s_ArmLLink"), *Id), CylinderMesh, FVector(X, Y - 35.f, VillageFloorZ + H * 0.4f), FVector(30.f, 30.f, 50.f), VillageCactus, FRotator(0.f, 0.f, 90.f), false);
+	AddMesh(*FString::Printf(TEXT("%s_ArmR"), *Id), CylinderMesh, FVector(X, Y + 55.f, VillageFloorZ + H * 0.7f), FVector(35.f, 35.f, H * 0.3f), VillageCactus, FRotator::ZeroRotator, false);
+	AddMesh(*FString::Printf(TEXT("%s_ArmRLink"), *Id), CylinderMesh, FVector(X, Y + 35.f, VillageFloorZ + H * 0.58f), FVector(30.f, 30.f, 50.f), VillageCactus, FRotator(0.f, 0.f, 90.f), false);
+}
+
+void ABRVillage::Palm(float X, float Y)
+{
+	const FString Id = NextName(TEXT("Palm"));
+	AddMesh(*FString::Printf(TEXT("%s_Trunk"), *Id), CylinderMesh, FVector(X, Y, VillageFloorZ + 250.f), FVector(35.f, 35.f, 500.f), FLinearColor(0.5f, 0.38f, 0.22f), FRotator(0.f, 0.f, 4.f));
+	for (int32 i = 0; i < 6; ++i)
+	{
+		const float Yaw = i * 60.f;
+		const FVector Out = FRotator(0.f, Yaw, 0.f).Vector() * 110.f;
+		AddMesh(*FString::Printf(TEXT("%s_Frond%d"), *Id, i), CubeMesh, FVector(X + Out.X, Y + Out.Y, VillageFloorZ + 490.f), FVector(230.f, 50.f, 6.f), VillageLeaf, FRotator(-20.f, Yaw, 0.f), false);
+	}
+}
+
+void ABRVillage::Lamp(float X, float Y)
+{
+	const FString Id = NextName(TEXT("Lamp"));
+	AddMesh(*FString::Printf(TEXT("%s_Post"), *Id), CylinderMesh, FVector(X, Y, VillageFloorZ + 230.f), FVector(14.f, 14.f, 460.f), FLinearColor(0.1f, 0.1f, 0.1f), FRotator::ZeroRotator, false);
+	AddMesh(*FString::Printf(TEXT("%s_Bulb"), *Id), SphereMesh, FVector(X, Y, VillageFloorZ + 470.f), FVector(40.f, 40.f, 40.f), FLinearColor(1.f, 0.85f, 0.5f), FRotator::ZeroRotator, false);
+	UPointLightComponent* Light = CreateDefaultSubobject<UPointLightComponent>(*FString::Printf(TEXT("%s_Light"), *Id));
+	Light->SetupAttachment(Root);
+	Light->SetRelativeLocation(FVector(X, Y, VillageFloorZ + 440.f));
+	Light->SetIntensity(0.f);
+	Light->SetAttenuationRadius(1100.f);
+	Light->SetLightColor(FLinearColor(1.f, 0.75f, 0.45f));
+	Light->SetCastShadows(false);
+	Light->SetMobility(EComponentMobility::Movable);
+}
+
+void ABRVillage::Barrel(float X, float Y, const FLinearColor& Color)
+{
+	AddMesh(*NextName(TEXT("Barrel")), CylinderMesh, FVector(X, Y, VillageFloorZ + 50.f), FVector(70.f, 70.f, 100.f), Color);
+}
+
+void ABRVillage::Crate(float X, float Y, float Yaw)
+{
+	AddMesh(*NextName(TEXT("Crate")), CubeMesh, FVector(X, Y, VillageFloorZ + 40.f), FVector(80.f, 80.f, 80.f), FLinearColor(0.6f, 0.45f, 0.25f), FRotator(0.f, Yaw, 0.f));
+}
+
+void ABRVillage::Bench(float X, float Y, float Yaw)
+{
+	const FString Id = NextName(TEXT("Bench"));
+	AddMesh(*FString::Printf(TEXT("%s_Seat"), *Id), CubeMesh, FVector(X, Y, VillageFloorZ + 45.f), FVector(220.f, 50.f, 12.f), VillageWood, FRotator(0.f, Yaw, 0.f));
+	AddMesh(*FString::Printf(TEXT("%s_Legs"), *Id), CubeMesh, FVector(X, Y, VillageFloorZ + 20.f), FVector(180.f, 30.f, 40.f), VillageDarkWood, FRotator(0.f, Yaw, 0.f), false);
+}
+
+void ABRVillage::Chicken(float X, float Y)
+{
+	const FString Id = NextName(TEXT("Chicken"));
+	USceneComponent* Bird = CreateDefaultSubobject<USceneComponent>(*Id);
+	Bird->SetupAttachment(Root);
+	Bird->SetRelativeLocation(FVector(X, Y, VillageFloorZ));
+	const bool bBrown = (PieceCount % 2) == 0;
+	const FLinearColor Feathers = bBrown ? FLinearColor(0.55f, 0.32f, 0.15f) : FLinearColor(0.92f, 0.9f, 0.85f);
+	auto Piece = [&](const TCHAR* Part, UStaticMesh* Mesh, const FVector& At, const FVector& Size, const FLinearColor& Color)
+	{
+		UStaticMeshComponent* C = AddMesh(*FString::Printf(TEXT("%s_%s"), *Id, Part), Mesh, At, Size, Color, FRotator::ZeroRotator, false);
+		C->SetupAttachment(Bird);
+		C->SetCastShadow(false);
+	};
+	Piece(TEXT("Body"), SphereMesh, FVector(0.f, 0.f, 22.f), FVector(36.f, 26.f, 28.f), Feathers);
+	Piece(TEXT("Head"), SphereMesh, FVector(16.f, 0.f, 40.f), FVector(16.f, 15.f, 16.f), Feathers);
+	Piece(TEXT("Comb"), ConeMesh, FVector(16.f, 0.f, 51.f), FVector(6.f, 8.f, 10.f), FLinearColor(0.9f, 0.05f, 0.05f));
+	Piece(TEXT("Beak"), ConeMesh, FVector(26.f, 0.f, 40.f), FVector(6.f, 6.f, 8.f), FLinearColor(1.f, 0.75f, 0.1f));
+	Piece(TEXT("Legs"), CylinderMesh, FVector(0.f, 0.f, 6.f), FVector(4.f, 14.f, 12.f), FLinearColor(1.f, 0.75f, 0.1f));
+}
+
+void ABRVillage::BeginPlay()
+{
+	Super::BeginPlay();
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		if (const FLinearColor* Color = ColorOverrides.Find(Mesh->GetFName()))
+		{
+			Paint(Mesh, *Color);
+		}
+	}
+	// Components made in the constructor aren't in the Transient arrays on spawned copies - collect them again.
+	Chickens.Reset();
+	ChickenTargets.Reset();
+	Lamps.Reset();
+	TArray<USceneComponent*> All;
+	GetComponents<USceneComponent>(All);
+	for (USceneComponent* Comp : All)
+	{
+		if (UPointLightComponent* Light = Cast<UPointLightComponent>(Comp))
+		{
+			Lamps.Add(Light);
+		}
+		else if (Comp->GetName().StartsWith(TEXT("Chicken")) && Comp->GetAttachParent() == Root)
+		{
+			Chickens.Add(Comp);
+			ChickenTargets.Add(Comp->GetRelativeLocation());
+		}
+	}
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		SetActorTickEnabled(false);
+	}
+}
+
+void ABRVillage::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const float Now = GetWorld()->GetTimeSeconds();
+
+	// Lamps on at night.
+	if (Now >= NextLampCheck)
+	{
+		NextLampCheck = Now + 1.f;
+		const ABRGameState* GS = BRGame(this);
+		const bool bNight = GS && GS->IsNight();
+		if (bNight != bLampsOn)
+		{
+			bLampsOn = bNight;
+			for (UPointLightComponent* Light : Lamps)
+			{
+				if (Light)
+				{
+					Light->SetIntensity(bNight ? LampBrightness : 0.f);
+				}
+			}
+		}
+	}
+
+	// Chickens strut, peck and wander around their yard (cosmetic, local only).
+	for (int32 i = 0; i < Chickens.Num(); ++i)
+	{
+		USceneComponent* Bird = Chickens[i];
+		if (!Bird || !ChickenTargets.IsValidIndex(i))
+		{
+			continue;
+		}
+		FVector Pos = Bird->GetRelativeLocation();
+		const FVector To = (ChickenTargets[i] - Pos) * FVector(1.f, 1.f, 0.f);
+		FRotator Rot = Bird->GetRelativeRotation();
+		if (To.Size() < 15.f)
+		{
+			if (FMath::FRand() < 0.01f)
+			{
+				const FVector2D Offset = FVector2D(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * 450.f;
+				ChickenTargets[i] = ChickenYard + FVector(Offset.X, Offset.Y, 0.f);
+			}
+			Rot.Pitch = FMath::Max(0.f, FMath::Sin(Now * 9.f + i)) * 35.f; // peck peck
+		}
+		else
+		{
+			Pos += To.GetSafeNormal() * 90.f * DeltaSeconds;
+			Pos.Z = ChickenYard.Z + FMath::Abs(FMath::Sin(Now * 14.f + i)) * 4.f;
+			Rot = FRotator(0.f, To.Rotation().Yaw, 0.f);
+		}
+		Bird->SetRelativeLocationAndRotation(Pos, Rot);
 	}
 }
 

@@ -19,7 +19,8 @@ public class PiratesVsVikings : ModuleRules
 			"OnlineSubsystemUtils",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"DeveloperSettings"
 		});
 	}
 }

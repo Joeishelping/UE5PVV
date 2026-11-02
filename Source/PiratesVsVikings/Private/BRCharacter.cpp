@@ -16,6 +16,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Components/TextRenderComponent.h"
 #include "EnhancedInputComponent.h"
@@ -95,12 +96,197 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME_CONDITION(ABRCharacter, AmmoRunnerGun, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, SlowUntil);
 	DOREPLIFETIME(ABRCharacter, SlowFactor);
+	DOREPLIFETIME(ABRCharacter, Look);
 }
 
 void ABRCharacter::InitAsNPC()
 {
 	bIsNPC = true;
 	DefaultFaction = BR::Runners;
+	// Every NPC gets a random look so the crowd isn't all clones (and players can blend in).
+	FBRLook Random;
+	Random.SkinTone = FMath::FRand();
+	Random.ShirtColor = FMath::FRandRange(0.06f, 1.f);
+	Random.PantsColor = FMath::RandBool() ? 0.f : FMath::FRandRange(0.06f, 1.f);
+	Random.bHat = FMath::RandBool();
+	Random.bSet = true;
+	Look = Random;
+}
+
+void ABRCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	if (const ABRPlayerState* PS = GetBRPlayerState(); PS && PS->bHasLook)
+	{
+		SetLook(PS->Look);
+	}
+}
+
+void ABRCharacter::SetLook(const FBRLook& NewLook)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	Look = NewLook;
+	Look.bSet = true;
+	ApplyLook(Look);
+	ForceNetUpdate();
+}
+
+void ABRCharacter::PreviewLook(const FBRLook& NewLook)
+{
+	FBRLook L = NewLook;
+	L.bSet = true;
+	ApplyLook(L);
+}
+
+void ABRCharacter::OnRep_Look()
+{
+	ApplyLook(Look);
+}
+
+static bool BRHasVectorParam(const UMaterialInterface* Material, FName Parameter)
+{
+	FLinearColor Ignored;
+	return Material && Material->GetVectorParameterValue(FHashedMaterialParameterInfo(Parameter), Ignored);
+}
+
+void ABRCharacter::ApplyLook(const FBRLook& L)
+{
+	if (!L.bSet || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	ApplySkin(BR::SkinColor(L.SkinTone));
+	TintOutfit(OutfitTop, ShirtColorParameters, L.ShirtColor);
+	TintOutfit(OutfitBottom, PantsColorParameters, L.PantsColor);
+	if (OutfitHead)
+	{
+		OutfitHead->SetHiddenInGame(!L.bHat);
+	}
+}
+
+void ABRCharacter::ApplySkin(const FLinearColor& Color)
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body || !Body->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+	bool bFound = false;
+	for (int32 Index = 0; Index < Body->GetNumMaterials(); ++Index)
+	{
+		for (const FName& Parameter : SkinColorParameters)
+		{
+			if (BRHasVectorParam(Body->GetMaterial(Index), Parameter))
+			{
+				if (UMaterialInstanceDynamic* MID = Body->CreateDynamicMaterialInstance(Index))
+				{
+					MID->SetVectorParameterValue(Parameter, Color);
+					bFound = true;
+				}
+			}
+		}
+	}
+	if (!bFound && bAutoSkinMaterial && Body->GetNumMaterials() > SkinMaterialSlot && SkinMaterialSlot >= 0)
+	{
+		// No SkinColor parameter on your material: use a plain colour material for the skin slot.
+		if (!SkinFallbackMID)
+		{
+			if (UMaterialInterface* Plain = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+			{
+				SkinFallbackMID = UMaterialInstanceDynamic::Create(Plain, this);
+			}
+		}
+		if (SkinFallbackMID)
+		{
+			SkinFallbackMID->SetVectorParameterValue(TEXT("Color"), Color);
+			Body->SetMaterial(SkinMaterialSlot, SkinFallbackMID);
+		}
+	}
+}
+
+void ABRCharacter::TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, float Slider)
+{
+	if (!Part || !Part->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+	const bool bOriginal = BR::IsOriginalCloth(Slider);
+	const FLinearColor Color = BR::ClothColor(Slider);
+	for (int32 Index = 0; Index < Part->GetNumMaterials(); ++Index)
+	{
+		UMaterialInterface* Material = Part->GetMaterial(Index);
+		if (bOriginal)
+		{
+			if (UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(Material))
+			{
+				MID->ClearParameterValues(); // back to the outfit's own colours
+			}
+			continue;
+		}
+		for (const FName& Parameter : Parameters)
+		{
+			if (BRHasVectorParam(Material, Parameter))
+			{
+				if (UMaterialInstanceDynamic* MID = Part->CreateDynamicMaterialInstance(Index))
+				{
+					MID->SetVectorParameterValue(Parameter, Color);
+				}
+			}
+		}
+	}
+}
+
+bool ABRCharacter::IsDriving() const
+{
+	const APVVBoat* Vehicle = GetCurrentBoat();
+	return Vehicle && Vehicle->GetDriver() == this;
+}
+
+bool ABRCharacter::WantsStiffArms() const
+{
+	return bAiming || (IsDriving() && (DriveAnim || SeatedAnim));
+}
+
+void ABRCharacter::StartWandering(const FVector& Home, float Radius)
+{
+	bWandering = true;
+	WanderHome = Home;
+	WanderRadius = Radius;
+	WanderTarget = GetActorLocation();
+	GetCharacterMovement()->bRunPhysicsWithNoController = true;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->MaxWalkSpeed = WanderSpeed;
+}
+
+void ABRCharacter::TickWander(float DeltaSeconds)
+{
+	if (!bWandering || Controller || GetCurrentBoat() || GetCarrier() || GetCondition() != EPVVCondition::Normal)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < WanderPauseUntil)
+	{
+		return; // standing around chatting
+	}
+	const FVector ToTarget = (WanderTarget - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	if (ToTarget.Size() < 80.f || Now > WanderGiveUpAt)
+	{
+		// Arrived (or stuck on a wall): hang out for a bit, then pick a new spot near home.
+		WanderPauseUntil = Now + FMath::FRandRange(2.f, 9.f);
+		const FVector2D Offset = FVector2D(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * WanderRadius;
+		WanderTarget = WanderHome + FVector(Offset.X, Offset.Y, 0.f);
+		WanderGiveUpAt = WanderPauseUntil + 20.f;
+		return;
+	}
+	if (GetCharacterMovement()->MaxWalkSpeed > WanderSpeed)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = WanderSpeed;
+	}
+	AddMovementInput(ToTarget.GetSafeNormal(), 1.f);
 }
 
 void ABRCharacter::BeginPlay()
@@ -119,6 +305,7 @@ void ABRCharacter::BeginPlay()
 	DefaultSocketOffset = CameraBoom->SocketOffset;
 	DefaultFOV = FollowCamera->FieldOfView;
 	EnableWobble();
+	ApplyLook(Look);
 }
 
 ABRPlayerState* ABRCharacter::GetBRPlayerState() const
@@ -622,12 +809,12 @@ void ABRCharacter::TickAnimationSlots()
 
 	UAnimSequenceBase* Wanted = nullptr;
 	if (GetCarrier()) Wanted = Pick(CarriedAnim, IdleAnim);
-	else if (GetCurrentBoat()) Wanted = Pick(SeatedAnim, IdleAnim);
+	else if (GetCurrentBoat()) Wanted = (IsDriving() && DriveAnim) ? DriveAnim.Get() : Pick(SeatedAnim, IdleAnim);
 	else if (GetCondition() == EPVVCondition::Restrained) Wanted = (GetStruggleProgress() > 0.f && StruggleAnim) ? StruggleAnim.Get() : Pick(RestrainedAnim, Locomotion);
 	else if (bInDeepWater) Wanted = Pick(SwimAnim, Locomotion);
 	else if (Move && Move->IsFalling()) Wanted = Pick(FallAnim, Locomotion);
 	else if (GetHoldProgress() > 0.f) Wanted = Pick(WorkAnim, Locomotion);
-	else if (bAiming) Wanted = Pick(AimAnim, Locomotion);
+	else if (bAiming) Wanted = (Speed > 15.f && AimWalkAnim) ? AimWalkAnim.Get() : Pick(AimAnim, Locomotion);
 	else if (bIsCrouched) Wanted = Speed > 15.f ? Pick(CrouchWalkAnim, Locomotion) : Pick(CrouchIdleAnim, Locomotion);
 	else Wanted = Locomotion;
 
@@ -829,8 +1016,8 @@ void ABRCharacter::EnableWobble()
 	MeshComp->SetAllBodiesBelowSimulatePhysics(SimRoot, true, !bWobblyLegs);
 	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(SimRoot, 1.f, false, !bWobblyLegs);
 	bWobbleOn = true;
-	bArmsStiff = bAiming;
-	ApplyMuscles(bAiming ? AimArmStrength : ArmStrength);
+	bArmsStiff = WantsStiffArms();
+	ApplyMuscles(bArmsStiff ? (bAiming ? AimArmStrength : DriveArmStrength) : ArmStrength);
 }
 
 void ABRCharacter::ApplyMuscles(float ArmMuscle)
@@ -868,14 +1055,14 @@ void ABRCharacter::TickWobble()
 		return;
 	}
 	// Arms snap to the aim pose while aiming; floppy otherwise.
-	if (bAiming != bArmsStiff)
+	if (WantsStiffArms() != bArmsStiff)
 	{
-		bArmsStiff = bAiming;
-		ApplyMuscles(bAiming ? AimArmStrength : ArmStrength);
+		bArmsStiff = WantsStiffArms();
+		ApplyMuscles(bArmsStiff ? (bAiming ? AimArmStrength : DriveArmStrength) : ArmStrength);
 	}
 	// Drunken sway: little random shoves to the upper body.
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (Now >= NextSwayTime && GetCondition() == EPVVCondition::Normal && !bAiming)
+	if (Now >= NextSwayTime && GetCondition() == EPVVCondition::Normal && !bAiming && !IsDriving())
 	{
 		NextSwayTime = Now + FMath::FRandRange(0.5f, 1.4f);
 		const float Woozy = 1.f + (Hunger < WeakHunger ? 1.5f : 0.f) + (1.f - GetBalanceFraction()) * 2.f;
@@ -948,6 +1135,11 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	{
 		bSlowApplied = bSlowedNow;
 		UpdateMovementSpeed();
+	}
+
+	if (HasAuthority())
+	{
+		TickWander(DeltaSeconds);
 	}
 
 	if (HasAuthority() && GS)
@@ -1107,14 +1299,16 @@ void ABRCharacter::UpdateGunVisual()
 		return;
 	}
 
-	// Where is it? In the hand normally; raised in front of you (pointing where you aim) while aiming.
-	const int32 Placement = bAiming ? 1 : 0;
+	// Where is it? In the hand normally. While aiming: still in the hand if you have an aim animation
+	// (so both hands are on the gun), otherwise raised in front of you, cartoon style.
 	USkeletalMeshComponent* MeshComp = GetMesh();
 	const bool bHasHand = MeshComp && MeshComp->GetSkeletalMeshAsset() && MeshComp->DoesSocketExist(HandSocket);
+	const bool bAimInHand = bAiming && bHasHand && bGunInHandWhileAiming && (AimAnim || AimWalkAnim || (MeshComp && MeshComp->AnimClass));
+	const int32 Placement = bAimInHand ? 2 : (bAiming ? 1 : 0);
 	if (Placement != GunPlacement)
 	{
 		GunPlacement = Placement;
-		if (Placement == 0 && bHasHand)
+		if ((Placement == 0 || Placement == 2) && bHasHand)
 		{
 			WeaponRoot->AttachToComponent(MeshComp, FAttachmentTransformRules::SnapToTargetNotIncludingScale, HandSocket);
 			WeaponRoot->SetRelativeTransform(HandGripOffset);

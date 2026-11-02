@@ -342,6 +342,24 @@ void ABRDesertArena::GetDogHomes(TArray<FVector>& OutHomes) const
 	};
 }
 
+void ABRDesertArena::GetVillageSpots(TArray<FVector>& OutSpots) const
+{
+	const FVector O = GetActorLocation();
+	const float Z = Ground + 100.f;
+	OutSpots = {
+		O + FVector(-10000.f, 1300.f, Z),	// plaza
+		O + FVector(-10000.f, -350.f, Z),	// market stalls
+		O + FVector(-10700.f, 2000.f, Z),	// taco stand
+		O + FVector(-9000.f, 1500.f, Z),	// cockfight crowd
+		O + FVector(-12000.f, 4500.f, Z),	// laundry / north houses
+		O + FVector(-13500.f, -2400.f, Z),	// church
+		O + FVector(-8000.f, -2900.f, Z),	// south houses
+		O + FVector(-7800.f, 900.f, Z),		// east houses
+		O + FVector(-12300.f, 1600.f, Z),	// well
+		O + FVector(-10300.f, -2000.f, Z)	// tool shop
+	};
+}
+
 FVector ABRDesertArena::GetCatapultLanding() const
 {
 	return GetActorLocation() + FVector(-8500.f, 0.f, Ground + 50.f);
@@ -406,7 +424,12 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Gate = World->SpawnActor<ABRCheckpointGate>(ABRCheckpointGate::StaticClass(), At(WallX, RoadY, Ground), Params);
 
 	// --- Cockfight pit + betting counters
-	if (ABRCockfightPit* Pit = World->SpawnActor<ABRCockfightPit>(ABRCockfightPit::StaticClass(), At(-9000.f, 2200.f, Ground), Params))
+	if (bBuildVillage)
+	{
+		World->SpawnActor<ABRVillage>(VillageClass ? VillageClass.Get() : ABRVillage::StaticClass(), At(0.f, 0.f, 0.f), Params);
+	}
+	UClass* PitClass = CockfightPitClass ? CockfightPitClass.Get() : ABRCockfightPit::StaticClass();
+	if (ABRCockfightPit* Pit = World->SpawnActor<ABRCockfightPit>(PitClass, At(-9000.f, 2200.f, Ground), Params))
 	{
 		auto Bet = [&](float X, float Y, int32 Side, int32 Amount, const FString& Title)
 		{

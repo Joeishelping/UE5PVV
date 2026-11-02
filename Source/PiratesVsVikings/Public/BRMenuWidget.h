@@ -4,7 +4,11 @@
 #include "Blueprint/UserWidget.h"
 #include "BRMenuWidget.generated.h"
 
+class UBorder;
 class UButton;
+class UCheckBox;
+class UHorizontalBox;
+class USlider;
 class UEditableTextBox;
 class UTextBlock;
 class UVerticalBox;
@@ -29,6 +33,16 @@ private:
 	UPROPERTY() TObjectPtr<UTextBlock> WardenLabel;
 	UPROPERTY() TObjectPtr<UEditableTextBox> AddressBox;
 
+	// Character customization (shows after you pick a side).
+	UPROPERTY() TObjectPtr<UVerticalBox> CustomizeBox;
+	UPROPERTY() TObjectPtr<USlider> SkinSlider;
+	UPROPERTY() TObjectPtr<USlider> ShirtSlider;
+	UPROPERTY() TObjectPtr<USlider> PantsSlider;
+	UPROPERTY() TObjectPtr<UCheckBox> HatBox;
+	UPROPERTY() TObjectPtr<UBorder> SkinSwatch;
+	UPROPERTY() TObjectPtr<UBorder> ShirtSwatch;
+	UPROPERTY() TObjectPtr<UBorder> PantsSwatch;
+
 	void BuildLayout();
 	UTextBlock* MakeText(const FString& Text, int32 Size, const FLinearColor& Color);
 	UButton* MakeButton(const FString& Label, const FLinearColor& Color, TObjectPtr<UTextBlock>* OutLabel = nullptr);
@@ -36,6 +50,18 @@ private:
 	class ABRPlayerController* GetBRController() const;
 	class UBRGameInstance* GetBRGameInstance() const;
 	void ChooseTeam(bool bRunner);
+	void BuildCustomize(UVerticalBox* Box);
+	UHorizontalBox* MakeSliderRow(const FString& Label, float Value, TObjectPtr<USlider>& OutSlider, TObjectPtr<UBorder>& OutSwatch);
+	void PreviewLook();
+	void SendLook();
+	void RefreshSwatches();
+
+	UFUNCTION() void OnSkinChanged(float Value);
+	UFUNCTION() void OnShirtChanged(float Value);
+	UFUNCTION() void OnPantsChanged(float Value);
+	UFUNCTION() void OnHatChanged(bool bChecked);
+	UFUNCTION() void OnSliderReleased();
+	UFUNCTION() void OnRandomLook();
 
 	UFUNCTION() void OnRunner();
 	UFUNCTION() void OnWarden();

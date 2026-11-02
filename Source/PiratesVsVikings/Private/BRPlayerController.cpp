@@ -21,11 +21,8 @@ void ABRPlayerController::BeginPlay()
 		return;
 	}
 	UBRGameInstance* GI = GetGameInstance<UBRGameInstance>();
-	if (GI && GI->PreferredTeam != EPVVFaction::None)
-	{
-		// Wait a moment so the automatic team balancing has run, then switch to the chosen side.
-		GetWorldTimerManager().SetTimer(PreferredTeamTimer, this, &ABRPlayerController::ApplyPreferredTeam, 1.f, false);
-	}
+	// Wait a moment so the automatic team balancing has run, then switch to the chosen side + send your look.
+	GetWorldTimerManager().SetTimer(PreferredTeamTimer, this, &ABRPlayerController::ApplyPreferredTeam, 1.f, false);
 	if (GI && !GI->bMenuDone && GetNetMode() == NM_Standalone)
 	{
 		ShowMenu();
@@ -39,6 +36,36 @@ void ABRPlayerController::ApplyPreferredTeam()
 	if (GI && GI->PreferredTeam != EPVVFaction::None && (!PS || PS->GetFaction() != GI->PreferredTeam))
 	{
 		RequestFaction(GI->PreferredTeam);
+	}
+	if (GI)
+	{
+		SendLook(GI->Look);
+	}
+}
+
+void ABRPlayerController::SendLook(const FBRLook& Look)
+{
+	if (ABRCharacter* Me = Cast<ABRCharacter>(GetPawn()))
+	{
+		Me->PreviewLook(Look); // instant on your own screen
+	}
+	Server_SetLook(Look);
+}
+
+void ABRPlayerController::Server_SetLook_Implementation(const FBRLook& NewLook)
+{
+	FBRLook Look = NewLook;
+	Look.SkinTone = FMath::Clamp(Look.SkinTone, 0.f, 1.f);
+	Look.ShirtColor = FMath::Clamp(Look.ShirtColor, 0.f, 1.f);
+	Look.PantsColor = FMath::Clamp(Look.PantsColor, 0.f, 1.f);
+	if (ABRPlayerState* PS = GetPlayerState<ABRPlayerState>())
+	{
+		PS->Look = Look;
+		PS->bHasLook = true;
+	}
+	if (ABRCharacter* Me = Cast<ABRCharacter>(GetPawn()))
+	{
+		Me->SetLook(Look);
 	}
 }
 

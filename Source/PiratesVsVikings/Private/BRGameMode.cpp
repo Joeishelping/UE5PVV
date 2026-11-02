@@ -56,6 +56,7 @@ void ABRGameMode::StartMatchFlow()
 		if (Arena)
 		{
 			Arena->SpawnGameplayActors(RunnerTruckClass, WardenTruckClass, DogClass);
+			SpawnVillagers();
 		}
 		RelocateExistingPlayers();
 	}
@@ -165,8 +166,9 @@ void ABRGameMode::AdvancePhase()
 		GS->Phase = EBRPhase::Invasion;
 		GS->PhaseSecondsLeft = InvasionSeconds;
 		GS->RunnersNeeded = FMath::Max(1, FMath::DivideAndRoundUp(GS->CountPlayers(BR::Runners), 2));
-		NextNPCTruck = 8.f;
-		Announce(FText::Format(LOCTEXT("Invasion", "THE LINE IS OPEN! Runners: get {0} of you to the Safe Zone. Wardens: catch, don't kill."), GS->RunnersNeeded));
+		NextNPCTruck = 3.f;
+		Announce(FText::Format(LOCTEXT("Invasion", "THE LINE IS OPEN! {1}: get {0} of you to the Safe Zone. {2}: catch, don't kill."), GS->RunnersNeeded,
+			FText::FromString(BR::RunnerName()), FText::FromString(BR::WardenName())));
 	}
 	else if (GS->Phase == EBRPhase::Invasion)
 	{
@@ -221,7 +223,7 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 			PS->bHasCrossedLine = true;
 			if (ABRCharacter* BRC = Cast<ABRCharacter>(C))
 			{
-				BRC->Notify(LOCTEXT("Crossed", "You crossed the Line. Wardens can now arrest you."));
+				BRC->Notify(FText::Format(LOCTEXT("Crossed", "You crossed the Line. {0} can now arrest you."), FText::FromString(BR::WardenName())));
 			}
 		}
 		const bool bFree = C->GetCondition() == EPVVCondition::Normal && !C->GetCarrier();
@@ -432,24 +434,65 @@ void ABRGameMode::SpawnNPCTruck()
 	Arena->GetNPCRoute(Route, CheckpointIndex);
 	Truck->StartNPCRoute(Route, CheckpointIndex, Arena->GetGate());
 
-	// 1-4 look-alike NPCs (driver first). Empty seats are where Runners hide.
-	const int32 Count = FMath::RandRange(1, 3);
-	UClass* NPCClass = NPCPassengerClass ? NPCPassengerClass.Get() : ABRCharacter::StaticClass();
+	// Look-alike NPCs (driver first). Empty seats are where Runners hide.
+	const int32 Count = FMath::Clamp(FMath::RandRange(NPCsPerTruck.X, NPCsPerTruck.Y), 1, 4);
 	for (int32 i = 0; i < Count; ++i)
 	{
-		const FTransform NPCSpawn(Spawn.GetLocation() + FVector(0.f, 0.f, 300.f + i * 220.f));
-		ABRCharacter* NPC = GetWorld()->SpawnActorDeferred<ABRCharacter>(NPCClass, NPCSpawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		if (!NPC)
+		if (ABRCharacter* NPC = SpawnNPC(FTransform(Spawn.GetLocation() + FVector(0.f, 0.f, 300.f + i * 220.f))))
 		{
-			continue;
+			Truck->AddNPC(NPC);
 		}
-		NPC->InitAsNPC();
-		NPC->FinishSpawning(NPCSpawn);
-		Truck->AddNPC(NPC);
 	}
 	if (Truck->GetStationCount() > 0)
 	{
 		Truck->SetRadioStation(FMath::RandRange(0, Truck->GetStationCount() - 1));
+	}
+}
+
+UClass* ABRGameMode::GetNPCClass() const
+{
+	UClass* NPCClass = NPCPassengerClass.Get();
+	// Default setting: use your Runner Blueprint so NPCs have your mesh, outfits and animations.
+	if ((!NPCClass || NPCClass == ABRCharacter::StaticClass()) && PirateCharacterClass && PirateCharacterClass->IsChildOf(ABRCharacter::StaticClass()))
+	{
+		NPCClass = PirateCharacterClass.Get();
+	}
+	return NPCClass && NPCClass->IsChildOf(ABRCharacter::StaticClass()) ? NPCClass : ABRCharacter::StaticClass();
+}
+
+ABRCharacter* ABRGameMode::SpawnNPC(const FTransform& Where)
+{
+	ABRCharacter* NPC = GetWorld()->SpawnActorDeferred<ABRCharacter>(GetNPCClass(), Where, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!NPC)
+	{
+		return nullptr;
+	}
+	NPC->AutoPossessAI = EAutoPossessAI::Disabled;
+	NPC->InitAsNPC();
+	NPC->FinishSpawning(Where);
+	return NPC;
+}
+
+void ABRGameMode::SpawnVillagers()
+{
+	if (!Arena || VillagerCount <= 0)
+	{
+		return;
+	}
+	TArray<FVector> Spots;
+	Arena->GetVillageSpots(Spots);
+	if (Spots.Num() == 0)
+	{
+		return;
+	}
+	for (int32 i = 0; i < VillagerCount; ++i)
+	{
+		const FVector Home = Spots[i % Spots.Num()];
+		const FVector At = Home + FVector(FMath::FRandRange(-200.f, 200.f), FMath::FRandRange(-200.f, 200.f), 0.f);
+		if (ABRCharacter* NPC = SpawnNPC(FTransform(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At)))
+		{
+			NPC->StartWandering(Home, VillagerWanderRadius);
+		}
 	}
 }
 

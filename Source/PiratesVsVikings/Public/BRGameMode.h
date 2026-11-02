@@ -71,10 +71,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float HarassmentPenalty = 5.f;
 
 	/** NPC traffic through the checkpoint during the Invasion. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FVector2D NPCTruckEverySeconds = FVector2D(40.f, 75.f);
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxNPCTrucks = 3;
-	/** Class used for NPC passengers - set it to your Runner Blueprint so they look like players. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FVector2D NPCTruckEverySeconds = FVector2D(12.f, 25.f);
+	/** Most NPC trucks on the road at once. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxNPCTrucks = 8;
+	/** NPCs per truck (driver included). Up to 4 seats - empty seats are where Runners hide. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FIntPoint NPCsPerTruck = FIntPoint(1, 3);
+	/**
+	 * Class for NPC passengers AND village NPCs. Leave it on BRCharacter and they automatically
+	 * use your Runner Blueprint (PVV|Factions -> Pirate Character Class), so they have your Runner's mesh, outfits and animations.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") TSubclassOf<APawn> NPCPassengerClass;
+
+	/** Townsfolk strolling around the Runner village. 0 = none. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") int32 VillagerCount = 12;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") float VillagerWanderRadius = 1100.f;
 
 private:
 	UPROPERTY() TObjectPtr<ABRDesertArena> Arena;
@@ -93,6 +103,9 @@ private:
 	void LaunchFromPen(APVVCharacter* Prisoner);
 	void RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner);
 	void SpawnNPCTruck();
+	void SpawnVillagers();
+	UClass* GetNPCClass() const;
+	class ABRCharacter* SpawnNPC(const FTransform& Where);
 	void SendHomeLater(APVVCharacter* Character, float Seconds);
 	FString NameOf(const APVVCharacter* Character) const;
 };

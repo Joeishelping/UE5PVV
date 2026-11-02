@@ -39,8 +39,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsWarden() const { return GetFaction() == BR::Wardens; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsNPC() const { return bIsNPC; }
 
-	/** Call before FinishSpawning: a computer-controlled look-alike passenger. */
+	/** Call before FinishSpawning: a computer-controlled look-alike passenger. Gets a random look. */
 	void InitAsNPC();
+	/** Server, after spawning an NPC: stroll around Home (village life). */
+	void StartWandering(const FVector& Home, float Radius);
+
+	virtual void PossessedBy(AController* NewController) override;
+
+	/** Server: set this character's customization (replicates to everyone). */
+	void SetLook(const FBRLook& NewLook);
+	/** Local only: show a look immediately (menu preview while dragging sliders). */
+	void PreviewLook(const FBRLook& NewLook);
+	UFUNCTION(BlueprintPure, Category = "BR|Look") FBRLook GetLook() const { return Look; }
 
 	// --- Read these from an Animation Blueprint (Try Get Pawn Owner -> Cast to BRCharacter) ---
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") float GetHunger() const { return Hunger; }
@@ -59,6 +69,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsKnockedDown() const { return GetCondition() == EPVVCondition::KnockedDown; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsRestrained() const { return GetCondition() == EPVVCondition::Restrained; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsSeated() const { return GetCurrentBoat() != nullptr; }
+	/** In the driver's seat of a truck/boat. */
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDriving() const;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsBeingCarried() const { return GetCarrier() != nullptr; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsCarryingSomeone() const { return GetCarriedCharacter() != nullptr; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsInDeepWater() const { return bInDeepWater; }
@@ -91,13 +103,19 @@ protected:
 	/** Jumping, falling, flying off the catapult. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> FallAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> SwimAnim;
+	/** Passenger seats and the truck bed. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> SeatedAnim;
+	/** Driver's seat: hands on the wheel (Mixamo "Driving"). Falls back to SeatedAnim. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> DriveAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> RestrainedAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> StruggleAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> CarriedAnim;
 	/** Holding E: jobs, cutting wire, zip-tying, refuelling. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> WorkAnim;
+	/** Standing still and aiming: both hands on the gun (Mixamo "Pistol Idle" / "Rifle Aiming Idle"). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> AimAnim;
+	/** Walking while aiming (Mixamo "Pistol Walk"). Falls back to AimAnim. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> AimWalkAnim;
 	// One-shots.
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> PunchAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> FireAnim;
@@ -166,7 +184,9 @@ protected:
 	/** Hand bone the gun attaches to, and the offset/rotation that makes it sit right in your model's hand. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") FName HandSocket = TEXT("hand_r");
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") FTransform HandGripOffset;
-	/** Where the gun floats while aiming (relative to the character, cartoon style). */
+	/** On + an Aim animation = the gun stays in your hand while aiming (hands on the gun). Off = it floats in front of you. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") bool bGunInHandWhileAiming = true;
+	/** Where the gun floats while aiming when there's no aim animation (relative to the character, cartoon style). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Weapons") FVector AimGunOffset = FVector(55.f, 24.f, 48.f);
 
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Drone") float DroneCooldown = 20.f;
@@ -189,9 +209,32 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HitWobble = 350.f;
 	/** Random drunken sway. Gets worse when you're starving or nearly knocked out. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SwayStrength = 40.f;
+	/** Arm strength while driving (high = hands stay on the wheel like the animation). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float DriveArmStrength = 5000.f;
+
+	// --- Customization: how the menu sliders reach your materials ---------------------
+	/** Vector parameters on your BODY material(s) that get the skin colour. Add one called SkinColor to your body material. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> SkinColorParameters = { TEXT("SkinColor"), TEXT("SkinTint"), TEXT("BaseColorFactor") };
+	/** If your body material has none of those parameters, swap material slot SkinMaterialSlot for a plain colour material so the slider still works. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") bool bAutoSkinMaterial = true;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") int32 SkinMaterialSlot = 0;
+	/** Vector parameters on the shirt (OutfitTop) / pants (OutfitBottom) materials that get the colour. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> ShirtColorParameters = { TEXT("ShirtColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> PantsColorParameters = { TEXT("PantsColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
+
+	// --- NPC villagers ----------------------------------------------------------------
+	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float WanderSpeed = 160.f;
 
 private:
 	UPROPERTY(Replicated) bool bIsNPC = false;
+	UPROPERTY(ReplicatedUsing = OnRep_Look) FBRLook Look;
+	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
+	bool bWandering = false;
+	FVector WanderHome = FVector::ZeroVector;
+	FVector WanderTarget = FVector::ZeroVector;
+	float WanderRadius = 1500.f;
+	float WanderPauseUntil = 0.f;
+	float WanderGiveUpAt = 0.f;
 	UPROPERTY(Replicated) float Hunger = 100.f;
 	UPROPERTY(Replicated) float Visibility = 1.f;
 	UPROPERTY(Replicated) float SpottedUntil = 0.f;
@@ -226,7 +269,7 @@ private:
 	float OneShotUntil = 0.f;
 	float NextSwayTime = 0.f;
 	int32 GunStyle = -1;   // 0 none, 1 taser, 2 pistol, 3 revolver
-	int32 GunPlacement = -1; // 0 hand, 1 aiming
+	int32 GunPlacement = -1; // 0 hand, 1 aiming (floating), 2 aiming (in hand)
 	FTimerHandle ReloadTimer;
 
 	ABRDesertArena* FindArena();
@@ -250,6 +293,12 @@ private:
 	FVector GetMuzzleLocation() const;
 
 	UFUNCTION() void OnRep_Aiming();
+	UFUNCTION() void OnRep_Look();
+	void ApplyLook(const FBRLook& L);
+	void ApplySkin(const FLinearColor& Color);
+	void TintOutfit(USkeletalMeshComponent* Part, const TArray<FName>& Parameters, float Slider);
+	void TickWander(float DeltaSeconds);
+	bool WantsStiffArms() const;
 	UFUNCTION() void OnRep_Slow();
 
 	void Input_AimStart();

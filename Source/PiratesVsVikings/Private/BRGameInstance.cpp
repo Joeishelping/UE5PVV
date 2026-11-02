@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Interfaces/OnlineExternalUIInterface.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Online/OnlineSessionNames.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystem.h"
@@ -15,9 +16,37 @@ namespace
 	const FName BRSessionKey(TEXT("BORDERRUN"));
 }
 
+static const TCHAR* LookSection = TEXT("BorderRun.Look");
+
+void UBRGameInstance::SaveLook() const
+{
+	if (!GConfig)
+	{
+		return;
+	}
+	GConfig->SetFloat(LookSection, TEXT("SkinTone"), Look.SkinTone, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("ShirtColor"), Look.ShirtColor, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("PantsColor"), Look.PantsColor, GGameUserSettingsIni);
+	GConfig->SetBool(LookSection, TEXT("Hat"), Look.bHat, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+void UBRGameInstance::LoadLook()
+{
+	if (!GConfig)
+	{
+		return;
+	}
+	GConfig->GetFloat(LookSection, TEXT("SkinTone"), Look.SkinTone, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("ShirtColor"), Look.ShirtColor, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("PantsColor"), Look.PantsColor, GGameUserSettingsIni);
+	GConfig->GetBool(LookSection, TEXT("Hat"), Look.bHat, GGameUserSettingsIni);
+}
+
 void UBRGameInstance::Init()
 {
 	Super::Init();
+	LoadLook();
 	if (IOnlineSessionPtr Sessions = GetSessions())
 	{
 		CreateHandle = Sessions->AddOnCreateSessionCompleteDelegate_Handle(FOnCreateSessionCompleteDelegate::CreateUObject(this, &UBRGameInstance::OnCreateSessionComplete));

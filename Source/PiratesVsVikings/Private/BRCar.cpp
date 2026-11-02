@@ -478,6 +478,24 @@ ABRTruck::ABRTruck()
 	Part(TEXT("Wheel_BL"), CylMesh, FVector(-170.f, -112.f, -35.f), FVector(95.f, 95.f, 40.f), Axle);
 	Part(TEXT("Wheel_BR"), CylMesh, FVector(-170.f, 112.f, -35.f), FVector(95.f, 95.f, 40.f), Axle);
 
+	// Driver's bench + steering wheel (spins with your steering).
+	Part(TEXT("Body_Bench"), CubeMesh, FVector(55.f, 0.f, 55.f), FVector(60.f, 200.f, 40.f));
+	Part(TEXT("Trim_Column"), CylMesh, FVector(140.f, -50.f, 110.f), FVector(6.f, 6.f, 45.f), FRotator(-60.f, 0.f, 0.f));
+	SteeringWheel = CreateDefaultSubobject<USceneComponent>(TEXT("SteeringWheel"));
+	SteeringWheel->SetupAttachment(SeatRoot);
+	SteeringWheel->SetRelativeLocationAndRotation(FVector(122.f, -50.f, 128.f), FRotator(-30.f, 0.f, 0.f));
+	auto WheelPart = [&](const TCHAR* Name, UStaticMesh* Mesh, const FVector& SizeCm, const FRotator& Rot)
+	{
+		UStaticMeshComponent* C = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		C->SetupAttachment(SteeringWheel);
+		C->SetStaticMesh(Mesh);
+		C->SetRelativeRotation(Rot);
+		C->SetRelativeScale3D(SizeCm / 100.f);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	};
+	WheelPart(TEXT("Wheel_SteeringRim"), CylMesh, FVector(42.f, 42.f, 4.f), FRotator(90.f, 0.f, 0.f));
+	WheelPart(TEXT("Trim_SteeringSpoke"), CubeMesh, FVector(3.f, 40.f, 5.f), FRotator::ZeroRotator);
+
 	// Headlights (night driving - and they make you easy to spot).
 	USpotLightComponent* Beam = CreateDefaultSubobject<USpotLightComponent>(TEXT("Headlights"));
 	Beam->SetupAttachment(SeatRoot);
@@ -518,6 +536,12 @@ bool ABRTruck::AddNPC(APVVCharacter* NPC)
 void ABRTruck::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (SteeringWheel && GetNetMode() != NM_DedicatedServer)
+	{
+		FRotator Rot = SteeringWheel->GetRelativeRotation();
+		Rot.Roll = FMath::FInterpTo(Rot.Roll, SteerInput * SteeringWheelTurn, DeltaSeconds, 8.f);
+		SteeringWheel->SetRelativeRotation(Rot);
+	}
 	if (HasAuthority() && bNPCDriven)
 	{
 		DriveNPC(DeltaSeconds);

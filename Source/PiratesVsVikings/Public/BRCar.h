@@ -111,6 +111,12 @@ public:
 
 	bool IsNPCTruck() const { return bNPCDriven; }
 
+protected:
+	/** Steering wheel in front of the driver. Move it in your truck Blueprint so it lines up with your driving animation's hands. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Truck") TObjectPtr<USceneComponent> SteeringWheel;
+	/** How far the wheel turns at full steer (degrees). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float SteeringWheelTurn = 120.f;
+
 private:
 	bool bNPCDriven = false;
 	TArray<FVector> Route;

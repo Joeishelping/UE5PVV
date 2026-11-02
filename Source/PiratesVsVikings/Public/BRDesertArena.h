@@ -5,6 +5,8 @@
 #include "BRDesertArena.generated.h"
 
 class ABRCatapult;
+class ABRCockfightPit;
+class ABRVillage;
 class ABRCheckpointGate;
 class ABRDog;
 class ABRTruck;
@@ -53,6 +55,15 @@ public:
 	float GetLineX() const { return GetActorLocation().X + LineX; }
 	float GetSafeX() const { return GetActorLocation().X + SafeX; }
 	FVector GetCatapultLanding() const;
+	/** Places in town where NPC villagers hang out. */
+	void GetVillageSpots(TArray<FVector>& OutSpots) const;
+
+	/** Your cockfight pit Blueprint (to give the roosters a real model). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") TSubclassOf<ABRCockfightPit> CockfightPitClass;
+	/** Your village Blueprint (to recolour houses etc.). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") TSubclassOf<ABRVillage> VillageClass;
+	/** Houses, church, plaza, market, lamps, chickens in the Runner town. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Your Blueprints") bool bBuildVillage = true;
 	ABRCatapult* GetCatapult() const { return Catapult; }
 
 	static constexpr float Ground = 100.f;

@@ -6,6 +6,7 @@
 #include "BRGameState.h"
 #include "BRPlayerController.h"
 #include "BRPlayerState.h"
+#include "BRSettings.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -174,7 +175,11 @@ void ABRHUD::DrawHUD()
 	}
 
 	// --- Team + goal
-	DrawText(bWarden ? TEXT("YOU ARE A WARDEN") : TEXT("YOU ARE A RUNNER"), bWarden ? WardenCol : RunnerCol, 20.f, SY - 175.f, Big, 1.4f);
+	{
+		const UBRSettings* Names = GetDefault<UBRSettings>();
+		const FString Singular = bWarden ? Names->WardenSingular : Names->RunnerSingular;
+		DrawText(FString::Printf(TEXT("YOU ARE: %s"), *Singular.ToUpper()), bWarden ? WardenCol : RunnerCol, 20.f, SY - 175.f, Big, 1.4f);
+	}
 	const TCHAR* Goal = bWarden
 		? (GS->Phase == EBRPhase::Prep ? TEXT("Prep: grab a truck, scout with your drone (Q). The Line opens soon.")
 			: TEXT("Spot Runners, taser them, zip-tie, haul them to the Holding Pen. Don't shoot anyone who hasn't crossed!"))

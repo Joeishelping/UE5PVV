@@ -69,10 +69,12 @@ Search these names on Mixamo (or use the listed pack).
 | Struggling to break free | "Struggle", "Shaking It Off" | `Is Restrained` and `Get Struggle Progress > 0` |
 | Being carried | "Hanging Idle" (limp) | `Is Being Carried` |
 | Carrying someone | "Carry Box Walk" (upper body only) | `Is Carrying Someone` (Layered blend, see 4c) |
-| Sitting in the truck bed / passenger | "Sitting Idle" | `Is Seated` |
+| Sitting in the truck bed / passenger | "Sitting Idle" | `Is Seated` (slot: **Seated Anim**) |
+| Driving (hands on the wheel) | "Driving" | `Is Driving` (slot: **Drive Anim**) |
 | Holding E (jobs, cutting fence, zip-tying, refuelling, jailbreak) | "Working On Device", "Wire Cutting" (search "Cutting"), "Kneeling Working" | `Get Hold Progress > 0` |
 | Aiming the pistol/taser | **Lyra Pistol Aim** pose / Mixamo "Pistol Idle" | `Is Aiming` |
 | Aiming the revolver | Mixamo "Pistol Idle" (one-handed) | `Is Aiming` and `Get Weapon Type == 3` |
+| Walking while aiming | Mixamo "Pistol Walk" | `Is Aiming` and Speed > 0 (slot: **Aim Walk Anim**) |
 | Firing | **Lyra Pistol Fire** / Mixamo "Shooting" | **Event On Weapon Fired** → Play Montage |
 | Reloading | **Lyra Pistol Reload** / Mixamo "Reloading" | **Event On Reload Started** → Play Montage |
 | Eating a taco | "Eating" (Mixamo) | **Event On Ate** → Play Montage |

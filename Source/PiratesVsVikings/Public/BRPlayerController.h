@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "PVVPlayerController.h"
+#include "BRTypes.h"
 #include "BRPlayerController.generated.h"
 
 class UBRMenuWidget;
@@ -57,11 +58,15 @@ public:
 
 	virtual void PawnLeavingGame() override;
 
+	/** Send your customization to the server (menu sliders call this). */
+	void SendLook(const FBRLook& Look);
+
 protected:
 	UPROPERTY() TObjectPtr<UBRMenuWidget> Menu;
 	FTimerHandle PreferredTeamTimer;
 	void ApplyPreferredTeam();
 
+	UFUNCTION(Server, Reliable) void Server_SetLook(const FBRLook& NewLook);
 	UFUNCTION(Server, Reliable) void Server_SkipPhase();
 	UFUNCTION(Server, Reliable) void Server_GiveMoney(int32 Amount);
 	UFUNCTION(Server, Reliable) void Server_SetTime(float Hours);

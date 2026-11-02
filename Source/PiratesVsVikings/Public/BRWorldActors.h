@@ -285,10 +285,24 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float FightSeconds = 12.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") float ResultSeconds = 6.f;
 
+	/** Your own rooster model (e.g. from Fab). Replaces the greybox birds; the coloured collar + RED/BLUE sign stay. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") TObjectPtr<UStaticMesh> RoosterModel;
+	/** Size / turn / height of your model so it stands on the floor facing forward (+X). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") FVector RoosterModelScale = FVector(1.f);
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") FRotator RoosterModelRotation = FRotator::ZeroRotator;
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") FVector RoosterModelOffset = FVector::ZeroVector;
+	/** Where the team collar sits on the bird (move it to your model's neck) and how big it is (cm). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") FVector CollarLocation = FVector(28.f, 0.f, 68.f);
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") FVector CollarSize = FVector(34.f, 34.f, 9.f);
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") FLinearColor RedTeamColor = FLinearColor(0.85f, 0.05f, 0.03f);
+	UPROPERTY(EditAnywhere, Category = "BR|Cockfight") FLinearColor BlueTeamColor = FLinearColor(0.05f, 0.2f, 0.95f);
+
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> RoosterRed;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> RoosterBlue;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Board;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> RedTag;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> BlueTag;
 
 private:
 	UPROPERTY(Replicated) uint8 State = BRPit::Betting;
@@ -302,6 +316,51 @@ private:
 	void AdvanceState(float ServerNow);
 	void PayOut();
 	void BuildRooster(USceneComponent* Parent, const TCHAR* Prefix, const FLinearColor& Accent);
+	void SetupRoosterLooks();
+};
+
+// ===========================================================================================
+/**
+ * Village life for the Runner town: colourful houses, a church, plaza with fountain, market stalls,
+ * papel picado flags, lamps that light up at night, cacti, palms, laundry, a wrecked car and wandering chickens.
+ * Spawned by the Desert Arena (turn off with Build Village). Purely decoration.
+ */
+UCLASS()
+class PIRATESVSVIKINGS_API ABRVillage : public ABRGreyboxActor
+{
+	GENERATED_BODY()
+
+public:
+	ABRVillage();
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** Recolour any piece by name (House3_Body, Church_Tower, Stall2_Awning ...). See the names in the Components list. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") TMap<FName, FLinearColor> ColorOverrides;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") float LampBrightness = 6000.f;
+
+protected:
+	UPROPERTY(Transient) TArray<TObjectPtr<USceneComponent>> Chickens;
+	UPROPERTY(Transient) TArray<TObjectPtr<UPointLightComponent>> Lamps;
+
+private:
+	TArray<FVector> ChickenTargets;
+	FVector ChickenYard = FVector::ZeroVector;
+	float NextLampCheck = 0.f;
+	bool bLampsOn = false;
+	int32 PieceCount = 0;
+
+	FString NextName(const TCHAR* Prefix);
+	void House(const TCHAR* Name, float X, float Y, float W, float D, float H, const FLinearColor& Wall, const FLinearColor& Trim);
+	void Stall(float X, float Y, const FLinearColor& Awning);
+	void Picado(const FVector2D& A, const FVector2D& B, float Z, int32 Count);
+	void Cactus(float X, float Y, float H);
+	void Palm(float X, float Y);
+	void Lamp(float X, float Y);
+	void Barrel(float X, float Y, const FLinearColor& Color);
+	void Crate(float X, float Y, float Yaw);
+	void Bench(float X, float Y, float Yaw);
+	void Chicken(float X, float Y);
 };
 
 // ===========================================================================================

@@ -1,5 +1,6 @@
 #include "BRMenuWidget.h"
 #include "BRGameInstance.h"
+#include "BRCharacter.h"
 #include "BRPlayerController.h"
 #include "BRTypes.h"
 #include "Blueprint/WidgetTree.h"
@@ -7,6 +8,8 @@
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/CheckBox.h"
+#include "Components/Slider.h"
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -113,6 +116,7 @@ void UBRMenuWidget::BuildLayout()
 		}
 	}
 	AddRow(Box, Teams);
+	BuildCustomize(Box);
 
 	UButton* HostSteam = MakeButton(TEXT("HOST GAME  (invite Steam friends)"), Go);
 	HostSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHostSteam);
@@ -179,11 +183,162 @@ void UBRMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	{
 		StatusLine->SetText(FText::FromString(GI->StatusText));
 	}
+	if (CustomizeBox)
+	{
+		CustomizeBox->SetVisibility(GI->PreferredTeam != EPVVFaction::None ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
 	if (RunnerLabel && WardenLabel)
 	{
-		RunnerLabel->SetText(FText::FromString(GI->PreferredTeam == BR::Runners ? TEXT("> RUNNER <") : TEXT("RUNNER")));
-		WardenLabel->SetText(FText::FromString(GI->PreferredTeam == BR::Wardens ? TEXT("> BORDER PATROL <") : TEXT("BORDER PATROL")));
+		const FString R = BR::RunnerName().ToUpper();
+		const FString W = BR::WardenName().ToUpper();
+		RunnerLabel->SetText(FText::FromString(GI->PreferredTeam == BR::Runners ? FString::Printf(TEXT("> %s <"), *R) : R));
+		WardenLabel->SetText(FText::FromString(GI->PreferredTeam == BR::Wardens ? FString::Printf(TEXT("> %s <"), *W) : W));
 	}
+}
+
+UHorizontalBox* UBRMenuWidget::MakeSliderRow(const FString& Label, float Value, TObjectPtr<USlider>& OutSlider, TObjectPtr<UBorder>& OutSwatch)
+{
+	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+
+	USizeBox* LabelBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	LabelBox->SetWidthOverride(110.f);
+	UTextBlock* Text = MakeText(Label, 16, FLinearColor::White);
+	Text->SetJustification(ETextJustify::Left);
+	LabelBox->AddChild(Text);
+
+	OutSlider = WidgetTree->ConstructWidget<USlider>(USlider::StaticClass());
+	OutSlider->SetValue(Value);
+	OutSlider->SetSliderBarColor(FLinearColor(0.6f, 0.6f, 0.6f));
+	OutSlider->SetSliderHandleColor(FLinearColor(1.f, 0.85f, 0.3f));
+	OutSlider->OnMouseCaptureEnd.AddDynamic(this, &UBRMenuWidget::OnSliderReleased);
+
+	USizeBox* SwatchBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	SwatchBox->SetWidthOverride(44.f);
+	SwatchBox->SetHeightOverride(26.f);
+	OutSwatch = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	SwatchBox->AddChild(OutSwatch);
+
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(LabelBox)) { S->SetVerticalAlignment(VAlign_Center); }
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(OutSlider))
+	{
+		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetPadding(FMargin(6.f, 0.f));
+	}
+	if (UHorizontalBoxSlot* S = Row->AddChildToHorizontalBox(SwatchBox)) { S->SetVerticalAlignment(VAlign_Center); }
+	return Row;
+}
+
+void UBRMenuWidget::BuildCustomize(UVerticalBox* Box)
+{
+	const UBRGameInstance* GI = GetBRGameInstance();
+	const FBRLook Look = GI ? GI->Look : FBRLook();
+
+	CustomizeBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	AddRow(CustomizeBox, MakeText(TEXT("Customize your character"), 18, FLinearColor(1.f, 0.85f, 0.3f)), 2.f);
+
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Skin"), Look.SkinTone, SkinSlider, SkinSwatch), 2.f);
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Shirt"), Look.ShirtColor, ShirtSlider, ShirtSwatch), 2.f);
+	AddRow(CustomizeBox, MakeSliderRow(TEXT("Pants"), Look.PantsColor, PantsSlider, PantsSwatch), 2.f);
+	SkinSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnSkinChanged);
+	ShirtSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnShirtChanged);
+	PantsSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnPantsChanged);
+
+	UHorizontalBox* Extras = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	HatBox = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass());
+	HatBox->SetIsChecked(Look.bHat);
+	HatBox->OnCheckStateChanged.AddDynamic(this, &UBRMenuWidget::OnHatChanged);
+	UTextBlock* HatText = MakeText(TEXT("Hat"), 16, FLinearColor::White);
+	UButton* Random = MakeButton(TEXT("RANDOM"), Neutral);
+	Random->OnClicked.AddDynamic(this, &UBRMenuWidget::OnRandomLook);
+	if (UHorizontalBoxSlot* S = Extras->AddChildToHorizontalBox(HatBox)) { S->SetVerticalAlignment(VAlign_Center); }
+	if (UHorizontalBoxSlot* S = Extras->AddChildToHorizontalBox(HatText))
+	{
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f));
+		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
+	if (UHorizontalBoxSlot* S = Extras->AddChildToHorizontalBox(Random)) { S->SetVerticalAlignment(VAlign_Center); }
+	AddRow(CustomizeBox, Extras, 2.f);
+	AddRow(CustomizeBox, MakeText(TEXT("Shirt/Pants slider all the way left = the outfit's own colour."), 12, FLinearColor(0.6f, 0.6f, 0.6f)), 2.f);
+
+	CustomizeBox->SetVisibility(GI && GI->PreferredTeam != EPVVFaction::None ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	AddRow(Box, CustomizeBox, 4.f);
+	RefreshSwatches();
+}
+
+void UBRMenuWidget::RefreshSwatches()
+{
+	const UBRGameInstance* GI = GetBRGameInstance();
+	if (!GI)
+	{
+		return;
+	}
+	const FLinearColor Original(0.3f, 0.3f, 0.3f);
+	if (SkinSwatch) SkinSwatch->SetBrushColor(BR::SkinColor(GI->Look.SkinTone));
+	if (ShirtSwatch) ShirtSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.ShirtColor) ? Original : BR::ClothColor(GI->Look.ShirtColor));
+	if (PantsSwatch) PantsSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.PantsColor) ? Original : BR::ClothColor(GI->Look.PantsColor));
+}
+
+void UBRMenuWidget::PreviewLook()
+{
+	const UBRGameInstance* GI = GetBRGameInstance();
+	const ABRPlayerController* PC = GetBRController();
+	if (GI && PC)
+	{
+		if (ABRCharacter* Me = Cast<ABRCharacter>(PC->GetPawn()))
+		{
+			Me->PreviewLook(GI->Look);
+		}
+	}
+	RefreshSwatches();
+}
+
+void UBRMenuWidget::SendLook()
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	if (!GI)
+	{
+		return;
+	}
+	GI->SaveLook();
+	if (ABRPlayerController* PC = GetBRController())
+	{
+		PC->SendLook(GI->Look);
+	}
+	RefreshSwatches();
+}
+
+void UBRMenuWidget::OnSkinChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.SkinTone = Value; PreviewLook(); } }
+void UBRMenuWidget::OnShirtChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.ShirtColor = Value; PreviewLook(); } }
+void UBRMenuWidget::OnPantsChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.PantsColor = Value; PreviewLook(); } }
+void UBRMenuWidget::OnSliderReleased() { SendLook(); }
+
+void UBRMenuWidget::OnHatChanged(bool bChecked)
+{
+	if (UBRGameInstance* GI = GetBRGameInstance())
+	{
+		GI->Look.bHat = bChecked;
+		SendLook();
+	}
+}
+
+void UBRMenuWidget::OnRandomLook()
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	if (!GI)
+	{
+		return;
+	}
+	GI->Look.SkinTone = FMath::FRand();
+	GI->Look.ShirtColor = FMath::FRand();
+	GI->Look.PantsColor = FMath::FRand();
+	GI->Look.bHat = FMath::RandBool();
+	if (SkinSlider) SkinSlider->SetValue(GI->Look.SkinTone);
+	if (ShirtSlider) ShirtSlider->SetValue(GI->Look.ShirtColor);
+	if (PantsSlider) PantsSlider->SetValue(GI->Look.PantsColor);
+	if (HatBox) HatBox->SetIsChecked(GI->Look.bHat);
+	SendLook();
 }
 
 ABRPlayerController* UBRMenuWidget::GetBRController() const

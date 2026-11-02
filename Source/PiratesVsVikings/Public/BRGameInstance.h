@@ -5,6 +5,7 @@
 #include "Interfaces/OnlineSessionInterface.h"
 #include "OnlineSessionSettings.h"
 #include "PVVTypes.h"
+#include "BRTypes.h"
 #include "BRGameInstance.generated.h"
 
 class FOnlineSessionSearch;
@@ -42,6 +43,11 @@ public:
 	EPVVFaction PreferredTeam = EPVVFaction::None;
 	/** The startup menu only shows once per launch. */
 	bool bMenuDone = false;
+
+	/** Your character customization (saved on this PC, sent to the server when you join). */
+	FBRLook Look;
+	void SaveLook() const;
+	void LoadLook();
 
 private:
 	IOnlineSessionPtr GetSessions() const;

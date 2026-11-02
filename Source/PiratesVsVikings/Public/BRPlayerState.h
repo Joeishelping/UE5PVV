@@ -40,6 +40,10 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 SentenceSeconds = 0;
 
+	/** Customization picked in the menu (server copy; the character replicates it to everyone). */
+	FBRLook Look;
+	bool bHasLook = false;
+
 	bool HasItem(EBRItem Item) const { return Inventory.Contains(Item); }
 	bool HasFreeSlot() const { return Inventory.Num() < MaxSlots; }
 
