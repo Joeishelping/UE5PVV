@@ -34,7 +34,7 @@ private:
 	void ThinkRunner(ABRCharacter* C, ABRPlayerState* PS);
 	void ThinkWarden(ABRCharacter* C, ABRPlayerState* PS);
 	/** Walk toward a spot; returns true once within Radius. */
-	bool MoveTo(ABRCharacter* C, const FVector& Where, float Radius, bool bSprint);
+	bool SteerTo(ABRCharacter* C, const FVector& Where, float Radius, bool bSprint);
 	/** Use the nearest thing of this kind (station, wall, ladder...) when close; walk to it otherwise. */
 	bool GoUse(ABRCharacter* C, AActor* Target, float UseRange = 230.f);
 	void FaceTowards(const FVector& Where);

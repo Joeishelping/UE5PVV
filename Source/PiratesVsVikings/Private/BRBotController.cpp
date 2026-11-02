@@ -145,7 +145,7 @@ void ABRBotController::FaceTowards(const FVector& Where)
 	}
 }
 
-bool ABRBotController::MoveTo(ABRCharacter* C, const FVector& Where, float Radius, bool bSprint)
+bool ABRBotController::SteerTo(ABRCharacter* C, const FVector& Where, float Radius, bool bSprint)
 {
 	const FVector To = (Where - C->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	if (To.Size() <= Radius)
@@ -176,7 +176,7 @@ bool ABRBotController::GoUse(ABRCharacter* C, AActor* Thing, float UseRange)
 			Closest = OnShape;
 		}
 	}
-	if (MoveTo(C, Closest, UseRange, false))
+	if (SteerTo(C, Closest, UseRange, false))
 	{
 		FaceTowards(Thing->GetActorLocation());
 		return C->BotInteractWith(Thing);
@@ -388,7 +388,7 @@ void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 			const float D = FVector::Dist2D(T->GetActorLocation(), C->GetActorLocation());
 			if (T->GetCondition() == EPVVCondition::Normal)
 			{
-				MoveTo(C, T->GetActorLocation(), 120.f, true);
+				SteerTo(C, T->GetActorLocation(), 120.f, true);
 				if (D < 190.f && Now >= NextAttack)
 				{
 					FaceTowards(T->GetActorLocation());
@@ -413,7 +413,7 @@ void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 	}
 
 	// Patrol along the Wall / around the base.
-	if (Now >= PatrolUntil || MoveTo(C, PatrolPoint, 200.f, false))
+	if (Now >= PatrolUntil || SteerTo(C, PatrolPoint, 200.f, false))
 	{
 		FVector Center = C->GetActorLocation();
 		for (TActorIterator<ABRWall> It(GetWorld()); It; ++It)
