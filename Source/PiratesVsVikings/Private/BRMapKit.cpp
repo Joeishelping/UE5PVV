@@ -11,7 +11,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
-#include "GameFramework/PlayerStart.h"
+#include "PVVPlayerStart.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -152,7 +152,7 @@ namespace BRMap
 	{
 		// Any Map Kit piece or a Player Start you placed yourself = it's your map.
 		return World && (TActorIterator<ABRBorderLine>(World) || TActorIterator<ABRSafeZone>(World) || TActorIterator<ABRRiverZone>(World)
-			|| TActorIterator<ABRRoadPoint>(World) || TActorIterator<ABRVillagerSpot>(World) || TActorIterator<APlayerStart>(World));
+			|| TActorIterator<ABRRoadPoint>(World) || TActorIterator<ABRVillagerSpot>(World) || TActorIterator<APVVPlayerStart>(World));
 	}
 
 	bool GetRoadRoute(const UWorld* World, TArray<FVector>& OutRoute, int32& OutCheckpointIndex, FTransform& OutSpawn, ABRCheckpointGate*& OutGate)
