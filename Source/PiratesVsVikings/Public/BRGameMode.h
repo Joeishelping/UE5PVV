@@ -75,7 +75,7 @@ public:
 	// --- Government budget + bounty ---------------------------------------------------------
 	/** Server: take money from Border Patrol's budget. False (and nothing taken) if there isn't enough. */
 	bool SpendBudget(int32 Amount);
-	UClass* GetDogClass() const { return DogClass.Get(); }
+	UClass* GetDogClass() const;
 	void AddBudget(int32 Amount);
 	/** Server: a Warden caught a Runner who had crossed (pen or catapult): budget + bounty. */
 	void OnGoodCatch(APVVCharacter* Warden, class ABRPlayerState* Caught);

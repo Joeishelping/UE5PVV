@@ -2606,11 +2606,11 @@ void ABRCharacter::OnRep_HeldItem()
 		HeldItemMesh->SetVisibility(false);
 		return;
 	}
-	UStaticMesh* Mesh = HeldItemMeshes.FindRef(HeldItem).Get();
+	UStaticMesh* ItemMesh = HeldItemMeshes.FindRef(HeldItem).Get();
 	FVector Scale(1.f);
 	FRotator Turn = FRotator::ZeroRotator;
 	FLinearColor Color(1.f, 1.f, 1.f);
-	if (!Mesh)
+	if (!ItemMesh)
 	{
 		// No model assigned: a simple stand-in shape.
 		const TCHAR* Shape = TEXT("/Engine/BasicShapes/Cube.Cube");
@@ -2625,9 +2625,9 @@ void ABRCharacter::OnRep_HeldItem()
 		case EBRItem::Shovel: Shape = TEXT("/Engine/BasicShapes/Cylinder.Cylinder"); Scale = FVector(.04f, .04f, 1.f); Color = FLinearColor(.45f, .3f, .15f); break;
 		default: break;
 		}
-		Mesh = LoadObject<UStaticMesh>(nullptr, Shape);
+		ItemMesh = LoadObject<UStaticMesh>(nullptr, Shape);
 	}
-	HeldItemMesh->SetStaticMesh(Mesh);
+	HeldItemMesh->SetStaticMesh(ItemMesh);
 	HeldItemMesh->SetRelativeTransform(FTransform(Turn, HeldItemOffset.GetLocation(), Scale) * FTransform(HeldItemOffset.GetRotation()));
 	if (!HeldItemMeshes.Contains(HeldItem))
 	{

@@ -1078,6 +1078,11 @@ void ABRGameMode::TickBots()
 	}
 }
 
+UClass* ABRGameMode::GetDogClass() const
+{
+	return DogClass.Get();
+}
+
 bool ABRGameMode::SpendBudget(int32 Amount)
 {
 	ABRGameState* GS = GetBRGameState();
