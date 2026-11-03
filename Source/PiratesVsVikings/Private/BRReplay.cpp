@@ -183,6 +183,8 @@ void ABRReplayDirector::StartPlayback()
 	{
 		USkeletalMeshComponent* Part = NewObject<USkeletalMeshComponent>(Ghost);
 		Part->SetupAttachment(GhostBody);
+		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision); // follower: no physics bodies of its own
+		Part->SetGenerateOverlapEvents(false);
 		Part->SetSkeletalMeshAsset(Wear);
 		Part->RegisterComponent();
 		Part->SetLeaderPoseComponent(GhostBody);

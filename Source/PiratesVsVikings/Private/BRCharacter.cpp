@@ -371,6 +371,23 @@ void ABRCharacter::OnRep_Look()
 	ApplyLook(Look);
 }
 
+// Clothes/hats copy the body's bones (leader pose), so they must never build physics bodies of their own:
+// the hat .glb imports come with a physics asset, and a follower's bodies read bones it doesn't have
+// ("Array index out of bounds: 2 into an array of size 0" engine crash a few seconds into play).
+static void BRMakeFollowerSafe(USkeletalMeshComponent* Part)
+{
+	if (!Part)
+	{
+		return;
+	}
+	Part->SetSimulatePhysics(false);
+	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Part->SetGenerateOverlapEvents(false);
+	Part->bAlwaysCreatePhysicsState = false;
+	Part->SetEnableGravity(false);
+	Part->SetCanEverAffectNavigation(false);
+}
+
 static bool BRHasVectorParam(const UMaterialInterface* Material, FName Parameter)
 {
 	FLinearColor Ignored;
@@ -411,6 +428,7 @@ void ABRCharacter::PickStyle(USkeletalMeshComponent* Part, const TArray<TObjectP
 	}
 	if (Part->GetSkeletalMeshAsset() != Wanted)
 	{
+		BRMakeFollowerSafe(Part);
 		Part->SetSkeletalMeshAsset(Wanted);
 		Part->SetLeaderPoseComponent(GetMesh(), true);
 	}
@@ -732,6 +750,11 @@ void ABRCharacter::BeginPlay()
 	for (USkeletalMeshComponent* Outfit : { OutfitTop.Get(), OutfitBottom.Get(), OutfitHead.Get(), OutfitFace.Get(), Hair.Get(), FacialHair.Get(), DisguiseOutfit.Get() })
 	{
 		// Clothes copy every bone of the body (incl. physics/ragdoll) and sit exactly on it.
+		if (!Outfit)
+		{
+			continue;
+		}
+		BRMakeFollowerSafe(Outfit);
 		Outfit->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 		Outfit->SetRelativeTransform(FTransform::Identity);
 		Outfit->SetLeaderPoseComponent(GetMesh(), true);
@@ -743,6 +766,10 @@ void ABRCharacter::BeginPlay()
 	ApplyCameraOptions();
 	CameraBaseLocation = FollowCamera->GetRelativeLocation();
 	SetupProximityVoice();
+	if (PhysicalAnimation && GetMesh())
+	{
+		PhysicalAnimation->AddTickPrerequisiteComponent(GetMesh()); // muscles read the pose only after it's been made this frame
+	}
 	EnableWobble();
 	if (GetMesh())
 	{
@@ -2231,6 +2258,13 @@ void ABRCharacter::Tick(float DeltaSeconds)
 			const FVector Head = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation();
 			KOStars->SetWorldLocationAndRotation(Head + FVector(0.f, 0.f, 45.f), FRotator(0.f, GetWorld()->GetTimeSeconds() * 360.f, 0.f));
 		}
+	}
+	// Safety: if the body ever loses its posed bones (mesh swapped, re-registered), switch the muscles off
+	// before the physics reads bones that aren't there, and switch them back on once it's posed again.
+	if (bWobbleOn && GetMesh() && (!GetMesh()->IsRegistered() || GetMesh()->GetComponentSpaceTransforms().Num() < GetMesh()->GetNumBones()))
+	{
+		DisableWobble();
+		bWobblePending = true;
 	}
 	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown && !GetCurrentBoat() && !GetCarrier())
 	{
@@ -3927,6 +3961,7 @@ void ABRCharacter::OnRep_Hat()
 		return; // hat system not set up: keep the Blueprint's OutfitHead
 	}
 	USkeletalMesh* HatMesh = WornHat == EBRHat::None ? nullptr : HatMeshes.FindRef(WornHat).Get();
+	BRMakeFollowerSafe(OutfitHead);
 	OutfitHead->SetSkeletalMeshAsset(HatMesh);
 	OutfitHead->SetLeaderPoseComponent(GetMesh(), true);
 	OutfitHead->SetHiddenInGame(HatMesh == nullptr);
@@ -3991,6 +4026,7 @@ void ABRCharacter::OnRep_Disguise()
 		return;
 	}
 	USkeletalMesh* Poncho = bDisguised ? PonchoMesh.Get() : nullptr;
+	BRMakeFollowerSafe(DisguiseOutfit);
 	DisguiseOutfit->SetSkeletalMeshAsset(Poncho);
 	DisguiseOutfit->SetLeaderPoseComponent(GetMesh(), true);
 	DisguiseOutfit->SetHiddenInGame(Poncho == nullptr);
