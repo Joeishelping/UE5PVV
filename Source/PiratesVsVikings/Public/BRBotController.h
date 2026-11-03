@@ -44,6 +44,8 @@ private:
 	FVector SafeZoneGoal(const ABRCharacter* C) const;
 
 	TWeakObjectPtr<ABRCharacter> Target;
+	/** Who we're brawling with up close right now (Gang Beasts brain runs every frame). */
+	TWeakObjectPtr<ABRCharacter> MeleeFoe;
 	FVector LastPos = FVector::ZeroVector;
 	float StuckTime = 0.f;
 	float SidestepUntil = 0.f;

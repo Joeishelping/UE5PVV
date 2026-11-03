@@ -135,6 +135,12 @@ public:
 	float GetGrabStruggle() const { return GrabStruggle; }
 	/** Server: let go of whoever you're holding. */
 	void ReleaseHandGrab();
+	/**
+	 * Server: Gang Beasts fighting brain for computer fighters (luchador, Border Patrol bots, angry NPCs).
+	 * Call every tick while near Foe: punch combos, grab-and-pummel, headbutts, kicks, windmill spins, flying dives, throws.
+	 * Aggression 0..1 = how fast it decides. Movement is up to the caller.
+	 */
+	void BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSeconds);
 	/** Server (also used by bots / the luchador). */
 	void DoKick();
 	void DoHeadbutt();
@@ -616,6 +622,10 @@ private:
 	void KickHit();
 	void HeadbuttHit();
 	float LastKickTime = -100.f;
+	float BrawlNextMove = 0.f;
+	float BrawlSpinUntil = 0.f;
+	float BrawlHoldUntil = 0.f;
+	bool bBrawlLeft = false;
 	float LastHeadbuttTime = -100.f;
 	FTimerHandle MoveHitTimer;
 	// Wall climbing (Gang Beasts): Z at a wall, then alternate left / right click.

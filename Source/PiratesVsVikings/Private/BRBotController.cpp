@@ -134,6 +134,10 @@ void ABRBotController::Tick(float DeltaSeconds)
 		C->BotSetSprinting(bWantSprint && !C->IsBusyInteracting());
 	}
 
+	if (ABRCharacter* Foe = MeleeFoe.Get(); Foe && !C->IsBusyInteracting() && C->IsWarden())
+	{
+		C->BrawlerAct(Foe, 0.6f, DeltaSeconds);
+	}
 	if (!C->IsBusyInteracting())
 	{
 		FVector Dir = Now < SidestepUntil ? (SidestepDir + MoveDir * 0.3f) : MoveDir;
@@ -348,6 +352,7 @@ void ABRBotController::ThinkRunner(ABRCharacter* C, ABRPlayerState* PS)
 
 void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 {
+	MeleeFoe = nullptr;
 	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
 	const float Now = GetWorld()->GetTimeSeconds();
 
@@ -401,20 +406,16 @@ void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 			const float D = FVector::Dist2D(T->GetActorLocation(), C->GetActorLocation());
 			if (T->GetCondition() == EPVVCondition::Normal)
 			{
-				SteerTo(C, T->GetActorLocation(), 120.f, true);
-				if (D < 190.f && Now >= NextAttack)
+				if (C->GetHandGrabTarget() == T)
 				{
-					FaceTowards(T->GetActorLocation());
-					NextAttack = Now + 0.55f;
-					if (D > 130.f && FMath::FRand() < 0.2f)
-					{
-						C->BotDive(); // flying tackle
-					}
-					else
-					{
-						C->BotAttack();
-					}
+					// Got them in a hold: zip-tie them while they struggle.
+					MeleeFoe = nullptr;
+					C->BotInteractWith(T);
+					return;
 				}
+				SteerTo(C, T->GetActorLocation(), 120.f, true);
+				// Up close: Gang Beasts brawling (punches, grabs, headbutts, kicks, dives) every frame in Tick.
+				MeleeFoe = D < 450.f ? T : nullptr;
 			}
 			else
 			{

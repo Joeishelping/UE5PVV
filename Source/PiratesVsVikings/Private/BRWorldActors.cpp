@@ -3484,36 +3484,39 @@ void ABRLuchaRing::TickFight(float ServerNow)
 		return;
 	}
 
-	// The luchador's brain: close in, swing, and the odd flying dive.
-	if (L->GetCondition() != EPVVCondition::Normal || bCDown)
+	// The luchador's brain (Gang Beasts style): charge in, circle, then punch combos, grabs, headbutts, kicks, windmills, dives.
+	if (L->GetCondition() != EPVVCondition::Normal)
 	{
-		return; // no hitting a man when he's down (mostly)
+		return;
 	}
+	const float Delta = GetWorld()->GetDeltaSeconds();
 	const FVector To = (C->GetActorLocation() - L->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	const float Dist = To.Size();
-	L->SetActorRotation(FRotator(0.f, To.Rotation().Yaw, 0.f));
-	if (Dist > 130.f)
+	const float Toughness = FMath::Clamp(1.f + Wager / 100.f * ToughnessPer100, 1.f, 3.f);
+	if (bCDown)
 	{
-		L->AddMovementInput(To.GetSafeNormal(), 1.f);
-	}
-	const float Now = GetWorld()->GetTimeSeconds();
-	if (Now >= NextSwing)
-	{
-		if (Dist < 180.f)
+		// Showboat while the challenger's down: back off and flex.
+		if (Dist < 260.f)
 		{
-			L->BotAttack();
-			NextSwing = Now + FMath::FRandRange(0.6f, 1.1f);
+			L->AddMovementInput(-To.GetSafeNormal(), 0.6f);
 		}
-		else if (Dist > 230.f && Dist < 420.f && FMath::FRand() < 0.25f)
+		return;
+	}
+	if (!L->GetHandGrabTarget() && !L->GetGrabbedBy())
+	{
+		L->GetCharacterMovement()->MaxWalkSpeed = 360.f + 60.f * Toughness;
+		if (Dist > 140.f)
 		{
-			L->BotDive(); // flying cross-body!
-			NextSwing = Now + 2.f;
+			L->AddMovementInput(To.GetSafeNormal(), 1.f); // charge!
 		}
 		else
 		{
-			NextSwing = Now + 0.3f;
+			// Circle around you a little, like a wrestler sizing you up.
+			const FVector Around = FVector::CrossProduct(To.GetSafeNormal(), FVector::UpVector) * FMath::Sin(GetWorld()->GetTimeSeconds() * 1.7f);
+			L->AddMovementInput(Around, 0.5f);
 		}
 	}
+	L->BrawlerAct(C, FMath::Clamp(0.45f + 0.15f * Toughness, 0.f, 1.f), Delta);
 }
 
 void ABRLuchaRing::Finish(int32 WinnerSide, const FString& Why)

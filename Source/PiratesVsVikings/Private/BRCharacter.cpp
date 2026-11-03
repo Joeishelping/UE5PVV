@@ -2972,6 +2972,116 @@ void ABRCharacter::TickReachVisuals()
 // -------------------------------------------------------------------------------------------
 // Kick + headbutt
 
+void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSeconds)
+{
+	if (!HasAuthority() || !Foe || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat())
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	const FVector ToFoe = (Foe->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	const float Dist = ToFoe.Size();
+	// Windmill: spin with floppy arms; any hand that whips past someone hits them.
+	if (Now < BrawlSpinUntil)
+	{
+		AddActorWorldRotation(FRotator(0.f, 1100.f * DeltaSeconds, 0.f));
+		return;
+	}
+	// Being held: fight your way out.
+	if (GrabbedBy)
+	{
+		if (Now >= BrawlNextMove)
+		{
+			BrawlNextMove = Now + 0.22f;
+			if (FMath::FRand() < 0.3f)
+			{
+				SetActorRotation(FRotator(0.f, (GrabbedBy->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
+				DoHeadbutt();
+			}
+			else
+			{
+				BotStruggleGrab();
+			}
+		}
+		return;
+	}
+	if (Now < BrawlNextMove)
+	{
+		return;
+	}
+	const float Pace = FMath::Lerp(1.f, 0.35f, FMath::Clamp(Aggression, 0.f, 1.f));
+	BrawlNextMove = Now + Pace * FMath::FRandRange(0.7f, 1.3f);
+	if (Foe->GetCondition() != EPVVCondition::Normal)
+	{
+		return; // they're down: let them get up (the crowd loves it)
+	}
+	SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw, 0.f));
+	// Got them in your hands: beat on them, then THROW them.
+	if (HandGrabTarget.Get() == Foe)
+	{
+		if (Now > BrawlHoldUntil)
+		{
+			Server_Grab_Implementation(); // throw
+			return;
+		}
+		const float Roll = FMath::FRand();
+		if (Roll < 0.55f)
+		{
+			Server_PunchHand_Implementation(bBrawlLeft);
+			bBrawlLeft = !bBrawlLeft;
+			BrawlNextMove = Now + 0.35f;
+		}
+		else if (Roll < 0.85f)
+		{
+			DoHeadbutt();
+		}
+		else
+		{
+			DoKick();
+		}
+		return;
+	}
+	if (Dist < 175.f)
+	{
+		const float Roll = FMath::FRand();
+		if (Roll < 0.32f)
+		{
+			Server_PunchHand_Implementation(bBrawlLeft); // one-two combos
+			bBrawlLeft = !bBrawlLeft;
+			BrawlNextMove = Now + 0.3f;
+		}
+		else if (Roll < 0.52f)
+		{
+			ArmsReaching = 3;
+			if (TryHandGrab(3))
+			{
+				BrawlHoldUntil = Now + FMath::FRandRange(1.5f, 3.f);
+			}
+			else
+			{
+				ArmsReaching = 0;
+			}
+		}
+		else if (Roll < 0.67f)
+		{
+			DoHeadbutt();
+		}
+		else if (Roll < 0.82f)
+		{
+			DoKick();
+		}
+		else
+		{
+			BrawlSpinUntil = Now + 0.7f; // windmill!
+			BlowDisguise();
+		}
+	}
+	else if (Dist < 430.f && FMath::FRand() < 0.3f * Aggression)
+	{
+		Server_Dive_Implementation(); // flying cross-body
+	}
+}
+
 void ABRCharacter::Input_Headbutt()
 {
 	Server_Headbutt();
