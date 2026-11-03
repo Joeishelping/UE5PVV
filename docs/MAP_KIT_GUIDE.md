@@ -90,6 +90,8 @@ Day/night, weather and ambient music are added to your map automatically.
 
 | **BR Watchtower** | Border Patrol side. Rotate the arrow to where the spotlight should sweep. Agents climb it with E and aim the light with their view. |
 | **BR Lucha Ring** | Wrestling ring. Runners pay to fight the luchador (win = double + his mask); others bet. Its counters appear by themselves. |
+| **BR Hiding Spot** | A dumpster, porta-potty or hay bales (**Style**). Runners hide inside, and Border Patrol can search it. |
+| **BR Mariachi Band** | A stage with a band. Players with a trumpet join in and earn tips. Set **Music**, **Beats Per Minute** and **Note Sounds**. |
 | **BR Chicken** | Put a few in a yard. They wander, flee, and can be grabbed and thrown. |
 | **BR Station, Kind = Warden Supply** | A Border Patrol shop paid from the government budget. Pick **Warden Gear** (Extra Traps, Hard Hat, Drone Recharge, Patrol Dog), or set Gear = None and pick an **Item**. |
 | **BR Station, Item = Poncho** | Sells the poncho disguise (try Price 200). |

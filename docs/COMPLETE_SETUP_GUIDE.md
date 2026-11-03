@@ -50,7 +50,7 @@ Drag `SM_Trumpet.glb` into the same folder. It's a normal static mesh, so the sk
    - **Skeleton** = your body's skeleton
    - Tick **Import Animations**
    - Click **Import**.
-3. You get one animation per move: Idle, Walk, Run, CrouchIdle, CrouchWalk, Fall, Swim, Seated, Drive, Restrained, Struggle, Carried, Work, Aim, AimWalk, Punch, Fire, Reload, Eat, Dance, Trumpet, Emote_Wave, Emote_Flex, Emote_Taunt, Emote_Beg, Emote_Cheer.
+3. You get one animation per move: Idle, Walk, Run, CrouchIdle, CrouchWalk, Fall, Swim, Seated, Drive, Restrained, Struggle, Carried, Work, Aim, AimWalk, Punch, Fire, Reload, Eat, Dance, Trumpet, Emote_Wave, Emote_Flex, Emote_Taunt, Emote_Beg, Emote_Cheer, **Emote_Smoke, Kick, Headbutt** (new: re-import this file if you imported it before).
 4. If it also made a copy of the body mesh, delete that copy and keep the animations.
 
 ---
@@ -68,6 +68,8 @@ Open **BP_Runner**. Do everything below, **Compile** and **Save**, then do the s
    - Emote Taunt Anim = Emote_Taunt
    - Emote Beg Anim = Emote_Beg
    - Emote Cheer Anim = Emote_Cheer
+   - **Emote Smoke Anim = Emote_Smoke**
+   - **Kick Anim = Kick**, **Headbutt Anim = Headbutt**
 3. Leave a slot empty if you don't have that animation. Your character just keeps the closest one it has.
 
 ### 3b. Hairstyles and beards (BR | Look)
@@ -136,6 +138,27 @@ Everything else (timers, points, budget, bounty, bots) can be changed from the i
 
 Each slot has a description of what to look for.
 
+**Body Sounds** (same page, further down): you can add several of each, and one is picked at random every time:
+| Slot | What to find |
+|---|---|
+| **Footstep Sounds** | 3-6 footsteps on dirt or gravel |
+| **Body Thump Sounds** | 2-4 heavy body thuds (ragdolls hitting the ground) |
+| **Hit Grunt Sounds** | 4-8 "oof", "ugh" or pain grunts |
+| **Flying Yell Sounds** | 2-4 screams (thrown, launched, catapulted) |
+| **Whoosh Sounds** | 2-3 swing or whoosh sounds (punch, kick, dive) |
+
+**Effects** (same page): drag in Niagara particle effects (free ones on **Fab**: search "dust", "smoke", "splash", "impact", "sparks"):
+| Slot | Used for |
+|---|---|
+| Dust Effect | hard landings, belly-flops, falling off walls |
+| Splash Effect | someone hitting deep water |
+| Smoke Effect | cannon smoke |
+| Punch Hit Effect | where a punch, kick or headbutt lands |
+| Cigarette Smoke Effect | the smoking emote's puffs |
+| Sparks Effect | the cannon's fuse |
+
+Empty slots use simple built-in puffs.
+
 ---
 
 ## Part 6: What's on the test map (built automatically)
@@ -144,7 +167,16 @@ Each slot has a description of what to look for.
 | Village (west) | jobs, shops (ladder, cutters, gas, tacos, **poncho**, **trumpet**, **shovel**, **cannonball suit**), coyote counter, cockfight, piñata, **chickens**, villagers |
 | Open desert by the scrapyard (south-west) | the **Lucha Libre ring** with its red challenge counters and green/blue betting counters |
 | Near bank | **Human Cannon** (climb up on the barrel, a friend lights the fuse: BOOM), tunnels, marina |
-| Border Patrol side | 2 **watchtowers**, the Holding Pen and catapult, blue **GOV. SUPPLY** counters |
+| Border Patrol side | 2 **watchtowers**, the Holding Pen and catapult, blue **GOV. SUPPLY** counters (now with a **Lasso**) |
+| North of the plaza | the **mariachi band stage** |
+| Around both sides | **hiding spots**: dumpsters, porta-potties, hay bales |
+| Tool shop | new counters: **LASSO $150**, **CARDBOARD BOX $30** |
+
+**The mariachi band:**
+1. Buy a trumpet, walk onto the stage, and press **E** to join the band.
+2. Pick your trumpet (mouse wheel) and press **F ON THE BEAT**. Watch the pulsing square at the bottom: green = now.
+3. Every 4 good notes in a row, the crowd tips you, and more for longer streaks (up to $120 a minute).
+4. To use your own song, select the stage in your level (Map Kit: **BR Mariachi Band**). Set **Music** to a looping song, set **Beats Per Minute** to match it, and add short **Note Sounds** and a **Miss Sound**.
 
 **The Lucha Libre ring:**
 1. Walk up to a red counter and press **E** to fight for $50, $100 or $250. Bigger fights mean a tougher luchador.
@@ -164,14 +196,23 @@ Each slot has a description of what to look for.
 | Z | grab with both hands (people) or pick up things; Z again to throw; on a teammate: climb on their shoulders |
 | E | interact (hold for jobs, zip-ties, ladders) |
 | Mouse wheel / F / G | pick an item / use it / drop it |
-| Hold T | emote wheel |
+| Hold T | emote wheel (Wave, Flex, Taunt, Beg, Cheer, Dance, **Smoke**). Emotes keep going until you move, fight, or pick the same one again. |
+| **R** (fists out) | **kick** |
+| **Middle mouse** | **headbutt** (breaks the grip of whoever's holding you) |
+| **Z at a tall wall** | start **climbing**: then **left, right, left, right** clicks. The same hand twice = slip (3 slips = fall). At the top, **Space** pulls you up. Space while climbing = let go. Falls over ~3 m knock you out. Climbing the Border Wall sets off its **sensors**. |
+| **Z on a knocked-out person** | pick them up and carry them (Z again throws) |
+| **F with the Lasso** | throw it where you're looking: yanks people off their feet (and off walls) |
+| **F with the Cardboard Box** | get in or out of the box. You're invisible while standing still. |
+| **E at a dumpster / porta-potty / hay** | hide inside (Border Patrol: search it) |
+| **Z near a dog** (Border Patrol) | put it on a leash. It pulls toward Runners. Z again lets it loose to chase. |
+| **Tab** | scoreboard |
 | H | drop $50 |
 | **X** | weapon: fists → taser → pistol → fists (Runners: fists ↔ revolver, if you bought one). With a weapon out, right mouse aims and left click shoots. |
 | V / B / Q | (Border Patrol) scan / trap / drone |
 | Y | ready up in the lobby |
 | N | watch other players while in the pen |
 | K | mute mic |
-| M | menu (team, customize, host settings) |
+| M | menu (team, customize, host settings, **settings**: mouse, invert, field of view, volume, music) |
 
 ### Grabbing and arresting (Gang Beasts style)
 - **Hold right click** next to someone to grab them with your right hand. **Tap left click** to punch them in the face while you hold them.
@@ -192,7 +233,13 @@ Each slot has a description of what to look for.
 
 ---
 
+### Play of the Round
+When a round ends, the biggest moment gets replayed in slow motion with a circling camera. That might be a cannon launch, a catapult, a throw, a lasso, a flying tackle, a huge fall, the bounty catch or a luchador win. It happens automatically.
+
+---
+
 ## Part 8: Playing together
+- **Standalone / packaged game needs a SAVED level.** If your editor shows "Untitled", use **File → Save Current Level As**. Then go to **Project Settings → Maps & Modes** and set **Editor Startup Map** and **Game Default Map** to it.
 - **Host:** M → **HOST GAME (Steam)** or **HOST GAME (Radmin / LAN)**. Your friend uses **FIND A FRIEND'S GAME** or types your Radmin IP into **JOIN IP**.
 - **Lobby:** everyone presses **Y** when ready. The host can press **START NOW**.
 - **Host settings** (right side of the M menu, host only): Prep time, Invasion time, Ready-up lobby, Best of 3, Fill with bots, team sizes.
