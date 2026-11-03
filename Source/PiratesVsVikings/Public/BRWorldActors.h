@@ -42,6 +42,10 @@ protected:
 	UTextRenderComponent* AddLabel(const TCHAR* Name, const FVector& Location, float Size, const FColor& Color);
 	/** Invisible ball that lets players find this with E (things with no collision are invisible to the E key). */
 	USphereComponent* AddPickupZone(float Radius);
+	/** Dropped things vanish after this many seconds (blinking for the last 5). Things you placed in the level stay. */
+	void StartDespawn(float Seconds);
+	FTimerHandle BlinkTimer;
+	bool bBlinkVisible = true;
 	static void Paint(UStaticMeshComponent* Mesh, const FLinearColor& Color);
 };
 
@@ -527,6 +531,8 @@ public:
 	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
+	/** Seconds before a DROPPED item disappears (ones you place in the level never do). */
+	UPROPERTY(EditAnywhere, Category = "BR|Pickup") float DespawnSeconds = 45.f;
 	/** What's lying here (you can also place these in your level as free loot). */
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Pickup") EBRItem Item = EBRItem::Taco;
 	/** Wire cutter cuts left. */
@@ -553,6 +559,8 @@ public:
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
 	UPROPERTY(ReplicatedUsing = OnRep_HatInfo, EditAnywhere, Category = "BR|Hat") EBRHat Hat = EBRHat::CowboyHat;
+	/** Seconds before a knocked-off hat disappears. */
+	UPROPERTY(EditAnywhere, Category = "BR|Hat") float DespawnSeconds = 30.f;
 	UPROPERTY(ReplicatedUsing = OnRep_HatInfo, EditAnywhere, Category = "BR|Hat") TObjectPtr<class USkeletalMesh> HatMesh;
 
 protected:
@@ -579,6 +587,8 @@ public:
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Cash") int32 Amount = 50;
+	/** Seconds before dropped cash disappears. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cash") float DespawnSeconds = 60.f;
 	UPROPERTY(Replicated) FString DropperName;
 	UPROPERTY(Replicated) EPVVFaction DropperTeam = EPVVFaction::None;
 

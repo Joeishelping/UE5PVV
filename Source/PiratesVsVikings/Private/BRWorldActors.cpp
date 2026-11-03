@@ -10,6 +10,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/SphereComponent.h"
+#include "TimerManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -132,6 +133,27 @@ USphereComponent* ABRGreyboxActor::AddPickupZone(float Radius)
 	Zone->SetGenerateOverlapEvents(false);
 	Zone->SetCanEverAffectNavigation(false);
 	return Zone;
+}
+
+void ABRGreyboxActor::StartDespawn(float Seconds)
+{
+	if (Seconds <= 0.f || IsNetStartupActor())
+	{
+		return; // placed in the level by you: stays forever
+	}
+	if (HasAuthority())
+	{
+		SetLifeSpan(Seconds);
+	}
+	// Blink for the last 5 seconds so people know it's about to go (each screen does this itself).
+	GetWorldTimerManager().SetTimer(BlinkTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		bBlinkVisible = !bBlinkVisible;
+		if (Root)
+		{
+			Root->SetVisibility(bBlinkVisible, true);
+		}
+	}), 0.2f, true, FMath::Max(0.1f, Seconds - 5.f));
 }
 
 void ABRGreyboxActor::Paint(UStaticMeshComponent* Mesh, const FLinearColor& Color)
@@ -2072,7 +2094,7 @@ ABRItemPickup::ABRItemPickup()
 	AddMesh(TEXT("Box"), CubeMesh, FVector(0.f, 0.f, 18.f), FVector(36.f, 36.f, 36.f), FLinearColor(0.85f, 0.7f, 0.3f), FRotator(0.f, 25.f, 0.f), false);
 	Tag = AddLabel(TEXT("Tag"), FVector(0.f, 0.f, 70.f), 22.f, FColor::White);
 	AddPickupZone(60.f);
-	InitialLifeSpan = 300.f; // litter disappears after 5 minutes
+	Tags.Add(TEXT("BRPickup"));
 }
 
 void ABRItemPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -2086,6 +2108,7 @@ void ABRItemPickup::BeginPlay()
 {
 	ComponentColors.Add(TEXT("Box"), BR::IsIllegal(Item) ? FLinearColor(0.7f, 0.1f, 0.1f) : FLinearColor(0.85f, 0.7f, 0.3f));
 	Super::BeginPlay();
+	StartDespawn(DespawnSeconds);
 	if (Tag)
 	{
 		Tag->SetText(FText::FromString(BR::ItemName(Item)));
@@ -2151,7 +2174,7 @@ ABRHatPickup::ABRHatPickup()
 	AddMesh(TEXT("Marker"), SphereMesh, FVector(0.f, 0.f, 12.f), FVector(22.f, 22.f, 22.f), FLinearColor(0.9f, 0.75f, 0.2f), FRotator::ZeroRotator, false);
 	Tag = AddLabel(TEXT("Tag"), FVector(0.f, 0.f, 60.f), 18.f, FColor(255, 230, 120));
 	AddPickupZone(60.f);
-	InitialLifeSpan = 180.f;
+	Tags.Add(TEXT("BRPickup"));
 }
 
 void ABRHatPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -2164,6 +2187,7 @@ void ABRHatPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 void ABRHatPickup::BeginPlay()
 {
 	Super::BeginPlay();
+	StartDespawn(DespawnSeconds);
 	OnRep_HatInfo();
 }
 
@@ -2220,7 +2244,7 @@ ABRCashPickup::ABRCashPickup()
 	AddMesh(TEXT("Band"), CubeMesh, FVector(0.f, 0.f, 6.f), FVector(8.f, 17.f, 11.f), FLinearColor(0.9f, 0.85f, 0.7f), FRotator(0.f, 15.f, 0.f), false);
 	Tag = AddLabel(TEXT("Tag"), FVector(0.f, 0.f, 45.f), 24.f, FColor(90, 255, 90));
 	AddPickupZone(60.f);
-	InitialLifeSpan = 240.f;
+	Tags.Add(TEXT("BRPickup"));
 }
 
 void ABRCashPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -2234,6 +2258,7 @@ void ABRCashPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 void ABRCashPickup::BeginPlay()
 {
 	Super::BeginPlay();
+	StartDespawn(DespawnSeconds);
 	if (Tag)
 	{
 		Tag->SetText(FText::FromString(FString::Printf(TEXT("$%d"), Amount)));

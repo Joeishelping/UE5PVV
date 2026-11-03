@@ -1004,6 +1004,11 @@ AActor* APVVCharacter::FindBestInteractable()
 		{
 			Score += 0.5f;
 		}
+		// Stuff lying on the ground beats the truck / counter it's next to (e.g. keys dropped by a car).
+		if (Candidate->ActorHasTag(TEXT("BRPickup")))
+		{
+			Score += 0.8f;
+		}
 		if (Score > BestScore)
 		{
 			BestScore = Score;
