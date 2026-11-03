@@ -1802,6 +1802,10 @@ bool ABRCannon::CanInteract_Implementation(APVVCharacter* Interactor) const
 	{
 		return true; // plug it
 	}
+	if (IsFreeRunner(Interactor) && IsRider(Interactor))
+	{
+		return true; // sitting on it: light it yourself
+	}
 	// Someone's sitting on the barrel: any Runner can light the fuse (even the one sitting there).
 	TArray<ABRCharacter*> Riders;
 	FindRiders(Riders);
@@ -1852,9 +1856,14 @@ FText ABRCannon::GetInteractPrompt_Implementation(APVVCharacter* Interactor) con
 	}
 	TArray<ABRCharacter*> Riders;
 	FindRiders(Riders);
+	if (IsRider(Interactor))
+	{
+		return PhaseAllowsFiring() ? FText::Format(LOCTEXT("LightOwn", "LIGHT THE FUSE yourself! ({0} seconds - hold on tight)"), FMath::CeilToInt(FuseSeconds))
+			: LOCTEXT("LightOwnWait", "Light the fuse (not until the Line opens)");
+	}
 	if (Riders.Num() > 0 && PhaseAllowsFiring())
 	{
-		return IsRider(Interactor) ? LOCTEXT("LightOwn", "LIGHT THE FUSE (you're sitting on it...)") : LOCTEXT("LightFuse", "LIGHT THE FUSE!");
+		return LOCTEXT("LightFuse", "LIGHT THE FUSE!");
 	}
 	const ABRPlayerState* PS = BRState(Interactor);
 	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
@@ -1894,6 +1903,11 @@ void ABRCannon::OnInteract_Implementation(APVVCharacter* Interactor)
 	// Someone on the barrel: light the fuse.
 	TArray<ABRCharacter*> Riders;
 	FindRiders(Riders);
+	if (IsRider(Runner) && !PhaseAllowsFiring())
+	{
+		Tell(Interactor, LOCTEXT("FuseTooEarly", "Not yet! The cannon only fires once the Line is open."));
+		return;
+	}
 	if (Riders.Num() > 0 && PhaseAllowsFiring())
 	{
 		FuseLitAt = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();

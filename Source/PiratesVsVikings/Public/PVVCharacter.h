@@ -72,6 +72,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "PVV")
 	float GetBalanceFraction() const { return MaxBalance > 0.f ? Balance / MaxBalance : 0.f; }
+	bool IsRagdollActive() const { return bRagdollActive; }
+	const FTransform& GetMeshRelativeTransform() const { return MeshRelativeTransform; }
 
 	const FText& GetFocusPrompt() const { return FocusPrompt; }
 	/** 0..1 while holding Interact (working a job, cutting wire, zip-tying...). */

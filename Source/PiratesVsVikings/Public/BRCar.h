@@ -56,6 +56,10 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float FuelPerSecond = 1.f / 60.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float RideHeight = 45.f;
+	/** Hit someone faster than this (cm/s) and you RUN THEM OVER: they get knocked flying (never killed). */
+	UPROPERTY(EditAnywhere, Category = "BR|Car") float RunOverSpeed = 450.f;
+	/** How far people get thrown when run over (x car speed). */
+	UPROPERTY(EditAnywhere, Category = "BR|Car") float RunOverLaunch = 0.55f;
 
 	/** Extra radio songs (on top of everything in Content/Music/Radio). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Radio") TArray<TObjectPtr<USoundBase>> Stations;
@@ -90,6 +94,8 @@ private:
 	UPROPERTY() TArray<TObjectPtr<USoundBase>> LoadedStations;
 
 	float LastHornTime = -100.f;
+	TMap<TWeakObjectPtr<APVVCharacter>, float> LastRunOver;
+	void TickRunOver();
 	mutable TWeakObjectPtr<class ABRDesertArena> CachedArena;
 
 	UFUNCTION() void OnRep_Radio();

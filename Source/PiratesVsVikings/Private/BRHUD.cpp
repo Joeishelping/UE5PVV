@@ -588,11 +588,13 @@ void ABRHUD::DrawHUD()
 	// --- Cantina: drinking contest + tipsy
 	if (Me->bChugging)
 	{
-		Centered(TEXT("DRINKING CONTEST!  MASH SPACE TO CHUG!"), SY * 0.36f, Yellow, Big, 1.6f);
+		Centered(TEXT("DRINKING CONTEST!  TAP SPACE IN RHYTHM - DON'T SPAM!"), SY * 0.36f, Yellow, Big, 1.6f);
 		Centered(TEXT("YOU"), SY * 0.36f + 40.f, Green, Small, 1.2f);
 		Bar(SX * 0.5f - 200.f, SY * 0.36f + 62.f, 400.f, 18.f, Me->ChugMine, Green);
 		Centered(TEXT("EL BORRACHO"), SY * 0.36f + 90.f, Red, Small, 1.2f);
 		Bar(SX * 0.5f - 200.f, SY * 0.36f + 112.f, 400.f, 18.f, Me->ChugRival, Red);
+		Centered(TEXT("GAG"), SY * 0.36f + 140.f, Me->ChugGag > 0.6f ? Red : Yellow, Small, 1.f);
+		Bar(SX * 0.5f - 100.f, SY * 0.36f + 160.f, 200.f, 10.f, Me->ChugGag, Me->ChugGag > 0.6f ? Red : Yellow);
 	}
 	else if (Me->IsTipsy())
 	{

@@ -162,6 +162,78 @@ void ABRCar::Tick(float DeltaSeconds)
 	{
 		Fuel = FMath::Max(0.f, Fuel - FMath::Abs(ThrottleInput) * FuelPerSecond * DeltaSeconds);
 	}
+	if (HasAuthority())
+	{
+		TickRunOver();
+	}
+}
+
+void ABRCar::TickRunOver()
+{
+	UStaticMeshComponent* Body = GetHull();
+	if (!Body || !Body->IsSimulatingPhysics())
+	{
+		return;
+	}
+	const FVector Vel = Body->GetPhysicsLinearVelocity();
+	const float Speed = Vel.Size2D();
+	if (Speed < RunOverSpeed)
+	{
+		return;
+	}
+	const FVector Dir = Vel.GetSafeNormal2D();
+	const FBoxSphereBounds Local = Body->CalcBounds(FTransform::Identity);
+	const FVector Scale = Body->GetComponentScale();
+	const FVector Extent = Local.BoxExtent * Scale + FVector(55.f, 55.f, 90.f);
+	const FVector Center = Body->GetComponentTransform().TransformPosition(Local.Origin);
+	const float Now = GetWorld()->GetTimeSeconds();
+	APVVCharacter* Driver = GetDriver();
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* C = *It;
+		if (C->GetCurrentBoat() || C->GetCarrier() || C->IsInCannon() || C->GetCondition() == EPVVCondition::Detained)
+		{
+			continue;
+		}
+		const FVector Rel = Body->GetComponentQuat().UnrotateVector(C->GetActorLocation() - Center);
+		if (FMath::Abs(Rel.X) > Extent.X || FMath::Abs(Rel.Y) > Extent.Y || FMath::Abs(Rel.Z) > Extent.Z)
+		{
+			continue;
+		}
+		if (FVector::DotProduct(C->GetActorLocation() - Center, Dir) < 0.f)
+		{
+			continue; // only the end that's moving into them
+		}
+		const float* Last = LastRunOver.Find(C);
+		if (Last && Now - *Last < 1.5f)
+		{
+			continue;
+		}
+		LastRunOver.Add(C, Now);
+		// Get out of the way of the car (so it doesn't stop dead against them) and go FLYING. No damage - just knocked down.
+		C->Multicast_IgnoreVehicles(static_cast<uint8>(Body->GetCollisionObjectType()), 1.2f);
+		const FVector Launch = Dir * Speed * RunOverLaunch + FVector(0.f, 0.f, 250.f + Speed * 0.15f);
+		C->LastTosser = Cast<ABRCharacter>(Driver);
+		C->LastTossTime = Now;
+		if (C->GetCondition() == EPVVCondition::Normal)
+		{
+			C->ApplyKnockdown(Driver ? static_cast<AActor*>(Driver) : this, Launch);
+		}
+		else
+		{
+			C->Multicast_FlingBody(Launch * 0.7f); // already down: tumble under the wheels
+		}
+		Body->SetPhysicsLinearVelocity(Vel * 0.9f); // THUMP
+		ABRGameState::FX(this, EBRFX::Smoke, C->GetActorLocation());
+		if (Driver)
+		{
+			ABRGameState::Highlight(this, C, 65.f, FString::Printf(TEXT("%s ran over %s"), *Driver->GetPlayerDisplayName(), *C->GetPlayerDisplayName()));
+			if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+			{
+				GM->Feed(FString::Printf(TEXT("%s ran over %s!"), *Driver->GetPlayerDisplayName(), *C->GetPlayerDisplayName()));
+			}
+		}
+	}
 }
 
 // -------------------------------------------------------------------------------------------

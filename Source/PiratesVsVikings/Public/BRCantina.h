@@ -53,11 +53,19 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") FString CantinaName = TEXT("LA CANTINA DEL DIABLO");
-	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 PatronCount = 8;
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 PatronCount = 6;
+	/** Bar fight: most locals that will gang up on one player at once (the rest fight each other). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 MaxOnOnePlayer = 2;
+	/** Bar fight: how hard the locals go (0..1). Same for everyone so fights feel fair and readable. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float LocalAggression = 0.7f;
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 DrinkPrice = 15;
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float TipsySeconds = 25.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 ContestEntry = 50;
-	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 ContestPrize = 150;
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 ContestPrize = 110;
+	/** After a contest El Borracho won't drink with you again for this long (stops the money farming). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float ContestCooldown = 180.f;
+	/** El Borracho gets this much faster every time someone beats him (he takes it personally). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float RivalRatePerWin = 0.015f;
 	/** Bar fight: the WINNER (the last one standing) finds this much next to each knocked-out local. Nobody else gets anything. */
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 CashPerLocal = 40;
 	/** Bar fight: what you pay if you get knocked out. */
@@ -107,7 +115,9 @@ protected:
 	float FightStartTime = 0.f;
 	float RefillAt = -1.f;
 	float ContestStart = 0.f;
-	float RivalRate = 0.12f;
+	float RivalRate = 0.15f;
+	int32 BorrachoLosses = 0;
+	TMap<TWeakObjectPtr<ABRCharacter>, float> ContestBannedUntil;
 	float NextThink = 0.f;
 	float LastBounceTime = -10.f;
 

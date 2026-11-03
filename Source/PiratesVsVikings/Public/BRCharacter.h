@@ -190,7 +190,7 @@ public:
 	/** Gang Beasts pacing: every hit is divided by this (higher = longer fights). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FightToughness = 1.9f;
 	/** Gang Beasts pacing: hits push you this much (lower = you stay in the fight instead of flying off). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HitPushScale = 0.7f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HitPushScale = 0.55f;
 	/** Rocked: the hit that WOULD knock you out dazes you instead (staggering, can't punch). The next good hit knocks you out. */
 	UPROPERTY(Replicated) float DazedUntil = -1.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DazeSeconds = 2.2f;
@@ -217,6 +217,10 @@ public:
 	/** Someone is choking you out (held from behind with both hands). */
 	UPROPERTY(Replicated) bool bChoked = false;
 	float NextSumoPush = 0.f;
+	/** Throw a floppy body (all machines). */
+	UFUNCTION(NetMulticast, Reliable) void Multicast_FlingBody(FVector_NetQuantize Velocity);
+	/** Let cars pass through this capsule for a moment (we just got run over; the ragdoll still tumbles off the car). */
+	UFUNCTION(NetMulticast, Reliable) void Multicast_IgnoreVehicles(uint8 Channel, float Seconds);
 	/** Who last threw / shoved / hit you (for "X sent Y for a swim"). */
 	TWeakObjectPtr<ABRCharacter> LastTosser;
 	float LastTossTime = -100.f;
@@ -241,6 +245,9 @@ public:
 	UPROPERTY(Replicated) bool bChugging = false;
 	UPROPERTY(Replicated) float ChugMine = 0.f;
 	UPROPERTY(Replicated) float ChugRival = 0.f;
+	/** Drinking contest: chug too fast and you GAG (lose progress). Keep a steady rhythm instead of spamming. */
+	UPROPERTY(Replicated) float ChugGag = 0.f;
+	float ChugGaggedUntil = 0.f;
 	UFUNCTION(Server, Reliable) void Server_Chug();
 	/** Big message across the middle of this player's screen for a few seconds (YOU WON THE BAR FIGHT!). */
 	UFUNCTION(Client, Reliable) void Client_Banner(const FString& Text, bool bGood);
@@ -542,6 +549,61 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SpineStrength = 480.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HeadStrength = 240.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float ArmStrength = 130.f;
+	// --- Active ragdoll (Gang Beasts balance) ------------------------------------------------------------
+	/** The physics puppet: your body balances itself on its feet, every hit and every start/stop tips you,
+	 *  lean too far and you FALL. Grabs physically tug on whoever you hold. Untick to go back to the old feel. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") bool bActiveRagdoll = true;
+	/** How hard you pull yourself back upright (higher = steadier on your feet). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float BalanceStiffness = 55.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float BalanceDamping = 7.5f;
+	/** Lean past this (degrees) and you go over. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float FallOverAngle = 36.f;
+	/** How much a hit tips you (per unit of hit push). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float HitTip = 0.06f;
+	/** How much starting, stopping and turning tips you. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float MoveTip = 0.05f;
+	/** Hand grabs are physical: your hand is tied to their body (arms stretch, bodies tug). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") bool bPhysicalGrabs = true;
+	/** Current lean (world direction * degrees), on every machine. */
+	FVector BodyLean = FVector::ZeroVector;
+	FVector BodyLeanVel = FVector::ZeroVector;
+	FVector LastLeanVelocity = FVector::ZeroVector;
+	bool bLeanApplied = false;
+	TWeakObjectPtr<ABRCharacter> LastLeanPusher;
+	/** Tip the body (world-space push). Any machine; the server decides who falls. */
+	void AddLean(const FVector& WorldPush, ABRCharacter* By);
+	void TickActiveRagdoll(float DeltaSeconds);
+	void UpdateGrabTethers();
+	UPROPERTY() TObjectPtr<class UPhysicsConstraintComponent> GrabTether[2];
+	// --- Dragging + lifting people over your head ---
+	/** How hard a knocked-out body you're holding gets pulled along (higher = less floppy lag). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float DragStrength = 9.f;
+	/** Walk speed while dragging a limp body or carrying someone over your head. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float DragSpeedScale = 0.7f;
+	/** Seconds to heave someone up over your head. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float LiftSeconds = 0.6f;
+	/** Throws from over your head are this much stronger. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float OverheadThrowScale = 1.5f;
+	/** Arms-up pose while holding someone overhead (optional; leave empty to just use the reaching arms). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> LiftAnim;
+	UPROPERTY(Replicated) bool bLiftOverhead = false;
+	UPROPERTY(Replicated) float LiftStartTime = 0.f;
+	/** Which bone of a limp body you've got hold of (index into the drag bone list; 255 = none yet). */
+	UPROPERTY(Replicated) uint8 DragBone = 255;
+	bool bDragSlowed = false;
+	UFUNCTION(Server, Reliable) void Server_Lift();
+	FTimerHandle IgnoreVehiclesTimer;
+	uint8 IgnoredVehicleChannel = 255;
+	FVector GetHoldPoint() const;
+	void DragHeldBody(float DeltaSeconds);
+	void PickDragBone();
+	bool IsDraggingBody() const;
+	void EndLift();
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsLiftingOverhead() const { return bLiftOverhead; }
+	TWeakObjectPtr<UPrimitiveComponent> TetherOther[2];
+	FVector TetherAnchor[2];
+	bool bTetherToWorld[2] = { false, false };
+
 	/** Gang Beasts gait: the upper body lags behind when you start, stop and turn (0 = off). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float MomentumSway = 0.35f;
 	/** Arms stiffen up while aiming so shooting looks and feels precise. */

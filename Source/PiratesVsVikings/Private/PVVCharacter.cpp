@@ -1083,6 +1083,14 @@ AActor* APVVCharacter::FindBestInteractable()
 		{
 			Score += 0.8f;
 		}
+		// Whatever you're standing ON wins (e.g. lighting the fuse of the cannon you're sitting on).
+		if (const UPrimitiveComponent* Base = GetMovementBase())
+		{
+			if (Base->GetOwner() == Candidate)
+			{
+				Score += 2.f;
+			}
+		}
 		if (Score > BestScore)
 		{
 			BestScore = Score;

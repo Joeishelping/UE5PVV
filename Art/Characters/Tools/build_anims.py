@@ -382,6 +382,22 @@ def block(t, p):
         p[f"hand_{s}"] = rot(-10)
 
 
+def lift_overhead(t, p):
+    # Holding somebody up over your head: arms straight up (elbows a bit bent), legs braced, wobbling under the weight.
+    w = S(t * TAU)
+    hip, knee = legs_ik(.08 + .02 * abs(w))
+    p["pelvis_T"] = (0, -.08 - .02 * abs(w), 0)
+    p["spine_01"] = rot(-6 + 3 * w)
+    p["spine_02"] = rot(-4)
+    p["neck_01"] = rot(-10)
+    for s in "lr":
+        p[f"thigh_{s}"] = rot(hip)
+        p[f"calf_{s}"] = rot(knee)
+        p[f"upperarm_{s}"] = arm(s, -20, 0, 150 + 6 * w)
+        p[f"lowerarm_{s}"] = rot(-35 - 5 * w)
+        p[f"hand_{s}"] = rot(-20)
+
+
 ANIMS = [
     ("Idle", idle, 2.0, True), ("Walk", lambda t, p: walk(t, p, 1.0), 1.0, True), ("Run", lambda t, p: walk(t, p, 1.8), .62, True),
     ("CrouchIdle", crouch_idle, 2.0, True), ("CrouchWalk", lambda t, p: walk(t, p, .7, .13), 1.1, True),
@@ -393,7 +409,7 @@ ANIMS = [
     ("Emote_Wave", wave, 1.0, True), ("Emote_Flex", flex, 1.5, True), ("Emote_Taunt", taunt, 1.0, True),
     ("Emote_Beg", beg, 1.0, True), ("Emote_Cheer", cheer, 1.0, True),
     ("Emote_Smoke", smoke, 4.0, True), ("Kick", kick, .5, False), ("Headbutt", headbutt, .45, False),
-    ("Block", block, 1.0, True),
+    ("Block", block, 1.0, True), ("Lift_Overhead", lift_overhead, 1.4, True),
 ]
 
 
@@ -450,4 +466,7 @@ def build():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 2:  # python build_anims.py OUT.glb Name1 Name2 ...  (just those moves)
+        OUT = sys.argv[1]
+        ANIMS = [a for a in ANIMS if a[0] in sys.argv[2:]]
     build()

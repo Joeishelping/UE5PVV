@@ -369,15 +369,33 @@ void ABRCantina::Use(EBRCantinaSpot Kind, APVVCharacter* Who)
 			BRC->Notify(FText::Format(LOCTEXT("NoContestMoney", "The entry is ${0}."), ContestEntry));
 			return;
 		}
+		const float Now = GetWorld()->GetTimeSeconds();
+		if (const float* Until = ContestBannedUntil.Find(BRC))
+		{
+			if (Now < *Until)
+			{
+				BRC->Notify(FText::Format(LOCTEXT("ContestWait", "El Borracho: \"Again?! Come back in {0} seconds, I need a nap.\""), FMath::CeilToInt(*Until - Now)));
+				return;
+			}
+		}
+		if (BRC->IsTipsy())
+		{
+			BRC->Notify(LOCTEXT("ContestTipsy", "El Borracho: \"You're already drunk, amigo. Sober up first.\""));
+			return;
+		}
 		PS->AddMoney(-ContestEntry);
 		ContestDrinker = BRC;
-		ContestStart = GetWorld()->GetTimeSeconds();
-		RivalRate = FMath::FRandRange(0.1f, 0.17f); // El Borracho's form tonight
+		ContestStart = Now;
+		ContestBannedUntil.Add(BRC, Now + ContestCooldown);
+		// El Borracho's form tonight (and he gets better every time he loses).
+		RivalRate = FMath::FRandRange(0.15f, 0.2f) + RivalRatePerWin * BorrachoLosses;
+		BRC->ChugGag = 0.f;
+		BRC->ChugGaggedUntil = 0.f;
 		BRC->bChugging = true;
 		BRC->ChugMine = 0.f;
 		BRC->ChugRival = 0.f;
 		BRC->ApplySlow(12.f, 0.f);
-		BRC->Notify(LOCTEXT("ContestGo", "DRINKING CONTEST! MASH SPACE to chug faster than El Borracho!"));
+		BRC->Notify(LOCTEXT("ContestGo", "DRINKING CONTEST! Tap SPACE in a steady rhythm to chug. Spam it and you'll GAG!"));
 		return;
 	}
 	StartFight(BRC);
@@ -423,7 +441,10 @@ void ABRCantina::StartFight(ABRCharacter* Starter)
 		if (IsStanding(P))
 		{
 			P->SetKnockdownSeconds(120.f);
-			P->StartBrawling(PickFoe(P), 60.f, FMath::FRandRange(0.75f, 1.f));
+			if (ABRCharacter* Foe = PickFoe(P))
+			{
+				P->StartBrawling(Foe, 60.f, LocalAggression);
+			}
 		}
 	}
 	if (FightSound)
@@ -446,44 +467,53 @@ void ABRCantina::StartFight(ABRCharacter* Starter)
 
 ABRCharacter* ABRCantina::PickFoe(ABRCharacter* For) const
 {
-	TArray<ABRCharacter*> Options;
-	for (ABRCharacter* P : Patrons)
+	// Gang Beasts style: everybody brawls, but it's readable - at most MaxOnOnePlayer locals on any one player
+	// at a time (the rest pair off and fight each other), and you always go for the nearest free opponent.
+	auto CountOn = [this, For](const ABRCharacter* Who)
 	{
-		if (P != For && IsStanding(P) && IsInside(P->GetActorLocation()))
+		int32 N = 0;
+		for (const ABRCharacter* P : Patrons)
 		{
-			Options.Add(P);
-		}
-	}
-	for (ABRCharacter* C : Contestants)
-	{
-		if (C != For && IsStanding(C) && !Losers.Contains(C) && IsInside(C->GetActorLocation()))
-		{
-			Options.Add(C);
-			Options.Add(C);
-			Options.Add(C); // everybody wants a piece of the outsider
-		}
-	}
-	if (Options.Num() == 0)
-	{
-		return nullptr;
-	}
-	// Mostly whoever's closest, sometimes someone random across the room.
-	if (FMath::FRand() < 0.6f)
-	{
-		ABRCharacter* Best = nullptr;
-		float BestDist = MAX_flt;
-		for (ABRCharacter* O : Options)
-		{
-			const float D = FVector::DistSquared(O->GetActorLocation(), For->GetActorLocation());
-			if (D < BestDist)
+			if (P != For && IsValid(P) && P->IsBrawling() && P->GetBrawlTarget() == Who && IsStanding(P))
 			{
-				BestDist = D;
-				Best = O;
+				++N;
 			}
 		}
-		return Best;
+		return N;
+	};
+	ABRCharacter* Best = nullptr;
+	float BestScore = MAX_flt;
+	auto Consider = [&](ABRCharacter* O, bool bPlayer)
+	{
+		if (!O || O == For || !IsStanding(O) || !IsInside(O->GetActorLocation()))
+		{
+			return;
+		}
+		const int32 Already = CountOn(O);
+		if (Already >= (bPlayer ? MaxOnOnePlayer : 1))
+		{
+			return; // they've got their hands full
+		}
+		// Nearest first; players are a little more tempting (the outsider started it).
+		const float Score = FVector::Dist(O->GetActorLocation(), For->GetActorLocation()) * (bPlayer ? 0.7f : 1.f) + Already * 400.f;
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = O;
+		}
+	};
+	for (ABRCharacter* C : Contestants)
+	{
+		if (!Losers.Contains(C))
+		{
+			Consider(C, true);
+		}
 	}
-	return Options[FMath::RandRange(0, Options.Num() - 1)];
+	for (ABRCharacter* P : Patrons)
+	{
+		Consider(P, false);
+	}
+	return Best;
 }
 
 void ABRCantina::Tick(float DeltaSeconds)
@@ -605,7 +635,11 @@ void ABRCantina::TickFight()
 		{
 			if (ABRCharacter* Foe = PickFoe(P))
 			{
-				P->StartBrawling(Foe, 60.f, FMath::FRandRange(0.6f, 1.f));
+				P->StartBrawling(Foe, 60.f, LocalAggression);
+			}
+			else
+			{
+				P->CalmDown(); // nobody free to fight: wait your turn (cheer them on)
 			}
 		}
 	}
@@ -714,7 +748,8 @@ void ABRCantina::TickContest(float Now)
 		return;
 	}
 	const float Dt = GetWorld()->GetDeltaSeconds();
-	D->ChugRival = FMath::Min(1.f, D->ChugRival + RivalRate * FMath::FRandRange(0.6f, 1.4f) * Dt);
+	D->ChugGag = FMath::Max(0.f, D->ChugGag - 0.5f * Dt);
+	D->ChugRival = FMath::Min(1.f, D->ChugRival + RivalRate * FMath::FRandRange(0.8f, 1.2f) * Dt);
 	const bool bDone = D->ChugMine >= 1.f || D->ChugRival >= 1.f || Now - ContestStart > 12.f;
 	if (!bDone)
 	{
@@ -728,6 +763,7 @@ void ABRCantina::TickContest(float Now)
 	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
 	if (bWon)
 	{
+		++BorrachoLosses;
 		if (PS)
 		{
 			PS->AddMoney(ContestPrize);

@@ -178,6 +178,10 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bWeaponDrawn);
 	DOREPLIFETIME(ABRCharacter, ArmsReaching);
 	DOREPLIFETIME(ABRCharacter, HandGrabMask);
+	DOREPLIFETIME(ABRCharacter, bLiftOverhead);
+	DOREPLIFETIME(ABRCharacter, ChugGag);
+	DOREPLIFETIME(ABRCharacter, LiftStartTime);
+	DOREPLIFETIME(ABRCharacter, DragBone);
 	DOREPLIFETIME(ABRCharacter, HandGrabTarget);
 	DOREPLIFETIME(ABRCharacter, GrabbedBy);
 	DOREPLIFETIME(ABRCharacter, GrabStruggle);
@@ -405,7 +409,7 @@ void ABRCharacter::AutoFillSlots()
 	FillAnim(EatAnim, TEXT("Eat")); FillAnim(TrumpetAnim, TEXT("Trumpet")); FillAnim(DanceAnim, TEXT("Dance"));
 	FillAnim(EmoteWaveAnim, TEXT("Emote_Wave")); FillAnim(EmoteFlexAnim, TEXT("Emote_Flex")); FillAnim(EmoteTauntAnim, TEXT("Emote_Taunt"));
 	FillAnim(EmoteBegAnim, TEXT("Emote_Beg")); FillAnim(EmoteCheerAnim, TEXT("Emote_Cheer")); FillAnim(EmoteSmokeAnim, TEXT("Emote_Smoke"));
-	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt")); FillAnim(BlockAnim, TEXT("Block"));
+	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt")); FillAnim(BlockAnim, TEXT("Block")); FillAnim(LiftAnim, TEXT("Lift_Overhead"));
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -1285,6 +1289,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	if (bInBox)
 	{
 		Multiplier *= 0.5f; // shuffling along in a box
+	}
+	if (IsDraggingBody())
+	{
+		Multiplier *= DragSpeedScale; // hauling a body / somebody over your head
 	}
 	if (GrabbedBy)
 	{
@@ -2189,6 +2197,7 @@ void ABRCharacter::TickAnimationSlots()
 	else if (GetHoldProgress() > 0.f) Wanted = Pick(WorkAnim, Locomotion);
 	else if (IsDancing() && DanceAnim) Wanted = DanceAnim.Get();
 	else if (ActiveEmote >= 0 && EmoteAnimFor(ActiveEmote)) Wanted = EmoteAnimFor(ActiveEmote);
+	else if (bLiftOverhead && LiftAnim) Wanted = LiftAnim.Get();
 	else if (bBlocking && BlockAnim) Wanted = BlockAnim.Get();
 	else if (bAiming) Wanted = (Speed > 15.f && AimWalkAnim) ? AimWalkAnim.Get() : Pick(AimAnim, Locomotion);
 	else if (bIsCrouched) Wanted = Speed > 15.f ? Pick(CrouchWalkAnim, Locomotion) : Pick(CrouchIdleAnim, Locomotion);
@@ -2950,6 +2959,8 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	UpdateGunVisual();
 	TickAnimationSlots();
 	TickWobble();
+	TickActiveRagdoll(DeltaSeconds);
+	DragHeldBody(DeltaSeconds);
 	UpdateLocalVisibility();
 }
 
@@ -3157,6 +3168,11 @@ bool ABRCharacter::HandleJumpPressed()
 		Server_GrabStruggle(); // mash Space to wriggle out of their hands
 		return true;
 	}
+	if (HandGrabTarget && (HandGrabMask == 3 || bLiftOverhead))
+	{
+		Server_Lift(); // both hands on someone: SPACE = heave them over your head (again = BODY SLAM)
+		return true;
+	}
 	if (bClimbing)
 	{
 		if (bHanging)
@@ -3226,8 +3242,31 @@ void ABRCharacter::Server_Grab_Implementation()
 	// Holding someone with your hands? THROW them. Hold BACK (S) = SUPLEX over your head, hold FORWARD (W) = big toss.
 	if (ABRCharacter* Held = HandGrabTarget.Get())
 	{
+		const bool bFromOverhead = bLiftOverhead && GetWorld()->GetTimeSeconds() - LiftStartTime >= LiftSeconds;
+		const bool bLimp = Held->GetCondition() == EPVVCondition::KnockedDown;
 		ReleaseHandGrab();
 		Held->LastTosser = this;
+		if (bFromOverhead || bLimp)
+		{
+			// Chuck the floppy body (from over your head it really flies).
+			const float Power = bFromOverhead ? OverheadThrowScale : 0.8f;
+			const FVector Vel = Forward * ThrowSpeed * Power + FVector(0.f, 0.f, ThrowSpeed * (bFromOverhead ? 0.35f : 0.5f)) + GetVelocity() * 0.5f;
+			Held->LastTossTime = GetWorld()->GetTimeSeconds();
+			Held->FallFromZ = FMath::Max(Held->FallFromZ, Held->GetActorLocation().Z + (bFromOverhead ? 150.f : 0.f));
+			Held->Multicast_FlingBody(Vel);
+			ABRGameState::Highlight(this, Held, bFromOverhead ? 75.f : 55.f, FString::Printf(TEXT("%s %s %s"), *GetPlayerDisplayName(), bFromOverhead ? TEXT("HURLED") : TEXT("FLUNG"), *Held->GetPlayerDisplayName()));
+			if (ABRPlayerState* PS = GetBRPlayerState())
+			{
+				++PS->StatThrows;
+			}
+			if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+			{
+				GM->Feed(FString::Printf(TEXT("%s %s %s"), *GetPlayerDisplayName(), bFromOverhead ? TEXT("HURLED") : TEXT("FLUNG"), *Held->GetPlayerDisplayName()));
+			}
+			AddShake(0.4f);
+			Multicast_Sfx(2);
+			return;
+		}
 		Held->LastTossTime = GetWorld()->GetTimeSeconds();
 		const FVector Input = GetCharacterMovement()->GetCurrentAcceleration().GetSafeNormal2D();
 		const float Dir = Input.IsNearlyZero() ? 0.f : FVector::DotProduct(Input, Forward);
@@ -3801,6 +3840,7 @@ float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVe
 	{
 		return Damage;
 	}
+	AddLean(Impulse, Cast<ABRCharacter>(Attacker)); // the hit rocks your whole body (balance spring)
 	const float Now = GS->GetServerWorldTimeSeconds();
 	const float After = Balance - Damage * GetDamageTakenMultiplier();
 	// A solid hit rocks you: you stagger for half a second (slow, wobbly) instead of just losing a number.
@@ -3973,8 +4013,10 @@ void ABRCharacter::ReleaseHandGrab()
 			Held->ForceNetUpdate();
 		}
 	}
+	EndLift();
 	HandGrabTarget = nullptr;
 	HandGrabMask = 0;
+	DragBone = 255;
 	ArmsReaching = 0; // let go completely (press again to grab again)
 	ForceNetUpdate();
 }
@@ -4082,6 +4124,26 @@ void ABRCharacter::TickHandGrab(float DeltaSeconds)
 	}
 	// Grip more hands if they're reaching too (not the hand that's on the wall).
 	HandGrabMask = static_cast<uint8>(HandGrabMask | (ArmsReaching & ~WallHandMask));
+	// Holding a limp body: grab whatever part is nearest your hands (arm, leg, collar...) and DRAG it.
+	if (Held->GetCondition() == EPVVCondition::KnockedDown)
+	{
+		if (DragBone == 255)
+		{
+			PickDragBone();
+		}
+		Held->ExtendKnockdown(DeltaSeconds * 0.5f); // being hauled around keeps you groggy a bit longer
+		if (bLiftOverhead && HandGrabMask != 3)
+		{
+			EndLift(); // one hand let go: they flop down in front of you (still dragging by the other hand)
+		}
+	}
+	else if (bLiftOverhead)
+	{
+		// They came round up there: they wriggle down in front of you.
+		ReleaseHandGrab();
+		Held->LaunchCharacter(GetActorForwardVector().GetSafeNormal2D() * 250.f + FVector(0.f, 0.f, 150.f), true, true);
+		return;
+	}
 	// Really hold them: they stay at arm's length in front of you and get dragged wherever you go.
 	if (Held->GetCondition() == EPVVCondition::Normal)
 	{
@@ -5077,6 +5139,10 @@ void ABRCharacter::Multicast_DiveLunge_Implementation()
 void ABRCharacter::Multicast_BodyHit_Implementation(FName Bone, FVector_NetQuantize Impulse)
 {
 	USkeletalMeshComponent* Body = GetMesh();
+	if (!HasAuthority())
+	{
+		AddLean(FVector(Impulse) * 0.6f, nullptr); // clients see the hit rock the whole body too
+	}
 	if (!bWobbleOn || !Body || Body->GetBoneIndex(Bone) == INDEX_NONE)
 	{
 		return;
@@ -5175,12 +5241,29 @@ void ABRCharacter::MakeTipsy(float Seconds)
 void ABRCharacter::Server_Chug_Implementation()
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (!bChugging || Now - LastChugTime < 0.06f)
+	if (!bChugging || Now < ChugGaggedUntil || Now - LastChugTime < 0.05f)
 	{
 		return;
 	}
+	// Rhythm, not spam: a gulp every ~0.15s is perfect. Faster than that and you start to GAG.
+	const float Gap = LastChugTime < 0.f ? 1.f : Now - LastChugTime;
 	LastChugTime = Now;
-	ChugMine = FMath::Min(1.f, ChugMine + 0.028f);
+	if (Gap < 0.13f)
+	{
+		ChugGag = FMath::Min(1.f, ChugGag + 0.2f);
+	}
+	if (ChugGag >= 1.f)
+	{
+		// GAG! Spit it back up and lose a big gulp.
+		ChugGag = 0.f;
+		ChugMine = FMath::Max(0.f, ChugMine - 0.18f);
+		ChugGaggedUntil = Now + 1.f;
+		Notify(LOCTEXT("ChugGag", "*GAG* Too fast! Steady rhythm, amigo."));
+		ForceNetUpdate();
+		return;
+	}
+	// Drunker = sloppier gulps.
+	ChugMine = FMath::Min(1.f, ChugMine + (IsTipsy() ? 0.016f : 0.021f));
 }
 
 bool ABRCharacter::MugPlayer(ABRCharacter* Victim)

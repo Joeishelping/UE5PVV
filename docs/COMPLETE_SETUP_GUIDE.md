@@ -500,6 +500,62 @@ So all you have to do is **import the files** (keep their names). Anything you s
 
 ---
 
+## Part 15i: Physics puppet, dragging, lifting, run-overs
+
+**Nothing to set up for most of this.** Just update the code (copy Source, delete Binaries + Intermediate, Generate VS files, open the .uproject).
+
+**Balance (Gang Beasts style)**
+- Your whole body now leans like a real body on top of your feet. Hits, shoves and your own sudden stops/turns tip you; your legs pull you back up. Lean too far and you fall over.
+- Hurt, dazed or drunk = wobblier. Blocking = feet planted (steadier).
+- Hands that grab a person or a wall are physically tied to it, so arms stretch and bodies tug.
+- Tune it: open your character Blueprint -> **Class Defaults** -> search **Ragdoll**:
+  - **Active Ragdoll** (untick to switch all of this off if it ever misbehaves)
+  - **Balance Stiffness** (higher = harder to tip), **Fall Over Angle**, **Hit Tip**, **Move Tip**
+  - **Physical Grabs** (untick = hands not tied with physics)
+
+**Dragging people**
+1. Knock someone down.
+2. Hold a mouse button on them. You grab the part nearest your hands (arm, leg, collar, head).
+3. Walk. The floppy body gets **dragged** behind you (you walk a bit slower).
+4. Z = fling them. Let go of the mouse = drop them.
+
+**Lifting people over your head**
+1. Grab someone with **BOTH** hands (hold both mouse buttons).
+2. Press **SPACE** to heave them over your head.
+   - Someone still fresh is too strong: wear them down first (punch them, chokehold them, or get them dizzy).
+3. While they're up there:
+   - **Z** = HURL them (big throw)
+   - **SPACE** again = BODY SLAM
+   - Let go of a mouse button = drop them in front of you
+4. If they wake up up there, they wriggle down.
+- Animation: import **Art/Characters/SK_PVV_Animations_Lift.glb** (Skeleton = your body skeleton). It makes **Lift_Overhead**, which fills itself into the **Lift Anim** slot (or set it by hand: Class Defaults -> search **Lift Anim**).
+- Tune: Class Defaults -> **Drag Strength**, **Drag Speed Scale**, **Lift Seconds**, **Overhead Throw Scale**.
+
+**Running people over**
+- Hit someone with a car faster than walking pace and they go flying and get knocked down. Nobody dies. People already lying down tumble under the wheels.
+- Tune it on the car/truck Blueprint: search **Run Over** (**Run Over Speed**, **Run Over Launch**).
+
+**Cannon**
+- Sitting on top of the barrel? Press **E** to light the fuse yourself (3 s, hold on tight). It only fires once the Line is open.
+
+**Cantina fixes**
+- **Drinking contest:** tap SPACE in a steady rhythm. Spamming it makes you **GAG** and lose progress (watch the GAG bar).
+  - El Borracho is faster now, and gets faster every time someone beats him.
+  - You can't enter while you're already drunk.
+  - You can only enter once every 3 minutes. Prize is $110 ($50 entry).
+  - Tune it on the BR Cantina: **Contest Prize**, **Contest Cooldown**, **Rival Rate Per Win**.
+- **Bar fight is less chaotic:**
+  - 6 locals.
+  - At most 2 locals on any one player at a time; the rest pair off and fight each other.
+  - Everyone goes for the nearest free opponent (no random cross-room charges).
+  - All locals fight equally hard.
+  - Tune it: **Max On One Player**, **Local Aggression**, **Patron Count**.
+- Hits shove you a bit less (**Hit Push Scale** 0.55) so fights are less pinball-y.
+
+**Note:** If your character Blueprint already changed a value (e.g. Hit Push Scale), it keeps your value. Click the little yellow reset arrow next to it to use the new default.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
