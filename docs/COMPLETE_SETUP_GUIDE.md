@@ -868,6 +868,31 @@ The **Skin slider** in the Customize menu now covers *only* that range: all the 
 
 ---
 
+## Part 15v: Air & water (balloon, raft, anti-air, wheelbarrow)
+
+**Hot air balloon ("GLOBOS PANCHO", launch pad north-west of town):**
+1. A Runner pays **$1500** (E) and climbs in. A second Runner can hop in for free.
+2. It lifts off after 8 s (or as soon as it's full).
+3. It drifts over the border at about 22 m up. The first rider steers a little with the mouse (up to 40 degrees).
+4. It lands on its own about 40 m past the Wall.
+- Everyone can see it: the riders keep getting spotted.
+- **Border Patrol can pop it:** a pistol shot hits the balloon, or use the **anti-air guns**. The riders **fall** (a big drop = knocked out).
+- The balloon comes back to the pad a minute later.
+
+**Inflatable raft ($80, next to the boat shop):**
+- Like a boat but cheaper, 2 seats, orange.
+- A bullet or anti-air round **pops it** and everyone ends up in the river.
+
+**Anti-air guns (two, by the watchtowers):** Border Patrol **hold E** to fire at the nearest flying balloon or raft. 70% hit chance, 8 s reload.
+
+**Wheelbarrows (two, by the town shops):**
+1. **E** to grab the handles.
+2. A teammate **E** to hop in.
+3. You push them around a little slower than walking.
+- **E** again to let go. If you get knocked down, it tips over.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

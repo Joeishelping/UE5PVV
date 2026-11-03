@@ -452,7 +452,7 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		if (PS->Money < Price) { Tell(Interactor, LOCTEXT("BrokeBoat", "Boats aren't free. Pool your money!")); return; }
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		if (GetWorld()->SpawnActor<APVVBoat>(APVVBoat::StaticClass(), BoatSpawn, FRotator::ZeroRotator, Params))
+		if (GetWorld()->SpawnActor<APVVBoat>(BoatClass ? BoatClass.Get() : APVVBoat::StaticClass(), BoatSpawn, FRotator::ZeroRotator, Params))
 		{
 			PS->AddMoney(-Price);
 			NextUseServerTime = GS->GetServerWorldTimeSeconds() + 20.f;

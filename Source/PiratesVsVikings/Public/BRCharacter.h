@@ -287,6 +287,13 @@ public:
 	FBRLook SavedLook;
 	EBRHat SavedHat = EBRHat::None;
 	float LastGrappleTime = -100.f;
+	/** Riding a fixture (balloon basket, wheelbarrow): visible, can't walk, no collision. */
+	void SetOnRide(bool bOn);
+	UFUNCTION() void OnRep_OnRide();
+	UPROPERTY(ReplicatedUsing = OnRep_OnRide) bool bOnRide = false;
+	/** Remember you're falling from this height (a big drop knocks you out when you land). */
+	void MarkFallFrom(float Z) { FallFromZ = FMath::Max(FallFromZ, Z); }
+	void SlowFor(float Seconds, float SpeedFactor) { ApplySlow(Seconds, SpeedFactor); }
 	void Input_TrapCycle();
 	UFUNCTION(Server, Reliable) void Server_CycleTrap();
 	UPROPERTY(Replicated) uint8 SelectedTrap = 0;

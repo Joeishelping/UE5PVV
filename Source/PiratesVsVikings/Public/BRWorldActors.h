@@ -97,6 +97,8 @@ public:
 	/** Untick to hide the floating sign (if your building already has one). */
 	UPROPERTY(EditAnywhere, Category = "BR|Station") bool bShowSign = true;
 	FVector BoatSpawn = FVector::ZeroVector;
+	/** Boat stations: what kind of boat they sell (empty = the normal boat). */
+	UPROPERTY(EditAnywhere, Category = "BR|Station") TSubclassOf<class APVVBoat> BoatClass;
 	/** Jobs: anyone can work here (e.g. digging through trash). Off = only Runners assigned to this job. Jobs that pay $0 are always open. */
 	UPROPERTY(EditAnywhere, Category = "BR|Station") bool bAnyoneCanWork = false;
 	/** The sign text (worked out at BeginPlay). Job assignments use it as the job's name. */

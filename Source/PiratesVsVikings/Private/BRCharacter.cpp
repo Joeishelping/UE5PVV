@@ -1,6 +1,7 @@
 #include "BRCharacter.h"
 #include "BRAudio.h"
 #include "BRGadgets.h"
+#include "BRAirWater.h"
 #include "Components/AudioComponent.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "PVVDetentionZone.h"
@@ -186,6 +187,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bKnockedOut);
 	DOREPLIFETIME(ABRCharacter, bDropKicking);
 	DOREPLIFETIME(ABRCharacter, bFakeUniform);
+	DOREPLIFETIME(ABRCharacter, bOnRide);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SelectedTrap, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SprintStamina, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
@@ -2091,6 +2093,10 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 	const bool bHit = GetWorld()->LineTraceSingleByObjectType(Hit, Start, End, Objects, Params);
 	APVVCharacter* Victim = bHit ? Cast<APVVCharacter>(Hit.GetActor()) : nullptr;
 	const bool bHostileHit = Victim && PVV::IsHostile(GetFaction(), Victim->GetFaction());
+	if (bHit && (bLethal || bRunnerGun) && !Victim)
+	{
+		BRAir::TryPop(Hit.GetActor(), this); // shot a balloon or a raft: POP
+	}
 
 	const FVector Muzzle = GetMuzzleLocation();
 	Multicast_Shot(Muzzle, bHit ? FVector(Hit.ImpactPoint) : End, bLethal || bRunnerGun, bHostileHit);

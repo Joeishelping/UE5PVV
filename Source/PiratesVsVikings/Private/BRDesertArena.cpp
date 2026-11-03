@@ -1,4 +1,5 @@
 #include "BRDesertArena.h"
+#include "BRAirWater.h"
 #include "BRSettings.h"
 #include "BRAudio.h"
 #include "BRCar.h"
@@ -995,6 +996,16 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	{
 		Marina->BoatSpawn = O + FVector(-900.f, -6300.f, 40.f);
 	}
+	// Inflatable rafts: cheaper and lighter than a boat, but a bullet or anti-air round pops them.
+	if (ABRStation* RaftShop = Station(-6400.f, -5800.f, EBRStationKind::BuyBoat, EBRItem::None, 80, TEXT("INFLATABLE RAFT $80\n(pops if shot!)"), FLinearColor(0.95f, 0.45f, 0.08f)))
+	{
+		RaftShop->BoatSpawn = O + FVector(-900.f, -5600.f, 40.f);
+		RaftShop->BoatClass = ABRRaft::StaticClass();
+	}
+	// Hot air balloon launch pad (north-west of town) and two wheelbarrows by the shops.
+	World->SpawnActor<ABRBalloon>(ABRBalloon::StaticClass(), At(-13600.f, 4300.f, Ground), Params);
+	World->SpawnActor<ABRWheelbarrow>(ABRWheelbarrow::StaticClass(), At(-11800.f, -2200.f, Ground), Params);
+	World->SpawnActor<ABRWheelbarrow>(ABRWheelbarrow::StaticClass(), At(-11400.f, -2200.f, Ground), Params);
 	const FVector2D ScrapSpots[] = { {-13800.f, -6200.f}, {-15200.f, -500.f}, {-8200.f, 6600.f}, {-9000.f, -6800.f}, {-6600.f, 3000.f} };
 	for (const FVector2D& Spot : ScrapSpots)
 	{
@@ -1074,6 +1085,9 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	// --- Watchtowers with spotlights, looking back over Mexico
 	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, -4800.f, Ground, 180.f), Params);
 	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, 4200.f, Ground, 180.f), Params);
+	// Anti-air guns by the watchtowers (shoot down balloons and rafts).
+	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, -4300.f, Ground, 180.f), Params);
+	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, 3700.f, Ground, 180.f), Params);
 
 	// --- Border Patrol supply counters (paid from the government budget)
 	auto Supply = [&](float X, float Y, EBRWardenGear Gear, EBRItem SupplyItem, int32 Cost, float Cooldown)
