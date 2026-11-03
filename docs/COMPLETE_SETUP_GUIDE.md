@@ -312,6 +312,24 @@ Only **one NPC truck plays music** at a time now.
 
 ---
 
+## Part 11: Test multiplayer by yourself
+
+1. Next to the green **Play** button, click the **three dots** (⋮).
+2. Set **Number of Players** to **2** (or 3, 4...).
+3. Set **Net Mode** to **Play As Listen Server**.
+4. Press **Play**. You get one window per player: the first one is the host, the others are friends joining.
+5. Click inside a window to control that player. **Shift+F1** frees your mouse so you can click the other window.
+6. For a more realistic test: ⋮ → **Advanced Settings** → untick **Run Under One Process** (slower to start, but each window is like a separate PC).
+
+Steam invites only work in a real packaged/standalone game, not in these test windows.
+
+## Part 12: Lasso, busts and trucks
+
+- **Lasso:** buy it (shop stand near spawn $, or the Border Patrol supply counter $250). Scroll the **mouse wheel** until the lasso is your selected item, look at someone and press **F**. It yanks them off their feet (works on players, NPCs and climbers), then **E** (hold) to zip-tie them. It recharges every 4 seconds.
+- **Ordering people out of a truck (E, hold):** only the people with no papers or with contraband get out; the clean ones stay seated. Each one picks at random, depending on how bad they are: **fight you Gang Beasts style**, **pull a KNIFE** (double damage; knock them down and it drops), **run**, or **put their hands up**. Sometimes a dirty driver just **floors it through the gate**.
+- **Driver pulled out?** After a second someone else aboard slides over and takes the wheel. Clean people drive on through the checkpoint; dirty ones floor it or jump out and run.
+- An NPC truck is only towed away once **nobody is left in it**, and anyone who already got out (running, cuffed, being carried) stays in the world.
+
 ## If something's wrong
 | Problem | Fix |
 |---|---|

@@ -183,6 +183,7 @@ protected:
 	virtual void EnsureDefaultInput();
 	void SeatCharacter(APVVCharacter* Character, int32 SeatIndex);
 	int32 FindFreePassengerSeat() const;
+	void ClearSeat(int32 SeatIndex);
 
 	UPROPERTY(ReplicatedUsing = OnRep_Occupants, BlueprintReadOnly, Category = "PVV|Boat")
 	TArray<TObjectPtr<APVVCharacter>> Occupants;
@@ -207,7 +208,6 @@ private:
 
 	void ApplyWaterForces(float DeltaSeconds);
 	void TickFlipRecovery(float DeltaSeconds);
-	void ClearSeat(int32 SeatIndex);
 	void ResetToTransform(const FTransform& Transform);
 	void SendDriveInput();
 

@@ -25,6 +25,23 @@
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
+// Nearest Border Patrol player (not an NPC) within Range of Where.
+static ABRCharacter* BRNearestCop(UWorld* World, const FVector& Where, float Range)
+{
+	ABRCharacter* Cop = nullptr;
+	float Closest = Range;
+	for (TActorIterator<ABRCharacter> It(World); It; ++It)
+	{
+		const float D = FVector::Dist(It->GetActorLocation(), Where);
+		if (It->IsWarden() && !It->IsNPC() && It->GetCondition() == EPVVCondition::Normal && D < Closest)
+		{
+			Closest = D;
+			Cop = *It;
+		}
+	}
+	return Cop;
+}
+
 #define LOCTEXT_NAMESPACE "BRCar"
 
 ABRCar::ABRCar()
@@ -273,27 +290,43 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 		int32 Found = 0;
 		int32 Seized = 0;
 		TArray<APVVCharacter*> Out;
+		TSet<APVVCharacter*> Minor; // only had contraband (papers fine)
+		bool bDriverDirty = false;
 		for (APVVCharacter* Occupant : Occupants)
 		{
 			ABRCharacter* BRC = Cast<ABRCharacter>(Occupant);
-			if (!BRC)
+			if (!BRC || BRC->GetCondition() != EPVVCondition::Normal)
 			{
 				continue;
 			}
+			bool bDirty = false;
 			if (BRC->bCarriesContraband)
 			{
 				BRC->bCarriesContraband = false;
 				++Seized;
+				bDirty = true;
 				if (!BRC->bIllegal)
 				{
-					continue; // contraband taken, papers fine: they can stay
+					Minor.Add(BRC);
 				}
 			}
 			if (BRC->IsSuspect())
 			{
-				Out.Add(BRC);
 				++Found;
+				bDirty = true;
 			}
+			if (bDirty)
+			{
+				Out.Add(BRC); // the clean, legal ones just stay in their seats
+				bDriverDirty |= Occupant == GetDriver();
+			}
+		}
+		// A dirty driver might just FLOOR IT instead of getting out.
+		ABRTruck* NPCTruck = bNPCTruck ? const_cast<ABRTruck*>(AsTruck) : nullptr;
+		if (NPCTruck && bDriverDirty && FMath::FRand() < 0.25f)
+		{
+			NPCTruck->FloorIt();
+			Out.Reset();
 		}
 		if (!bNPCTruck)
 		{
@@ -304,21 +337,11 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 			for (APVVCharacter* Suspect : Out)
 			{
 				Unseat(Suspect);
-				Suspect->LaunchCharacter(FVector(FMath::FRandRange(-300.f, 300.f), FMath::FRandRange(-300.f, 300.f), 500.f), true, true);
+				Suspect->LaunchCharacter(FVector(FMath::FRandRange(-150.f, 150.f), FMath::FRandRange(-150.f, 150.f), 300.f), true, true);
 				if (ABRCharacter* NPC = Cast<ABRCharacter>(Suspect); NPC && NPC->IsNPC())
 				{
-					NPC->StartWandering(NPC->GetActorLocation(), 1500.f);
-					if (NPC->bIllegal)
-					{
-						if (FMath::FRand() < 0.3f)
-						{
-							NPC->StartBrawling(Cast<ABRCharacter>(Interactor), 15.f); // won't go quietly
-						}
-						else
-						{
-							NPC->StartFleeing(30.f); // no papers: RUN! (tase them, zip-tie them, haul them off)
-						}
-					}
+					// Fight, knife, run or give up - random, worse for people with no papers.
+					NPC->ReactToBust(Cast<ABRCharacter>(Interactor), Minor.Contains(Suspect));
 				}
 			}
 		}
@@ -667,20 +690,7 @@ void ABRTruck::Tick(float DeltaSeconds)
 	if (HasAuthority() && bNPCDriven)
 	{
 		DriveNPC(DeltaSeconds);
-		// Driver got dragged out and nobody's driving: the truck gets towed away after a while.
-		const float Now = GetWorld()->GetTimeSeconds();
-		if (GetDriver())
-		{
-			NoDriverSince = -1.f;
-		}
-		else if (NoDriverSince < 0.f)
-		{
-			NoDriverSince = Now;
-		}
-		else if (Now - NoDriverSince > TowAfterSeconds)
-		{
-			Destroy(); // towed (and out of everyone's way)
-		}
+		TickDriverTakeover(GetWorld()->GetTimeSeconds());
 	}
 }
 
@@ -833,68 +843,130 @@ void ABRTruck::SuspectsReact()
 			Suspects.Add(BRC);
 		}
 	}
-	ABRCharacter* Cop = nullptr;
-	float Closest = 1500.f;
-	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
-	{
-		const float D = FVector::Dist(It->GetActorLocation(), GetActorLocation());
-		if (It->IsWarden() && !It->IsNPC() && It->GetCondition() == EPVVCondition::Normal && D < Closest)
-		{
-			Closest = D;
-			Cop = *It;
-		}
-	}
-	const float Roll = FMath::FRand();
+	ABRCharacter* Cop = BRNearestCop(GetWorld(), GetActorLocation(), 1500.f);
 	const bool bDriverIsSuspect = Suspects.Contains(Cast<ABRCharacter>(GetDriver()));
-	if (Roll < 0.4f && GetDriver())
+	// FLOOR IT (more likely when the driver is the dirty one): smash the barrier and race off.
+	if (GetDriver() && FMath::FRand() < (bDriverIsSuspect ? 0.5f : 0.25f))
 	{
-		// FLOOR IT: smash the barrier and race off.
-		bRunningGate = true;
-		bCheckpointDone = true;
-		++RouteIndex;
-		if (ABRCheckpointGate* CheckGate = Cast<ABRCheckpointGate>(Gate.Get()))
-		{
-			CheckGate->OpenFor(6.f);
-		}
-		if (GM)
-		{
-			GM->Feed(TEXT("A truck SMASHED THROUGH the checkpoint! Chase it!"));
-			GM->OnTruckForcedThrough();
-		}
+		FloorIt();
 		return;
 	}
-	const bool bFight = Roll > 0.72f && Cop;
 	for (ABRCharacter* Suspect : Suspects)
 	{
+		const bool bMinor = !Suspect->bIllegal;
 		Unseat(Suspect);
-		Suspect->LaunchCharacter(GetActorRightVector() * FMath::FRandRange(-300.f, 300.f) + FVector(0.f, 0.f, 350.f), true, true);
-		if (bFight)
-		{
-			Suspect->StartBrawling(Cop, 18.f); // come out swinging
-		}
-		else
-		{
-			Suspect->StartFleeing(30.f); // RUN!
-		}
+		Suspect->LaunchCharacter(GetActorRightVector() * FMath::FRandRange(-200.f, 200.f) + FVector(0.f, 0.f, 300.f), true, true);
+		Suspect->ReactToBust(Cop, bMinor); // fight, knife, run or give up
 	}
 	if (GM && Suspects.Num() > 0)
 	{
-		GM->Feed(bFight ? TEXT("The passengers jumped out SWINGING at Border Patrol!") : TEXT("The passengers bailed out and RAN!"));
+		GM->Feed(TEXT("The suspects bailed out of the truck!"));
 	}
-	(void)bDriverIsSuspect;
+}
+
+void ABRTruck::FloorIt()
+{
+	if (!HasAuthority() || bRunningGate || !GetDriver())
+	{
+		return;
+	}
+	bRunningGate = true;
+	bReacted = true;
+	if (RouteIndex <= CheckpointIndex)
+	{
+		bCheckpointDone = true;
+		RouteIndex = FMath::Min(CheckpointIndex + 1, Route.Num() - 1);
+	}
+	if (ABRCheckpointGate* CheckGate = Cast<ABRCheckpointGate>(Gate.Get()))
+	{
+		CheckGate->OpenFor(6.f); // SMASH
+	}
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->Feed(TEXT("A truck SMASHED THROUGH the checkpoint! Chase it!"));
+		GM->OnTruckForcedThrough();
+	}
+}
+
+void ABRTruck::TickDriverTakeover(float Now)
+{
+	if (GetDriver())
+	{
+		NoDriverSince = -1.f;
+		return;
+	}
+	if (NoDriverSince < 0.f)
+	{
+		NoDriverSince = Now;
+		return;
+	}
+	bool bAnyoneAboard = false;
+	for (const APVVCharacter* Occupant : Occupants)
+	{
+		bAnyoneAboard |= Occupant != nullptr;
+	}
+	// Nobody left aboard: towed after a while (only the empty truck - people who got out stay).
+	if (!bAnyoneAboard)
+	{
+		if (Now - NoDriverSince > TowAfterSeconds)
+		{
+			Destroy();
+		}
+		return;
+	}
+	if (Now - NoDriverSince < 1.5f)
+	{
+		return; // a moment of panic first
+	}
+	for (int32 i = 1; i < Occupants.Num(); ++i)
+	{
+		ABRCharacter* NPC = Cast<ABRCharacter>(Occupants[i].Get());
+		if (!NPC || !NPC->IsNPC() || NPC->GetCondition() != EPVVCondition::Normal)
+		{
+			continue; // zip-tied prisoners in the back don't drive
+		}
+		const bool bDirty = NPC->IsSuspect();
+		if (bDirty && bReacted && FMath::FRand() < 0.4f)
+		{
+			// Busted: this one makes a run for it instead.
+			Unseat(NPC);
+			NPC->ReactToBust(BRNearestCop(GetWorld(), GetActorLocation(), 2000.f), !NPC->bIllegal);
+			NoDriverSince = Now - 1.f; // next person thinks about it in a sec
+			return;
+		}
+		// Slide over into the driver's seat.
+		ClearSeat(i);
+		SeatCharacter(NPC, 0);
+		NoDriverSince = -1.f;
+		if (bDirty && (bReacted || FMath::FRand() < 0.6f))
+		{
+			FloorIt(); // the dirty ones just GO
+		}
+		return;
+	}
 }
 
 void ABRTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	Super::EndPlay(EndPlayReason); // ejects everyone first
+	// Only the people still riding along leave with the truck. Anyone who got out (running, fighting,
+	// zip-tied, being carried, in the pen) stays in the world.
+	TArray<APVVCharacter*> Riders;
 	if (HasAuthority() && EndPlayReason == EEndPlayReason::Destroyed)
 	{
 		for (const TWeakObjectPtr<APVVCharacter>& NPC : SpawnedNPCs)
 		{
-			if (NPC.IsValid())
+			if (NPC.IsValid() && NPC->GetCurrentBoat() == this && NPC->GetCondition() != EPVVCondition::Restrained)
 			{
-				NPC->Destroy();
+				Riders.Add(NPC.Get());
 			}
+		}
+	}
+	Super::EndPlay(EndPlayReason); // ejects everyone first
+	for (APVVCharacter* Rider : Riders)
+	{
+		if (IsValid(Rider))
+		{
+			Rider->Destroy();
 		}
 	}
 }

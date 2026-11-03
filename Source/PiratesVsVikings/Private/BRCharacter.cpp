@@ -187,7 +187,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, ClimbNormal);
 }
 
-void ABRCharacter::StartBrawling(ABRCharacter* Target, float Seconds)
+void ABRCharacter::StartBrawling(ABRCharacter* Target, float Seconds, float Aggression)
 {
 	if (!Target)
 	{
@@ -195,11 +195,59 @@ void ABRCharacter::StartBrawling(ABRCharacter* Target, float Seconds)
 		return;
 	}
 	AngryAt = Target;
+	BrawlAggression = Aggression;
 	AngryUntil = GetWorld()->GetTimeSeconds() + Seconds;
 	if (!bWandering)
 	{
 		StartWandering(GetActorLocation(), 1500.f);
 	}
+}
+
+void ABRCharacter::ReactToBust(ABRCharacter* Cop, bool bMinorOffense)
+{
+	if (!HasAuthority() || !bIsNPC)
+	{
+		return;
+	}
+	// How bad a person are they? Smugglers with no papers are worse than someone with a bit of contraband.
+	const float Menace = FMath::FRand() * (bMinorOffense ? 0.7f : 1.f);
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	if (!Cop || Menace < 0.25f)
+	{
+		if (!Cop || FMath::FRand() < 0.5f)
+		{
+			StartFleeing(30.f); // RUN!
+			return;
+		}
+		// Gives up: stands there with their hands up (zip-tie them).
+		StartWandering(GetActorLocation(), 40.f);
+		if (GM)
+		{
+			GM->Feed(TEXT("A suspect put their hands up: \"OK OK, don't tase me!\""));
+		}
+		return;
+	}
+	if (Menace > 0.82f)
+	{
+		SetNPCHeldItem(EBRItem::Knife);
+		StartBrawling(Cop, 60.f, 1.f); // pulled a KNIFE - fights until somebody drops
+		Multicast_Sfx(3);
+		if (GM)
+		{
+			GM->Feed(FString::Printf(TEXT("A suspect pulled a KNIFE on %s!"), *Cop->GetPlayerDisplayName()));
+		}
+		return;
+	}
+	if (Menace > 0.45f)
+	{
+		StartBrawling(Cop, 45.f, FMath::Lerp(0.6f, 0.95f, (Menace - 0.45f) / 0.37f)); // comes out swinging
+		if (GM && FMath::FRand() < 0.5f)
+		{
+			GM->Feed(FString::Printf(TEXT("A suspect wants to FIGHT %s!"), *Cop->GetPlayerDisplayName()));
+		}
+		return;
+	}
+	StartFleeing(30.f);
 }
 
 void ABRCharacter::StartFleeing(float Seconds)
@@ -271,8 +319,14 @@ void ABRCharacter::StartFlight(const FVector& Velocity)
 		return;
 	}
 	bFlying = true;
-	GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	FlightStartedAt = GetWorld()->GetTimeSeconds();
+	FlightVelocity = Velocity;
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	Move->SetMovementMode(MOVE_Falling);
+	Move->BrakingDecelerationFalling = 0.f; // nothing slows the flight down
+	Move->AirControl = 0.f;
 	LaunchCharacter(Velocity, true, true);
+	Multicast_FlightFlop(true);
 	ForceNetUpdate();
 }
 
@@ -310,12 +364,87 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 		return;
 	}
 	bFlying = false;
+	EndFlightTweaks();
 	ABRGameState::FX(this, EBRFX::Dust, GetActorLocation() - FVector(0.f, 0.f, 80.f));
 	ABRGameState::Sfx(this, EBRSfx::Landing, GetActorLocation());
 	ClearRestraint(); // the zip-ties snap on impact
 	if (WornHat != EBRHat::CannonHelmet)
 	{
 		ApplyKnockdown(nullptr, -GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 150.f)); // tumble
+	}
+}
+
+void ABRCharacter::EndFlightTweaks()
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	const UCharacterMovementComponent* Defaults = GetClass()->GetDefaultObject<ABRCharacter>()->GetCharacterMovement();
+	if (Move && Defaults)
+	{
+		Move->BrakingDecelerationFalling = Defaults->BrakingDecelerationFalling;
+		Move->AirControl = Defaults->AirControl;
+	}
+	for (AActor* Ignored : FlightIgnored)
+	{
+		if (IsValid(Ignored))
+		{
+			MoveIgnoreActorRemove(Ignored);
+		}
+	}
+	FlightIgnored.Reset();
+	Multicast_FlightFlop(false);
+}
+
+void ABRCharacter::IgnoreDuringFlight(AActor* Other)
+{
+	if (Other && Other != this)
+	{
+		MoveIgnoreActorAdd(Other);
+		FlightIgnored.AddUnique(Other);
+	}
+}
+
+void ABRCharacter::TickFlight()
+{
+	if (!HasAuthority() || !bFlying)
+	{
+		return;
+	}
+	const float Age = GetWorld()->GetTimeSeconds() - FlightStartedAt;
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	// Something stopped the flight early (snagged on the catapult, movement switched off): keep them flying.
+	if (Age < 0.6f && Move && (Move->MovementMode != MOVE_Falling || GetVelocity().Size() < FlightVelocity.Size() * 0.3f))
+	{
+		Move->SetMovementMode(MOVE_Falling);
+		Move->Velocity = FlightVelocity - FVector(0.f, 0.f, 980.f * Age);
+	}
+	// Never landed (stuck somewhere): end it.
+	if (Age > 12.f)
+	{
+		bFlying = false;
+		EndFlightTweaks();
+	}
+}
+
+void ABRCharacter::Multicast_FlightFlop_Implementation(bool bFlop)
+{
+	// Flying through the air: go floppy and flail (muscles back on when they land / get up).
+	if (!bWobbleOn || !GetMesh())
+	{
+		return;
+	}
+	if (bFlop)
+	{
+		ApplyMuscles(ArmStrength * 0.15f);
+		FPhysicalAnimationData Limp;
+		Limp.bIsLocalSimulation = false;
+		Limp.OrientationStrength = SpineStrength * WobbleStrength * 0.15f;
+		Limp.AngularVelocityStrength = Limp.OrientationStrength * 0.1f;
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("spine_01"), Limp, true);
+		GetMesh()->AddImpulseToAllBodiesBelow(FVector(FMath::FRandRange(-200.f, 200.f), FMath::FRandRange(-200.f, 200.f), 300.f), TEXT("spine_02"), true, true);
+	}
+	else
+	{
+		ApplyMuscles(CurrentArmMuscle());
 	}
 }
 
@@ -693,7 +822,12 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			{
 				AddMovementInput(ToFoe.GetSafeNormal(), 1.f);
 			}
-			BrawlerAct(Foe, 0.5f, DeltaSeconds);
+			BrawlerAct(Foe, BrawlAggression, DeltaSeconds);
+			return;
+		}
+		// Knocked them flat? A real hard case waits for them to get up and goes again.
+		if (Now < AngryUntil && BrawlAggression >= 0.8f && Foe->GetCondition() == EPVVCondition::KnockedDown)
+		{
 			return;
 		}
 		AngryAt = nullptr;
@@ -2225,6 +2359,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 
 	if (HasAuthority())
 	{
+		TickFlight();
 		TickWander(DeltaSeconds);
 		TickFollow(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
@@ -2258,6 +2393,11 @@ void ABRCharacter::Tick(float DeltaSeconds)
 			const FVector Head = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation();
 			KOStars->SetWorldLocationAndRotation(Head + FVector(0.f, 0.f, 45.f), FRotator(0.f, GetWorld()->GetTimeSeconds() * 360.f, 0.f));
 		}
+	}
+	// Knocked down or cuffed: the knife goes clattering away.
+	if (HasAuthority() && bIsNPC && HeldItem == EBRItem::Knife && GetCondition() != EPVVCondition::Normal)
+	{
+		SetNPCHeldItem(EBRItem::None);
 	}
 	// Safety: if the body ever loses its posed bones (mesh swapped, re-registered), switch the muscles off
 	// before the physics reads bones that aren't there, and switch them back on once it's posed again.
@@ -3328,7 +3468,24 @@ void ABRCharacter::Server_Lasso_Implementation(FVector_NetQuantize From, FVector
 	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
 	const bool bHit = GetWorld()->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, Objects, FCollisionShape::MakeSphere(35.f), Params);
 	ABRCharacter* Victim = bHit ? Cast<ABRCharacter>(Hit.GetActor()) : nullptr;
-	Multicast_LassoRope(bHit ? FVector(Hit.ImpactPoint) : End);
+	FVector RopeEnd = bHit ? FVector(Hit.ImpactPoint) : End;
+	if (!Victim)
+	{
+		// A little aim help: whoever's closest to where you threw it (within a narrow cone).
+		float BestDot = FMath::Cos(FMath::DegreesToRadians(10.f));
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			const FVector To = It->GetActorLocation() - Start;
+			const float Dot = FVector::DotProduct(To.GetSafeNormal(), Aim);
+			if (*It != this && To.Size() < 1800.f && Dot > BestDot && (!bHit || To.Size() < Hit.Distance + 100.f))
+			{
+				BestDot = Dot;
+				Victim = *It;
+				RopeEnd = It->GetActorLocation();
+			}
+		}
+	}
+	Multicast_LassoRope(RopeEnd);
 	if (!Victim || Victim->GetCarrier() || Victim->GetCurrentBoat() || Victim->IsHidingInSpot() || Victim->GetCondition() == EPVVCondition::Detained)
 	{
 		return;
@@ -3872,6 +4029,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			{
 				Damage = FMath::Max(Damage, AttackDamage);
 			}
+			if (HeldItem == EBRItem::Knife)
+			{
+				Damage *= 2.f; // stabby
+			}
 			FName HitBone = TEXT("spine_03");
 			if (const USkeletalMeshComponent* VictimBody = Victim->GetMesh(); VictimBody && VictimBody->GetBoneIndex(TEXT("head")) != INDEX_NONE
 				&& FVector::Dist(VictimBody->GetBoneLocation(TEXT("head")), Pos) < 40.f)
@@ -4101,6 +4262,7 @@ void ABRCharacter::OnRep_HeldItem()
 		case EBRItem::GasCan: Scale = FVector(.22f, .12f, .3f); Color = FLinearColor(.8f, .1f, .05f); break;
 		case EBRItem::WireCutters: Scale = FVector(.28f, .04f, .04f); Color = FLinearColor(.3f, .3f, .32f); break;
 		case EBRItem::Shovel: Shape = TEXT("/Engine/BasicShapes/Cylinder.Cylinder"); Scale = FVector(.04f, .04f, 1.f); Color = FLinearColor(.45f, .3f, .15f); break;
+		case EBRItem::Knife: Scale = FVector(.3f, .02f, .05f); Color = FLinearColor(.85f, .87f, .9f); break;
 		default: break;
 		}
 		ItemMesh = LoadObject<UStaticMesh>(nullptr, Shape);

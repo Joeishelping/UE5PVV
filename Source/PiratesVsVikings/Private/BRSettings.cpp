@@ -166,6 +166,7 @@ namespace BR
 		case EBRItem::Poncho:      return TEXT("Disguise Poncho");
 		case EBRItem::Lasso:       return TEXT("Lasso");
 		case EBRItem::CardboardBox: return TEXT("Cardboard Box");
+		case EBRItem::Knife: return TEXT("Knife");
 		default:                   return TEXT("");
 		}
 	}

@@ -37,7 +37,8 @@ enum class EBRItem : uint8
 	Drugs			UMETA(DisplayName = "Drug Package"),
 	Poncho			UMETA(DisplayName = "Disguise Poncho"),
 	Lasso			UMETA(DisplayName = "Lasso"),
-	CardboardBox	UMETA(DisplayName = "Cardboard Box")
+	CardboardBox	UMETA(DisplayName = "Cardboard Box"),
+	Knife			UMETA(DisplayName = "Knife")
 };
 
 /** Hats: each one gives a skill. Get knocked out and it may fly off - anyone can pick it up. */

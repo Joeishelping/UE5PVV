@@ -1,4 +1,5 @@
 #include "BRWorldActors.h"
+#include "Components/CapsuleComponent.h"
 #include "BRSettings.h"
 #include "BRCharacter.h"
 #include "BRDog.h"
@@ -805,7 +806,9 @@ void ABRCatapult::Launch(APVVCharacter* Passenger, const FVector& Target)
 	{
 		return;
 	}
-	const FVector Start = Basket->GetComponentLocation();
+	// Launch from just above the basket (inside it, the capsule snags on the catapult and freezes).
+	const float Half = Passenger->GetCapsuleComponent() ? Passenger->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
+	const FVector Start = Basket->GetComponentLocation() + FVector(0.f, 0.f, Half + 60.f);
 	if (Passenger->GetCarrier())
 	{
 		Passenger->GetCarrier()->TakeCarried();
@@ -829,6 +832,7 @@ void ABRCatapult::Launch(APVVCharacter* Passenger, const FVector& Target)
 	Velocity.Z = Delta.Z / T + 0.5f * Gravity * T;
 	if (ABRCharacter* Flyer = Cast<ABRCharacter>(Passenger))
 	{
+		Flyer->IgnoreDuringFlight(this); // fly straight out of the swinging arm
 		Flyer->StartFlight(Velocity);
 	}
 	else

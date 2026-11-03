@@ -49,7 +49,9 @@ public:
 	/** Server (NPCs): make a run for it, away from Border Patrol, for this many seconds. */
 	void StartFleeing(float Seconds);
 	/** Server (NPCs): attack this person Gang Beasts style for a while, then run. */
-	void StartBrawling(ABRCharacter* Target, float Seconds);
+	void StartBrawling(ABRCharacter* Target, float Seconds, float Aggression = 0.5f);
+	/** NPC busted at the checkpoint (no papers / contraband): fight, pull a knife, run, or give up - random, by how bad they are. */
+	void ReactToBust(ABRCharacter* Cop, bool bMinorOffense);
 
 	// --- NPC secrets (server) -------------------------------------------------------------
 	/** No papers. Border Patrol score for catching them; Runners score for smuggling them through. */
@@ -72,6 +74,8 @@ public:
 
 	/** Server: fly through the air (catapult / cannon). Lands with a comedy tumble; zip-ties come off on landing. */
 	void StartFlight(const FVector& Velocity);
+	/** Server: the flyer passes through this (e.g. the catapult that threw them) until they land. */
+	void IgnoreDuringFlight(AActor* Other);
 	/** Server: hide inside a cannon / pop back out. */
 	void SetInCannon(bool bIn);
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsInCannon() const { return bInCannon; }
@@ -458,6 +462,12 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_Look) FBRLook Look;
 	UPROPERTY(ReplicatedUsing = OnRep_InCannon) bool bInCannon = false;
 	UPROPERTY(Replicated) bool bFlying = false;
+	float FlightStartedAt = -100.f;
+	FVector FlightVelocity = FVector::ZeroVector;
+	UPROPERTY() TArray<TObjectPtr<AActor>> FlightIgnored;
+	void EndFlightTweaks();
+	void TickFlight();
+	UFUNCTION(NetMulticast, Reliable) void Multicast_FlightFlop(bool bFlop);
 	UPROPERTY(Replicated) float DanceUntil = 0.f;
 	UPROPERTY(ReplicatedUsing = OnRep_Shoulders) bool bOnShoulders = false;
 	UPROPERTY(Replicated) bool bDiving = false;
@@ -509,6 +519,7 @@ private:
 	float FleeUntil = -1.f;
 	TWeakObjectPtr<ABRCharacter> AngryAt;
 	float AngryUntil = -1.f;
+	float BrawlAggression = 0.5f;
 	FVector WanderHome = FVector::ZeroVector;
 	FVector WanderTarget = FVector::ZeroVector;
 	float WanderRadius = 1500.f;

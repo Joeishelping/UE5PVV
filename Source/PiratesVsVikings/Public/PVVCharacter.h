@@ -115,6 +115,8 @@ public:
 	/** Called by APVVBoat only. */
 	void EnterSeat(APVVBoat* Boat, USceneComponent* SeatParent, const FVector& LocalOffset);
 	void ExitSeat(const FVector& ExitLocation, float ExitYaw);
+	/** Where the body really is (the pelvis while ragdolled - it can slide away from the capsule). */
+	FVector GetBodyLocation() const;
 
 	void ResetForRespawn(const FTransform& SpawnTransform);
 
@@ -358,6 +360,7 @@ private:
 	void OnRep_Sprinting();
 
 	void SetRagdoll(bool bEnable);
+	void TickRagdollCapsule();
 	void UpdateStatusLabel();
 	void UpdateWading();
 	AActor* FindBestInteractable();

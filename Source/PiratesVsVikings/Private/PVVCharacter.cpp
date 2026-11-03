@@ -255,6 +255,7 @@ void APVVCharacter::Tick(float DeltaSeconds)
 	}
 
 	UpdateWading();
+	TickRagdollCapsule();
 	if (IsLocallyControlled())
 	{
 		UpdateFocus();
@@ -915,6 +916,40 @@ void APVVCharacter::UpdateMovementSpeed()
 	Move->MaxSwimSpeed = Swim;
 }
 
+FVector APVVCharacter::GetBodyLocation() const
+{
+	const USkeletalMeshComponent* MeshComp = GetMesh();
+	if (bRagdollActive && MeshComp && MeshComp->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE)
+	{
+		return MeshComp->GetBoneLocation(TEXT("pelvis"));
+	}
+	return GetActorLocation();
+}
+
+void APVVCharacter::TickRagdollCapsule()
+{
+	// Knocked out, the floppy body slides away from the invisible capsule. Keep the capsule on top of the body,
+	// so you can walk up to where they actually are and zip-tie / pick them up (and they get up where they lie).
+	if (!bRagdollActive || !HasAuthority() || CarriedBy || CurrentBoat)
+	{
+		return;
+	}
+	const FVector Body = GetBodyLocation();
+	const float Half = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	FVector Want(Body.X, Body.Y, Body.Z + Half * 0.5f);
+	FHitResult Floor;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PVVRagdollFloor), false, this);
+	if (GetWorld()->LineTraceSingleByChannel(Floor, Body + FVector(0.f, 0.f, 50.f), Body - FVector(0.f, 0.f, 400.f), ECC_Visibility, Params))
+	{
+		Want.Z = Floor.ImpactPoint.Z + Half + 2.f;
+	}
+	if (FVector::DistSquared(Want, GetActorLocation()) > 25.f * 25.f)
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		SetActorLocation(Want, false, nullptr, ETeleportType::None);
+	}
+}
+
 void APVVCharacter::SetRagdoll(bool bEnable)
 {
 	USkeletalMeshComponent* MeshComp = GetMesh();
@@ -927,6 +962,9 @@ void APVVCharacter::SetRagdoll(bool bEnable)
 	if (bEnable)
 	{
 		MeshComp->SetCollisionProfileName(TEXT("Ragdoll"));
+		// The capsule follows the body around now (TickRagdollCapsule): don't let it shove its own ragdoll.
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+		MeshComp->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 		MeshComp->SetSimulatePhysics(true);
 		MeshComp->WakeAllRigidBodies();
 		MeshComp->SetAllPhysicsLinearVelocity(LastHitImpulse);
@@ -935,6 +973,7 @@ void APVVCharacter::SetRagdoll(bool bEnable)
 	{
 		MeshComp->SetSimulatePhysics(false);
 		MeshComp->SetCollisionProfileName(TEXT("CharacterMesh"));
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
 		MeshComp->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 		MeshComp->SetRelativeTransform(MeshRelativeTransform);
 	}
@@ -1004,7 +1043,8 @@ AActor* APVVCharacter::FindBestInteractable()
 			continue;
 		}
 
-		const FVector ToCandidate = Candidate->GetActorLocation() - GetActorLocation();
+		const APVVCharacter* AsPerson = Cast<APVVCharacter>(Candidate);
+		const FVector ToCandidate = (AsPerson ? AsPerson->GetBodyLocation() : Candidate->GetActorLocation()) - GetActorLocation();
 		float Score = FVector::DotProduct(Forward, ToCandidate.GetSafeNormal2D()) - ToCandidate.Size() / InteractRadius;
 		// People beat props, so a nearby boat never steals a rescue.
 		if (Candidate->IsA<APVVCharacter>())
@@ -1138,7 +1178,8 @@ void APVVCharacter::TickHold(float DeltaSeconds)
 
 	// Props (cell doors etc.) check their own range in CanInteract; people must stay close.
 	const bool bInRange = !HoldTarget->IsA<APVVCharacter>()
-		|| FVector::Dist(HoldTarget->GetActorLocation(), GetActorLocation()) <= InteractRadius * 1.5f;
+		|| FMath::Min(FVector::Dist(HoldTarget->GetActorLocation(), GetActorLocation()),
+			FVector::Dist(CastChecked<APVVCharacter>(HoldTarget.Get())->GetBodyLocation(), GetActorLocation())) <= InteractRadius * 1.5f;
 	const bool bStillValid = Condition == EPVVCondition::Normal
 		&& bInRange
 		&& IPVVInteractable::Execute_CanInteract(HoldTarget, this);

@@ -112,6 +112,8 @@ public:
 	bool AddNPC(APVVCharacter* NPC);
 
 	bool IsNPCTruck() const { return bNPCDriven; }
+	/** Server: the driver floors it - smashes the checkpoint barrier and races off. */
+	void FloorIt();
 
 protected:
 	/** Steering wheel in front of the driver. Move it in your truck Blueprint so it lines up with your driving animation's hands. */
@@ -133,6 +135,8 @@ private:
 	float CheckpointArrivalTime = -1.f;
 	bool bCheckpointDone = false;
 	float NoDriverSince = -1.f;
+	/** Driver got pulled out: somebody else aboard takes the wheel (or bails). */
+	void TickDriverTakeover(float Now);
 	TWeakObjectPtr<AActor> Gate;
 	TArray<TWeakObjectPtr<APVVCharacter>> SpawnedNPCs;
 	/** -1 = right lane, +1 = left lane. */
