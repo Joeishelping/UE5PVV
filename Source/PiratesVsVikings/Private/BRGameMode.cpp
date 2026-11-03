@@ -636,6 +636,12 @@ void ABRGameMode::HandleDrowned(APVVCharacter* Victim)
 	{
 		return;
 	}
+	const ABRCharacter* Swimmer = Cast<ABRCharacter>(Victim);
+	const ABRCharacter* Tosser = Swimmer ? Swimmer->LastTosser.Get() : nullptr;
+	if (Tosser && GetWorld()->GetTimeSeconds() - Swimmer->LastTossTime < 8.f)
+	{
+		Feed(FString::Printf(TEXT("%s sent %s for a SWIM!"), *NameOf(Tosser), *NameOf(Victim)));
+	}
 	Announce(FText::Format(LOCTEXT("Drowned", "{0} tried to swim the river and DROWNED. Should've bought a boat."), FText::FromString(NameOf(Victim))));
 	if (APVVCharacter* Carrier = Victim->GetCarrier())
 	{
@@ -849,6 +855,26 @@ void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
 		{
 			Hatted->KnockOffHat(); // it flies off; anyone can grab it
 		}
+	}
+	// FLOPPY CHAINS: whoever is holding you, and whoever you're holding, goes down with you.
+	static int32 ChainDepth = 0;
+	if (ABRCharacter* Linked = Cast<ABRCharacter>(Victim); Linked && ChainDepth == 0)
+	{
+		++ChainDepth;
+		int32 Dragged = 0;
+		for (ABRCharacter* Other : { Linked->GetGrabbedBy(), const_cast<ABRCharacter*>(Linked->GetHandGrabTarget()) })
+		{
+			if (Other && Other != Linked && Other->GetCondition() == EPVVCondition::Normal && !Other->GetCurrentBoat() && FMath::FRand() < 0.6f)
+			{
+				Other->ApplyKnockdown(Cause, (Other->GetActorLocation() - Linked->GetActorLocation()).GetSafeNormal2D() * 200.f + FVector(0.f, 0.f, 80.f));
+				++Dragged;
+			}
+		}
+		if (Dragged > 0)
+		{
+			Feed(FString::Printf(TEXT("%s went down - and took %d with them!"), *NameOf(Linked), Dragged));
+		}
+		--ChainDepth;
 	}
 	APVVCharacter* By = Cast<APVVCharacter>(Cause);
 	ABRCharacter* NPCVictim = Cast<ABRCharacter>(Victim);

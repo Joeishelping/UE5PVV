@@ -95,6 +95,10 @@ public:
 	float KnockbackScale = 1.f;
 	/** Server: full balance again (candy!). */
 	void RestoreBalance() { Balance = MaxBalance; }
+	/** Server: drain balance without a hit (chokeholds). Knocks you out at 0. */
+	void DrainBalance(APVVCharacter* By, float Amount);
+	/** Server: stay down longer (body splash). */
+	void ExtendKnockdown(float Seconds);
 	/** Blocking etc: change an incoming melee hit (return the new damage, edit the push). */
 	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) { return Damage; }
 	void ApplyKnockdown(AActor* Cause, const FVector& Impulse);

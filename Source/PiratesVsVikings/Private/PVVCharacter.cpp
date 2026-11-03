@@ -536,6 +536,31 @@ void APVVCharacter::ApplyKnockdown(AActor* Cause, const FVector& Impulse)
 	}
 }
 
+void APVVCharacter::DrainBalance(APVVCharacter* By, float Amount)
+{
+	if (!HasAuthority() || Condition != EPVVCondition::Normal)
+	{
+		return;
+	}
+	Balance = FMath::Max(0.f, Balance - Amount);
+	LastDamageTime = GetWorld()->GetTimeSeconds();
+	if (Balance <= 0.f)
+	{
+		ApplyKnockdown(By, FVector(0.f, 0.f, 50.f));
+	}
+}
+
+void APVVCharacter::ExtendKnockdown(float Seconds)
+{
+	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)
+	{
+		return;
+	}
+	const float Left = GetWorldTimerManager().GetTimerRemaining(KnockdownTimer);
+	FTimerDelegate RecoverDelegate = FTimerDelegate::CreateUObject(this, &APVVCharacter::Recover, 0.5f);
+	GetWorldTimerManager().SetTimer(KnockdownTimer, RecoverDelegate, FMath::Max(0.f, Left) + Seconds, false);
+}
+
 void APVVCharacter::Recover(float BalanceFraction)
 {
 	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)

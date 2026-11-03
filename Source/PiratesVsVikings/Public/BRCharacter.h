@@ -199,6 +199,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */
 	bool IsThreatTo(const ABRCharacter* Who) const;
+
+	// --- Gang Beasts hands -------------------------------------------------------------------
+	/** Local: Space is being held (climb = hold Space + alternate mouse clicks). */
+	bool bSpaceHeld = false;
+	virtual void StopJumping() override;
+	/** Server: let go of the wall (both mouse buttons released). */
+	UFUNCTION(Server, Reliable) void Server_ClimbLetGo();
+	/** Server: a reaching hand touches a wall/ledge in front: grab it (start hanging/climbing). */
+	bool TryWallGrab(uint8 Hands);
+	/** Which hands are on the wall (the other one can hold a person). */
+	uint8 WallHandMask = 0;
+	/** Grip on the wall: punches to your hands knock it down; 0 = you fall. */
+	float ClimbGrip = 1.f;
+	/** Someone is choking you out (held from behind with both hands). */
+	UPROPERTY(Replicated) bool bChoked = false;
+	float NextSumoPush = 0.f;
+	/** Who last threw / shoved / hit you (for "X sent Y for a swim"). */
+	TWeakObjectPtr<ABRCharacter> LastTosser;
+	float LastTossTime = -100.f;
 	/** Locked in the pen: picking your cuffs (only while no Border Patrol is watching). 1 = out! */
 	UPROPERTY(Replicated) float EscapeProgress = 0.f;
 	UPROPERTY(Replicated) bool bGuardWatching = false;

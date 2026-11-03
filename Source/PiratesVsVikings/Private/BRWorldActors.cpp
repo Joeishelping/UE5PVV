@@ -854,12 +854,23 @@ void ABRCatapult::Multicast_Fling_Implementation()
 bool ABRCatapult::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
 	const APVVCharacter* Prisoner = Interactor ? Interactor->GetCarriedCharacter() : nullptr;
+	if (!Prisoner)
+	{
+		// Dragged here in a headlock (held in your hands) works too.
+		const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+		Prisoner = BRC ? BRC->GetHandGrabTarget() : nullptr;
+	}
 	return Interactor && Interactor->GetFaction() == BR::Wardens && Prisoner && Prisoner->GetFaction() == BR::Runners;
 }
 
 FText ABRCatapult::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
 	const APVVCharacter* Prisoner = Interactor ? Interactor->GetCarriedCharacter() : nullptr;
+	if (!Prisoner)
+	{
+		const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+		Prisoner = BRC ? BRC->GetHandGrabTarget() : nullptr;
+	}
 	return FText::Format(LOCTEXT("Fling", "LAUNCH {0} back across the border! (hold)"),
 		FText::FromString(Prisoner ? Prisoner->GetPlayerDisplayName() : FString(TEXT("them"))));
 }
@@ -871,6 +882,14 @@ void ABRCatapult::OnInteract_Implementation(APVVCharacter* Interactor)
 		return;
 	}
 	APVVCharacter* Prisoner = Interactor->TakeCarried();
+	if (!Prisoner)
+	{
+		if (ABRCharacter* BRC = Cast<ABRCharacter>(Interactor))
+		{
+			Prisoner = BRC->GetHandGrabTarget();
+			BRC->ReleaseHandGrab();
+		}
+	}
 	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
 	if (Prisoner && GM)
 	{

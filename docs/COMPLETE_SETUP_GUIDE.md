@@ -461,6 +461,31 @@ So all you have to do is **import the files** (keep their names). Anything you s
 
 ---
 
+## Part 15g: Gang Beasts hands, climbing and moves
+
+**Hands (like Gang Beasts):** LEFT mouse = left hand, RIGHT mouse = right hand. Tap = punch. **Hold** = reach out and grab whatever that hand touches: a person, or a **wall / ledge**. Each hand is separate, so you can hang on a wall with one hand and hold a person with the other.
+
+**Climbing:**
+1. Walk up to a wall and **hold** a mouse button. You grab it and hang there (as long as you keep holding).
+2. **Hold SPACE** and click **LEFT, RIGHT, LEFT, RIGHT**... to climb. Same hand twice = you slip.
+3. At the top, press **SPACE** to pull yourself up.
+4. **Let go of both mouse buttons** to drop. (Z at a wall still starts a climb too.)
+- Someone below punching you while you hang knocks your grip loose. Grab someone on a wall to yank them off.
+
+**Moves:**
+- **Dangle and drop:** hold someone out over a ledge, the bridge or the Wall (or while you hang off a wall). Let go = they fall, and a big fall knocks them out.
+- **Ankle grab:** dive (Ctrl) with a mouse button held = grab their ankles and faceplant them.
+- **Chokehold:** grab someone **from behind with BOTH hands**: their balance drains until they pass out. They escape by mashing Space or headbutting.
+- **Headlock drag:** hold someone and walk: they come with you. Border Patrol can drag a Runner straight to the **catapult** this way.
+- **Directional throws (Z while holding someone):** hold **S** = **SUPLEX** over your head, hold **W** = big long toss, nothing = normal throw.
+- **Body splash:** dive onto someone who's down: they stay down 4 s longer.
+- **Belly-flop slide:** dives slide further, and much further through water.
+- **Floppy chains:** when someone goes down, whoever's holding them (or held by them) often goes down too.
+- **Sumo shove:** run into someone with **both** mouse buttons held = SHOVE (off ledges, into the river...).
+- Throw or shove someone into the deep river and the kill feed says you **sent them for a swim**.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
