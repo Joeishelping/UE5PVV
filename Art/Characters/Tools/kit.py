@@ -200,8 +200,46 @@ def normals(V, F):
     return N/np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
 def orient(V, F):
     vol = np.einsum('ij,ij->i', V[F[:, 0]], np.cross(V[F[:, 1]], V[F[:, 2]])).sum(); return F if vol > 0 else F[:, ::-1]
-def write_glb(path, parts, materials):
+def _split_seam(V, F, uv, period):
+    """UVs that wrap around (u in [0, period)): give the triangles that cross the seam their own copies of the
+    vertices on the low side (u + period), so the texture doesn't squash into a stripe there."""
+    fu = uv[F, 0]; bad = (fu.max(1) - fu.min(1)) > period / 2
+    if not bad.any(): return V, F, uv, np.arange(len(V))
+    remap = {}; extra = []; F = F.copy()
+    for fi in np.where(bad)[0]:
+        for k in range(3):
+            vi = F[fi, k]
+            if uv[vi, 0] < period / 2:
+                if vi not in remap: remap[vi] = len(V) + len(extra); extra.append(vi)
+                F[fi, k] = remap[vi]
+    src = np.r_[np.arange(len(V)), np.array(extra, int)]
+    uv2 = uv[src].copy(); uv2[len(V):, 0] += period
+    return V[src], F, uv2, src
+def hair_uv(V, tag, tiles_u=8, tiles_v=2.2):
+    """Strands run from the crown down: u goes around the head, v from the crown to the hairline."""
+    rel = V - HC; r = np.maximum(np.linalg.norm(rel, axis=1), 1e-6)
+    th = np.arctan2(rel[:, 2], rel[:, 0]); ph = np.arcsin(np.clip(rel[:, 1] / r, -1, 1))
+    u = (th / (2 * np.pi) % 1) * tiles_u; v = (np.pi / 2 - ph) / (np.pi / 2) * tiles_v
+    return np.stack([u, v], 1), tiles_u
+def facehair_uv(V, tag, tiles_u=7, tiles_v=5.):
+    """Beards: strands run straight down the face."""
+    rel = V - HC; th = np.arctan2(rel[:, 2], rel[:, 0])
+    u = (th / (2 * np.pi) % 1) * tiles_u; v = (HC[1] - V[:, 1]) * tiles_v
+    return np.stack([u, v], 1), tiles_u
+def write_glb(path, parts, materials, textures=None, uv_fn=None):
+    """textures: {material name: (albedo png bytes, normal png bytes)}. uv_fn(V, tag) -> (uv, wrap period)."""
     mat_names = [m[0] for m in materials]
+    prep = []
+    for p in parts:
+        F = orient(p.V, p.F); N = normals(p.V, F)
+        if uv_fn is not None:
+            uv, period = uv_fn(p.V, p.tag); V2, F2, uv2, src = _split_seam(p.V, F, uv, period)
+            q = Part((V2, F2), p.tag, p.mat); q.N = N[src]; q.uv = uv2
+        else:
+            q = Part((p.V, F), p.tag, p.mat); q.N = N
+            q.uv = np.stack([(np.arctan2(p.V[:, 2], p.V[:, 0])/(2*np.pi)) % 1, 1-p.V[:, 1]/2], 1)
+        prep.append(q)
+    parts = prep
     deltas = [{m: morph_delta(m, p.V, p.tag) for m in MORPHS} for p in parts]
     active = [m for m in MORPHS if any(np.abs(d[m]).max() > 1e-6 for d in deltas)]
     buf = bytearray(); views, accs = [], []
@@ -214,10 +252,9 @@ def write_glb(path, parts, materials):
         accs.append(a); return len(accs)-1
     prims = []
     for p, dl in zip(parts, deltas):
-        F = orient(p.V, p.F); J, W = skin(p)
-        uv = np.stack([(np.arctan2(p.V[:, 2], p.V[:, 0])/(2*np.pi)) % 1, 1-p.V[:, 1]/2], 1)
+        F = p.F; J, W = skin(p); uv = p.uv
         pr = {"attributes": {"POSITION": add(p.V.astype(np.float32), 5126, "VEC3", 34962, True),
-                             "NORMAL": add(normals(p.V, F).astype(np.float32), 5126, "VEC3", 34962),
+                             "NORMAL": add(p.N.astype(np.float32), 5126, "VEC3", 34962),
                              "TEXCOORD_0": add(uv.astype(np.float32), 5126, "VEC2", 34962),
                              "JOINTS_0": add(J.astype(np.uint16), 5123, "VEC4", 34962),
                              "WEIGHTS_0": add(W.astype(np.float32), 5126, "VEC4", 34962)},
@@ -240,6 +277,19 @@ def write_glb(path, parts, materials):
          "skins": [{"name": "SK_PVV", "joints": list(range(len(BONES))), "inverseBindMatrices": ibm_acc, "skeleton": 0}],
          "materials": [{"name": n, "doubleSided": ds, "pbrMetallicRoughness": {"baseColorFactor": list(c)+[1.0], "metallicFactor": met, "roughnessFactor": ro}} for n, c, met, ro, ds in materials],
          "accessors": accs, "bufferViews": views, "buffers": [{"byteLength": len(buf)}]}
+    if textures:
+        g["images"], g["textures"], g["samplers"] = [], [], [{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}]
+        def add_image(png, name):
+            while len(buf) % 4: buf.append(0)
+            off = len(buf); buf.extend(png); views.append({"buffer": 0, "byteOffset": off, "byteLength": len(png)})
+            g["images"].append({"name": name, "mimeType": "image/png", "bufferView": len(views)-1})
+            g["textures"].append({"sampler": 0, "source": len(g["images"])-1}); return len(g["textures"])-1
+        for m in g["materials"]:
+            if m["name"] in textures:
+                alb, nrm = textures[m["name"]]
+                m["pbrMetallicRoughness"]["baseColorTexture"] = {"index": add_image(alb, "T_" + m["name"][2:] + "_" + mname[3:] + "_D")}
+                m["normalTexture"] = {"index": add_image(nrm, "T_" + m["name"][2:] + "_" + mname[3:] + "_N"), "scale": 1.0}
+        g["buffers"] = [{"byteLength": len(buf)}]
     while len(buf) % 4: buf.append(0)
     js = json.dumps(g, separators=(',', ':')).encode()
     while len(js) % 4: js += b' '

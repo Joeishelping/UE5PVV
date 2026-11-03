@@ -30,13 +30,43 @@ def front(th):
     return (np.sin(th) + 1) / 2
 
 
-def shell(thick, hairline, S=64, rings=18):
-    return cap(lambda th, ph: HR + thick(th, ph), hairline, S=S, rings=rings)
+def strands(th, ph, t):
+    """Locks of hair: grooves running from the crown down to the hairline (with a little swirl),
+    deeper where the hair is thicker. Short buzz cuts get only a faint texture."""
+    a = th + .18 * np.sin(ph * 4 + th * 2)
+    lock = .5 + .5 * np.sin(a * 34 + 2.1 * np.sin(a * 7))
+    fine = .5 + .5 * np.sin(a * 110 + 1.3 * np.sin(ph * 9))
+    depth = np.clip(t * .4, .0008, .013)
+    return depth * (.75 * lock ** 2 + .25 * fine)  # only ever adds (never digs below the scalp)
+
+
+def ragged(hairline):
+    """Uneven hairline: little tufts instead of a perfectly clean edge (so it doesn't read as a cap)."""
+    return lambda th: hairline(th) + .004 * np.sin(th * 37) + .003 * np.sin(th * 61 + 1.3)
+
+
+def shell(thick, hairline, S=200, rings=28, detail=1.):
+    return cap(lambda th, ph: HR + np.maximum(thick(th, ph), .006) + detail * strands(th, ph, thick(th, ph)), ragged(hairline), S=S, rings=rings)
+
+
+TEX_STRAIGHT = None
+TEX_CURLY = None
+CURLY_STYLES = {"SK_Hair_Afro", "SK_Hair_CurlyTop", "SK_Hair_Twists"}
+
+
+def hair_textures(name):
+    global TEX_STRAIGHT, TEX_CURLY
+    import hair_tex
+    if name in CURLY_STYLES:
+        TEX_CURLY = TEX_CURLY or hair_tex.curly()
+        return {"M_Hair": TEX_CURLY}
+    TEX_STRAIGHT = TEX_STRAIGHT or hair_tex.straight()
+    return {"M_Hair": TEX_STRAIGHT}
 
 
 def write_hair(name, parts):
     path = os.path.join(OUT, name + ".glb")
-    write_glb(path, [Part(vf, "hair", "M_Hair") for vf in parts], HAIR_MAT)
+    write_glb(path, [Part(vf, "hair", "M_Hair") for vf in parts], HAIR_MAT, textures=hair_textures(name), uv_fn=hair_uv)
     print("wrote", path)
 
 
@@ -55,7 +85,7 @@ write_hair("SK_Hair_SlickBack", [shell(
     + .003 * np.sin(th * 26) * top(ph, .5, .4), std)])
 
 curl = lambda th, ph: .012 * np.abs(np.sin(th * 9) * np.sin(ph * 14))
-write_hair("SK_Hair_CurlyTop", [shell(lambda th, ph: .005 + (.055 + curl(th, ph)) * top(ph, .75, .3), low, S=72, rings=22)])
+write_hair("SK_Hair_CurlyTop", [shell(lambda th, ph: .005 + (.055 + curl(th, ph)) * top(ph, .75, .3), low, detail=.3)])
 
 
 def mullet_line(th):
@@ -73,7 +103,7 @@ def long_line(th):
 
 write_hair("SK_Hair_LongWavy", [shell(
     lambda th, ph: .025 + .07 * ss((.4 - ph) / .9) * (1 - .6 * front(th)) + .008 * np.sin(th * 14 + ph * 6),
-    long_line, S=72, rings=24)])
+    long_line)])
 
 # ------------------------------------------------------------------ regulation cuts
 write_hair("SK_Hair_HighAndTight", [shell(lambda th, ph: .003 + .025 * top(ph, 1.0, .2), low)])
@@ -93,18 +123,18 @@ def side_part(th, ph):
     return .02 + .012 * top(ph, .6, .5) + sweep - groove
 
 
-write_hair("SK_Hair_SidePart", [shell(side_part, std, S=80)])
+write_hair("SK_Hair_SidePart", [shell(side_part, std)])
 
 
 # ------------------------------------------------------------------ volume styles
 afro_bump = lambda th, ph: .01 * np.sin(th * 13) * np.sin(ph * 11)
-write_hair("SK_Hair_Afro", [shell(lambda th, ph: .06 + .07 * ss((ph + .2) / 1.2) + afro_bump(th, ph), std, S=72, rings=22)])
+write_hair("SK_Hair_Afro", [shell(lambda th, ph: .06 + .07 * ss((ph + .2) / 1.2) + afro_bump(th, ph), std, detail=.25)])
 
 waves = lambda th, ph: .0025 * np.sin(np.arccos(np.clip(np.cos(ph) * np.sin(th), -1, 1)) * 40)  # rings around the crown
-write_hair("SK_Hair_Waves", [shell(lambda th, ph: .008 + waves(th, ph), low, S=96, rings=26)])
+write_hair("SK_Hair_Waves", [shell(lambda th, ph: .008 + waves(th, ph), low)])
 
 write_hair("SK_Hair_Pompadour", [shell(
-    lambda th, ph: .006 + .03 * top(ph, .7, .4) + .06 * top(ph, .8, .4) * ss((np.sin(th) - .2) / .6), low, S=72, rings=22)])
+    lambda th, ph: .006 + .03 * top(ph, .7, .4) + .06 * top(ph, .8, .4) * ss((np.sin(th) - .2) / .6), low)])
 
 
 def on_head(th, ph, r):
@@ -153,7 +183,7 @@ def mustache_path(width, droop=0., curl=0., y=1.458):
 
 def write_face(name, parts):
     path = os.path.join(OUT, name + ".glb")
-    write_glb(path, [Part(vf, "facehair", "M_Hair") for vf in parts], HAIR_MAT)
+    write_glb(path, [Part(vf, "facehair", "M_Hair") for vf in parts], HAIR_MAT, textures=hair_textures(name), uv_fn=facehair_uv)
     print("wrote", path)
 
 
@@ -167,7 +197,7 @@ for sx in (-1, 1):
 write_face("SK_Face_Horseshoe", horse)
 
 
-def beard_sheet(top_y, bottom_y, half_angle, thick, cols=36, rows=12, lip_gap=True):
+def beard_sheet(top_y, bottom_y, half_angle, thick, cols=110, rows=20, lip_gap=True):
     """Sheet over the lower face. top_y(a) / bottom_y(a) by angle from the face centre (a = 0 front)."""
     A = np.linspace(-half_angle, half_angle, cols)
     P = []
@@ -176,7 +206,7 @@ def beard_sheet(top_y, bottom_y, half_angle, thick, cols=36, rows=12, lip_gap=Tr
         for a in A:
             y = bottom_y(a) + (top_y(a) - bottom_y(a)) * t
             th = np.pi / 2 + a
-            r = HR + thick(a, t)
+            r = HR + thick(a, t) + np.clip(thick(a, t) * .35, .0005, .008) * (.5 + .5 * np.sin(a * 45 + 1.5 * np.sin(t * 6)) - .5)
             rr = np.sqrt(max(r ** 2 - (y - HC[1]) ** 2, (r * .35) ** 2))
             row.append([rr * np.cos(th), y, rr * np.sin(th)])
         P.append(row)

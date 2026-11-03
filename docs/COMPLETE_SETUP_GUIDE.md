@@ -556,6 +556,28 @@ So all you have to do is **import the files** (keep their names). Anything you s
 
 ---
 
+## Part 15j: Hair that looks like hair
+
+All hairstyles (**SK_Hair_***) and beards (**SK_Face_***) were rebuilt:
+- Locks and strand grooves in the shape.
+- A ragged hairline instead of a clean "bandana" edge.
+- A strand texture + normal map built into each file. Afros, curly tops and twists get a curly texture.
+
+The textures are light grey, so your **Hair Color** slider still tints them like before.
+
+**Re-import them:**
+1. In the Content Browser, open the folder with your hair meshes.
+2. Select all the **SK_Hair_...** and **SK_Face_...** meshes, right-click, **Reimport**.
+   - If it asks for a file, pick the matching one from **Art/Characters/**.
+3. Unreal makes new textures next to them (**T_Hair_..._D** and **T_Hair_..._N**). Keep those.
+4. Open one hair mesh and check the material shows the strands.
+   - **If it still looks smooth:** your hair is using an old material you made. Delete the hair meshes and drag the .glb files in again (Skeleton = your body skeleton, Import Morph Targets ticked).
+5. Check that **Hair_UnderHat** and the face shape keys are still listed under **Morph Targets**. They are in the new files.
+
+Before/after picture: **Art/Characters/Previews/hair_before_after.png**
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
