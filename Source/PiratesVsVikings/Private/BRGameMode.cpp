@@ -1026,8 +1026,48 @@ void ABRGameMode::AddBot(EPVVFaction Team)
 	PS->Look.HairStyle = FMath::RandRange(0, 8);
 	PS->Look.HairColor = FMath::RandBool() ? 0.f : FMath::FRandRange(.05f, .35f);
 	PS->Look.FacialHair = FMath::RandRange(0, 4);
-	PS->bHasLook = true;
-	RestartPlayer(Bot);
+	// Spawn the body ourselves (step by step, logged) instead of the engine's RestartPlayer.
+	UE_LOG(LogTemp, Warning, TEXT("[Bots] %s: spawning body"), *PS->GetPlayerName());
+	const AActor* Start = ChooseStartForFaction(Team);
+	UClass* BodyClass = GetDefaultPawnClassForController(Bot);
+	if (!Start || !BodyClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Bots] no player start or character class for that team - bot removed"));
+		Bot->Destroy();
+		return;
+	}
+	const FVector Spread(FMath::FRandRange(-250.f, 250.f), FMath::FRandRange(-250.f, 250.f), 0.f);
+	const FTransform SpawnAt(FRotator(0.f, Start->GetActorRotation().Yaw, 0.f), Start->GetActorLocation() + Spread);
+	FActorSpawnParameters BodyParams;
+	BodyParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	APawn* Body = GetWorld()->SpawnActor<APawn>(BodyClass, SpawnAt, BodyParams);
+	if (!Body)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Bots] body failed to spawn - bot removed"));
+		Bot->Destroy();
+		return;
+	}
+	if (AController* Old = Body->GetController())
+	{
+		Old->UnPossess(); // the Blueprint's own auto-AI, if it has one
+		Old->Destroy();
+	}
+	Bot->Possess(Body);
+	UE_LOG(LogTemp, Warning, TEXT("[Bots] %s possessed"), *PS->GetPlayerName());
+	// Apply the look a moment later, the same way a real player's look arrives.
+	TWeakObjectPtr<ABRPlayerState> WeakPS = PS;
+	TWeakObjectPtr<APawn> WeakBody = Body;
+	FTimerHandle LookTimer;
+	GetWorldTimerManager().SetTimer(LookTimer, FTimerDelegate::CreateWeakLambda(this, [WeakPS, WeakBody]()
+	{
+		ABRPlayerState* LookPS = WeakPS.Get();
+		ABRCharacter* LookBody = Cast<ABRCharacter>(WeakBody.Get());
+		if (LookPS && LookBody)
+		{
+			LookPS->bHasLook = true;
+			LookBody->SetLook(LookPS->Look);
+		}
+	}), 2.f, false);
 	Feed(FString::Printf(TEXT("%s joined the %s"), *PS->GetPlayerName(), *(Team == BR::Wardens ? BR::WardenName() : BR::RunnerName())));
 }
 

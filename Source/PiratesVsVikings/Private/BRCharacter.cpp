@@ -767,7 +767,7 @@ void ABRCharacter::UpdateMovementSpeed()
 	}
 	if (GrabbedBy)
 	{
-		Multiplier *= 0.4f; // someone's got hold of you
+		Multiplier *= 0.05f; // someone's got hold of you: you're not walking anywhere (mash Space!)
 	}
 	Move->MaxWalkSpeed *= Multiplier;
 	Move->MaxWalkSpeedCrouched = 220.f * Multiplier;
@@ -2453,6 +2453,18 @@ void ABRCharacter::Server_Grab_Implementation()
 		TryClimb(); // nothing to grab: grab the ledge in front and climb
 		return;
 	}
+	// Knocked out (or zip-tied): scoop them up and carry them. Z again throws them.
+	if (Target->GetCondition() == EPVVCondition::KnockedDown || Target->GetCondition() == EPVVCondition::Restrained)
+	{
+		Grab(Target);
+		if (GetCarriedCharacter() == Target)
+		{
+			GrabStartTime = GetWorld()->GetTimeSeconds();
+			Multicast_Sfx(5);
+			Notify(LOCTEXT("PickedUpBody", "Picked them up! Z = throw. Border Patrol: carry them to the pen or a truck."));
+		}
+		return;
+	}
 	// A teammate standing up: climb on their shoulders. Anyone else: grab them.
 	if (Target->GetFaction() == GetFaction() && !Target->IsNPC() && !IsNPC() && Target->GetCondition() == EPVVCondition::Normal && !Target->IsOnShoulders())
 	{
@@ -2561,7 +2573,8 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 	// Someone grabbed (not zip-tied) wriggles free after a few seconds.
 	if (APVVCharacter* Held = GetCarriedCharacter())
 	{
-		if (Held->GetCondition() != EPVVCondition::Restrained && Now - GrabStartTime > GrabHoldSeconds)
+		// Awake (not knocked out, not zip-tied): they wriggle free after a few seconds.
+		if (Held->GetCondition() == EPVVCondition::Normal && Now - GrabStartTime > GrabHoldSeconds)
 		{
 			DropCarried();
 		}
@@ -2818,12 +2831,15 @@ void ABRCharacter::TickHandGrab(float DeltaSeconds)
 	}
 	// Grip more hands if they're reaching too.
 	HandGrabMask = static_cast<uint8>(HandGrabMask | ArmsReaching);
-	// Keep them at arm's length: drag them along.
-	if (Held->GetCondition() == EPVVCondition::Normal && Dist > 115.f)
+	// Really hold them: they stay at arm's length in front of you and get dragged wherever you go.
+	if (Held->GetCondition() == EPVVCondition::Normal)
 	{
-		const FVector Want = GetActorLocation() + GetActorForwardVector().GetSafeNormal2D() * 95.f;
-		const FVector Pull = (Want - Held->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
-		Held->LaunchCharacter(Pull.GetSafeNormal() * FMath::Min(Pull.Size() * 5.f, 650.f), true, false);
+		const FVector Want = GetActorLocation() + GetActorForwardVector().GetSafeNormal2D() * 90.f;
+		FVector Next = FMath::VInterpTo(Held->GetActorLocation(), FVector(Want.X, Want.Y, Held->GetActorLocation().Z), DeltaSeconds, 12.f);
+		Held->SetActorLocation(Next, true, nullptr, ETeleportType::None);
+		Held->GetCharacterMovement()->Velocity = GetVelocity();
+		const FRotator Face = (GetActorLocation() - Held->GetActorLocation()).Rotation();
+		Held->SetActorRotation(FRotator(0.f, Face.Yaw, 0.f));
 	}
 }
 

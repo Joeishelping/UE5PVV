@@ -33,6 +33,7 @@ void ABRBotController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 	LastPos = InPawn ? InPawn->GetActorLocation() : FVector::ZeroVector;
+	WakeUpAt = GetWorld()->GetTimeSeconds() + 2.5f;
 	StuckTime = 0.f;
 	Target = nullptr;
 	PatrolUntil = 0.f;
@@ -53,11 +54,15 @@ void ABRBotController::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	ABRCharacter* C = Me();
 	ABRPlayerState* PS = MyState();
-	if (!C || !PS || !HasAuthority())
+	if (!IsValid(C) || !PS || !HasAuthority() || C->IsActorBeingDestroyed())
 	{
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < WakeUpAt)
+	{
+		return; // let the new body settle (physics, outfits) before doing anything
+	}
 
 	// Struggle / wake up like a person mashing a key (about 5 presses a second, not every frame).
 	if (C->GetGrabbedBy() && C->GetCondition() == EPVVCondition::Normal && Now >= NextMash)
