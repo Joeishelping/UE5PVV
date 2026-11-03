@@ -275,6 +275,7 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 		if (Drop > FallKnockoutHeight && GetCondition() == EPVVCondition::Normal)
 		{
 			ApplyKnockdown(nullptr, FVector(0.f, 0.f, 100.f)); // splat
+			ABRGameState::Highlight(this, this, 45.f + Drop * 0.02f, FString::Printf(TEXT("%s fell %d m and went SPLAT"), *GetPlayerDisplayName(), FMath::RoundToInt(Drop / 100.f)));
 			ABRGameState::FX(this, EBRFX::Dust, GetActorLocation() - FVector(0.f, 0.f, 80.f));
 			ABRGameState::Sfx(this, EBRSfx::Landing, GetActorLocation());
 		}
@@ -2518,6 +2519,7 @@ void ABRCharacter::Server_Grab_Implementation()
 	{
 		ReleaseHandGrab();
 		Held->LaunchCharacter(Forward * ThrowSpeed + FVector(0.f, 0.f, ThrowSpeed * 0.45f), true, true);
+		ABRGameState::Highlight(this, Held, 60.f, FString::Printf(TEXT("%s THREW %s"), *GetPlayerDisplayName(), *Held->GetPlayerDisplayName()));
 		if (ABRPlayerState* PS = GetBRPlayerState())
 		{
 			++PS->StatThrows;
@@ -2548,6 +2550,7 @@ void ABRCharacter::Server_Grab_Implementation()
 			Flying->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 		}
 		Held->LaunchCharacter(Forward * ThrowSpeed + FVector(0.f, 0.f, ThrowSpeed * 0.45f), true, true);
+		ABRGameState::Highlight(this, Cast<ABRCharacter>(Held), 62.f, FString::Printf(TEXT("%s THREW %s"), *GetPlayerDisplayName(), *Held->GetPlayerDisplayName()));
 		if (ABRPlayerState* PS = GetBRPlayerState())
 		{
 			++PS->StatThrows;
@@ -2767,6 +2770,7 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 				bDiving = false;
 				const float TackleBoost = WornHat == EBRHat::LuchaMask ? 1.5f : 1.f;
 				Victim->ApplyKnockdown(this, (Forward * 650.f + FVector(0.f, 0.f, 300.f)) * TackleBoost);
+				ABRGameState::Highlight(this, Cast<ABRCharacter>(Victim), 50.f, FString::Printf(TEXT("%s flying-tackled %s"), *GetPlayerDisplayName(), *Victim->GetPlayerDisplayName()));
 				if (ABRPlayerState* PS = GetBRPlayerState())
 				{
 					++PS->StatTackles;
@@ -3268,6 +3272,7 @@ void ABRCharacter::Server_Lasso_Implementation(FVector_NetQuantize From, FVector
 	Victim->BlowDisguise();
 	const FVector Yank = (GetActorLocation() - Victim->GetActorLocation()).GetSafeNormal2D() * 900.f + FVector(0.f, 0.f, 300.f);
 	Victim->ApplyKnockdown(this, Yank);
+	ABRGameState::Highlight(this, Victim, 55.f, FString::Printf(TEXT("%s LASSOED %s"), *GetPlayerDisplayName(), *Victim->GetPlayerDisplayName()));
 	Multicast_Sfx(2);
 	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 	{

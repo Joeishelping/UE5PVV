@@ -79,6 +79,10 @@ public:
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_Sfx(EBRSfx Sound, FVector_NetQuantize Location, bool b2D);
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_FX(EBRFX Kind, FVector_NetQuantize Location, const FString& Text);
 
+	/** Server: something worth replaying happened (the biggest one becomes the Play of the Round). */
+	static void Highlight(const UObject* Context, class ABRCharacter* Star, float Score, const FString& Caption);
+	UFUNCTION(NetMulticast, Reliable) void Multicast_Highlight(class ABRCharacter* Star, float Score, const FString& Caption);
+
 	/** Kill-feed line in the top-right corner of everyone's screen ("Jorge got YEETED by Dave"). */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_Feed(const FString& Line);

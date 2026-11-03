@@ -1561,6 +1561,7 @@ void ABRCannon::FireRiders()
 		Rider->TeleportTo(Muzzle->GetComponentLocation() + Dir * (60.f + Index * 90.f) + FVector(0.f, 0.f, 40.f), FRotator(0.f, Dir.Rotation().Yaw, 0.f), false, true);
 		Rider->StartFlight(Dir * LaunchSpeed * FMath::FRandRange(0.85f, 1.f) + FVector(FMath::FRandRange(-150.f, 150.f), FMath::FRandRange(-150.f, 150.f), 0.f));
 		Rider->Spot(8.f);
+		ABRGameState::Highlight(this, Rider, 100.f + Index, FString::Printf(TEXT("%s got blasted off the top of the cannon"), *Rider->GetPlayerDisplayName()));
 		if (ABRPlayerState* PS = Rider->GetBRPlayerState())
 		{
 			++PS->StatCannonShots;
@@ -1745,6 +1746,7 @@ void ABRCannon::Fire()
 	Runner->SetInCannon(false);
 	Runner->TeleportTo(Muzzle->GetComponentLocation() + Dir * 60.f, FRotator(0.f, Dir.Rotation().Yaw, 0.f), false, true);
 	Runner->StartFlight(Dir * LaunchSpeed);
+	ABRGameState::Highlight(this, Runner, 100.f, FString::Printf(TEXT("%s fired themselves out of a cannon"), *Runner->GetPlayerDisplayName()));
 	ABRGameState::FX(this, EBRFX::Smoke, Muzzle->GetComponentLocation() + Dir * 80.f);
 	Runner->Spot(8.f); // everyone saw that
 	if (ABRPlayerState* PS = Runner->GetBRPlayerState())
@@ -3531,6 +3533,7 @@ void ABRLuchaRing::Finish(int32 WinnerSide, const FString& Why)
 		if (C)
 		{
 			C->SetHat(EBRHat::LuchaMask); // won his mask!
+			ABRGameState::Highlight(this, C, 90.f, FString::Printf(TEXT("%s beat %s in the ring"), *ChallengerName, *FighterName));
 			C->Notify(FText::Format(LOCTEXT("LuchaWin", "YOU BEAT {0}! +${1} and his MASK (dives and tackles hit harder)."), FText::FromString(FighterName), Wager * 2));
 			ABRGameState::FX(this, EBRFX::MoneyText, C->GetActorLocation() + FVector(0.f, 0.f, 80.f), FString::Printf(TEXT("+$%d"), Wager * 2));
 		}

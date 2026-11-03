@@ -7,6 +7,7 @@
 #include "BRPlayerController.h"
 #include "BRPlayerState.h"
 #include "BRSettings.h"
+#include "BRReplay.h"
 #include "BRWorldActors.h"
 #include "PVVDetentionZone.h"
 #include "BRMapKit.h"
@@ -55,6 +56,18 @@ void ABRHUD::Marker(const FVector& World, const FString& Text, const FLinearColo
 	Screen.X = FMath::Clamp(Screen.X, W * 0.5f + 10.f, Canvas->ClipX - W * 0.5f - 10.f);
 	Screen.Y = FMath::Clamp(Screen.Y, H + 90.f, Canvas->ClipY - 50.f);
 	DrawText(Text, Color, Screen.X - W * 0.5f, Screen.Y - H, GEngine->GetMediumFont());
+}
+
+void ABRHUD::BeginPlay()
+{
+	Super::BeginPlay();
+	// Play of the Round recorder (this screen only).
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Replay = GetWorld()->SpawnActor<ABRReplayDirector>(ABRReplayDirector::StaticClass(), FTransform::Identity, Params);
+	}
 }
 
 void ABRHUD::DrawHUD()
@@ -122,6 +135,15 @@ void ABRHUD::DrawHUD()
 		WeatherText, FMath::RoundToInt(GS->Approval)), 46.f, White, Small, 1.2f);
 	Bar(SX * 0.5f - 150.f, 66.f, 300.f, 10.f, GS->Approval / 100.f, GS->Approval >= ABRGameState::DroneApproval ? Green : (GS->Approval >= ABRGameState::LethalApproval ? Yellow : Red));
 
+	// --- Play of the Round (cinema bars + caption, nothing else)
+	if (Replay && Replay->IsPlaying())
+	{
+		DrawRect(FLinearColor::Black, 0.f, 0.f, SX, SY * 0.12f);
+		DrawRect(FLinearColor::Black, 0.f, SY * 0.88f, SX, SY * 0.12f);
+		Centered(TEXT("PLAY OF THE ROUND"), SY * 0.03f, Yellow, Big, 2.2f);
+		Centered(Replay->GetCaption(), SY * 0.91f, White, Big, 1.5f);
+		return;
+	}
 	if (GS->Phase == EBRPhase::Ended)
 	{
 		const FString WinText = GS->Winner == BR::Runners ? BR::RunnerName().ToUpper() + TEXT(" WIN!")

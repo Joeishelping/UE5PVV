@@ -1,4 +1,7 @@
 #include "BRGameState.h"
+#include "BRReplay.h"
+#include "BRCharacter.h"
+#include "EngineUtils.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
@@ -90,6 +93,24 @@ void ABRGameState::Multicast_Sfx_Implementation(EBRSfx Sound, FVector_NetQuantiz
 		{
 			UGameplayStatics::PlaySoundAtLocation(this, Wave, Location);
 		}
+	}
+}
+
+void ABRGameState::Highlight(const UObject* Context, ABRCharacter* Star, float Score, const FString& Caption)
+{
+	UWorld* World = Context ? Context->GetWorld() : nullptr;
+	ABRGameState* GS = World ? World->GetGameState<ABRGameState>() : nullptr;
+	if (GS && GS->HasAuthority() && Star && GS->Phase == EBRPhase::Invasion)
+	{
+		GS->Multicast_Highlight(Star, Score, Caption);
+	}
+}
+
+void ABRGameState::Multicast_Highlight_Implementation(ABRCharacter* Star, float Score, const FString& Caption)
+{
+	for (TActorIterator<ABRReplayDirector> It(GetWorld()); It; ++It)
+	{
+		It->OnHighlight(Star, Score, Caption);
 	}
 }
 

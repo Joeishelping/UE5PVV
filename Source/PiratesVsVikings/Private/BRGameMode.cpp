@@ -524,6 +524,7 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 	if (Catapult)
 	{
 		Catapult->Launch(Prisoner, Landing);
+		ABRGameState::Highlight(this, Cast<ABRCharacter>(Prisoner), 80.f, FString::Printf(TEXT("%s got CATAPULTED back across the border"), *NameOf(Prisoner)));
 	}
 	else
 	{
@@ -801,6 +802,7 @@ void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
 		++PS->StatKnockdowns;
 	}
 	static const TCHAR* Verbs[] = { TEXT("FLATTENED"), TEXT("BONKED"), TEXT("BODY-SLAMMED"), TEXT("SENT FLYING"), TEXT("DROPPED"), TEXT("CLOTHESLINED") };
+	ABRGameState::Highlight(this, Cast<ABRCharacter>(Victim), 30.f, FString::Printf(TEXT("%s knocked out %s"), *NameOf(By), *NameOf(Victim)));
 	Feed(FString::Printf(TEXT("%s %s %s"), *NameOf(By), Verbs[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Verbs)) - 1)], *NameOf(Victim)));
 }
 
@@ -1169,6 +1171,10 @@ void ABRGameMode::OnGoodCatch(APVVCharacter* Warden, ABRPlayerState* Caught)
 	}
 	AwardPoints(Warden, BountyPoints);
 	AddBudget(BountyBudget);
+	if (APawn* CaughtPawn = Caught->GetPawn())
+	{
+		ABRGameState::Highlight(this, Cast<ABRCharacter>(CaughtPawn), 70.f, FString::Printf(TEXT("%s caught the most WANTED Runner"), *NameOf(Warden)));
+	}
 	GS->BountyTarget = nullptr;
 	BountyClock = BountyCheckSeconds - 5.f; // a new bounty soon
 	Feed(FString::Printf(TEXT("%s CLAIMED THE BOUNTY on %s (+%d, budget +$%d)"), *NameOf(Warden), *Caught->GetPlayerName(), BountyPoints, BountyBudget));
