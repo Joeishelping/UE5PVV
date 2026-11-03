@@ -145,6 +145,13 @@ public:
 	void DoKick();
 	void DoHeadbutt();
 	bool IsClimbing() const { return bClimbing; }
+	/** Hiding in a dumpster / porta-potty, or standing still in a cardboard box: Border Patrol can't see you. */
+	bool IsHiddenFromPatrol() const;
+	bool IsHidingInSpot() const { return bHiddenInSpot; }
+	bool IsInBox() const { return bInBox; }
+	/** Server: hide inside / come out of a hiding spot. */
+	void SetHiddenInSpot(bool bHide, const FVector& ExitAt);
+	class ABRDog* GetLeashedDog() const;
 	bool IsHanging() const { return bHanging; }
 	/** Server: let go of the wall (bFall = slipped / yanked off: counts as a fall). */
 	void StopClimbing(bool bFall);
@@ -622,6 +629,22 @@ private:
 	void KickHit();
 	void HeadbuttHit();
 	float LastKickTime = -100.f;
+	// Hiding, box, lasso, leash
+	UPROPERTY(ReplicatedUsing = OnRep_HiddenInSpot) bool bHiddenInSpot = false;
+	UPROPERTY(ReplicatedUsing = OnRep_Box) bool bInBox = false;
+	UPROPERTY(Replicated) TObjectPtr<class ABRDog> LeashedDog;
+	UFUNCTION() void OnRep_HiddenInSpot();
+	UFUNCTION() void OnRep_Box();
+	UFUNCTION(Server, Reliable) void Server_Lasso(FVector_NetQuantize From, FVector_NetQuantizeNormal Dir);
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_LassoRope(FVector_NetQuantize End);
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> RopeMesh;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BoxMesh;
+	float LassoRopeUntil = -1.f;
+	FVector LassoRopeEnd = FVector::ZeroVector;
+	float LastLassoTime = -100.f;
+	void ToggleBox();
+	void TickRope();
+	void DrawRope(const FVector& From, const FVector& To);
 	float BrawlNextMove = 0.f;
 	float BrawlSpinUntil = 0.f;
 	float BrawlHoldUntil = 0.f;

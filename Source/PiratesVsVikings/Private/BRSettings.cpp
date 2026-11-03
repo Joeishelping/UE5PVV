@@ -137,6 +137,8 @@ namespace BR
 		case EBRItem::TacoPlatter: return TEXT("Taco Platter");
 		case EBRItem::Drugs:       return TEXT("Drug Package");
 		case EBRItem::Poncho:      return TEXT("Disguise Poncho");
+		case EBRItem::Lasso:       return TEXT("Lasso");
+		case EBRItem::CardboardBox: return TEXT("Cardboard Box");
 		default:                   return TEXT("");
 		}
 	}

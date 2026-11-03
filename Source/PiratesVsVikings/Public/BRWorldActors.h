@@ -865,3 +865,30 @@ private:
 	void Finish(int32 WinnerSide, const FString& Why);
 	void UpdateBoard(float ServerNow);
 };
+
+// ===========================================================================================
+/**
+ * Somewhere to hide: a Runner climbs in (E) and vanishes. Border Patrol can search it (hold E):
+ * if someone's inside they get dragged out onto the ground. Spotlights, scanners, dogs and bots can't see inside.
+ */
+UCLASS(meta = (DisplayName = "BR Hiding Spot"))
+class PIRATESVSVIKINGS_API ABRHidingSpot : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRHidingSpot();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override;
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Hiding") EBRHideStyle Style = EBRHideStyle::Dumpster;
+
+protected:
+	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> Hider;
+	FString StyleName() const;
+};

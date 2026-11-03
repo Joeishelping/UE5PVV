@@ -445,6 +445,16 @@ void ABRHUD::DrawHUD()
 		}
 	}
 
+	// --- Hiding
+	if (Me->IsHidingInSpot())
+	{
+		Centered(TEXT("HIDING  -  nobody can see you.  E = climb out"), SY * 0.7f, Green, Big, 1.2f);
+	}
+	else if (Me->IsInBox())
+	{
+		Centered(Me->IsHiddenFromPatrol() ? TEXT("In the box: invisible while you stand still") : TEXT("In the box: MOVING (they can see you)"), SY * 0.7f, Me->IsHiddenFromPatrol() ? Green : Yellow, Small, 1.3f);
+	}
+
 	// --- Climbing
 	if (Me->IsHanging())
 	{

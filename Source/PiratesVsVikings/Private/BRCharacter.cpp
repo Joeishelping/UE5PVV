@@ -2,6 +2,7 @@
 #include "BRSettings.h"
 #include "BRCar.h"
 #include "BRDesertArena.h"
+#include "BRDog.h"
 #include "BRMapKit.h"
 #include "BRDrone.h"
 #include "BRGameMode.h"
@@ -92,6 +93,26 @@ ABRCharacter::ABRCharacter()
 	HeldItemMesh->SetupAttachment(GetMesh());
 	HeldItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HeldItemMesh->SetVisibility(false);
+	{
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> RopeCyl(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> BoxCube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+		RopeMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RopeMesh"));
+		RopeMesh->SetupAttachment(GetCapsuleComponent());
+		RopeMesh->SetStaticMesh(RopeCyl.Object);
+		RopeMesh->SetUsingAbsoluteLocation(true);
+		RopeMesh->SetUsingAbsoluteRotation(true);
+		RopeMesh->SetUsingAbsoluteScale(true);
+		RopeMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		RopeMesh->SetCastShadow(false);
+		RopeMesh->SetVisibility(false);
+		BoxMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BoxMesh"));
+		BoxMesh->SetupAttachment(GetCapsuleComponent());
+		BoxMesh->SetStaticMesh(BoxCube.Object);
+		BoxMesh->SetRelativeLocation(FVector(0.f, 0.f, -15.f));
+		BoxMesh->SetRelativeScale3D(FVector(0.95f, 0.95f, 1.25f));
+		BoxMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		BoxMesh->SetVisibility(false);
+	}
 
 	// Greybox gun (pointing along +X, grip down). Restyled per weapon at runtime.
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -149,6 +170,9 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, GrabbedBy);
 	DOREPLIFETIME(ABRCharacter, GrabStruggle);
 	DOREPLIFETIME(ABRCharacter, bClimbing);
+	DOREPLIFETIME(ABRCharacter, bHiddenInSpot);
+	DOREPLIFETIME(ABRCharacter, bInBox);
+	DOREPLIFETIME(ABRCharacter, LeashedDog);
 	DOREPLIFETIME(ABRCharacter, bHanging);
 	DOREPLIFETIME(ABRCharacter, bLastClimbLeft);
 	DOREPLIFETIME(ABRCharacter, ClimbNormal);
@@ -686,6 +710,14 @@ void ABRCharacter::BeginPlay()
 	}
 	OnRep_Hat();
 	OnRep_Disguise();
+	if (UMaterialInstanceDynamic* RopeMID = RopeMesh ? RopeMesh->CreateDynamicMaterialInstance(0) : nullptr)
+	{
+		RopeMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.6f, 0.45f, 0.25f));
+	}
+	if (UMaterialInstanceDynamic* BoxMID = BoxMesh ? BoxMesh->CreateDynamicMaterialInstance(0) : nullptr)
+	{
+		BoxMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.62f, 0.46f, 0.27f));
+	}
 }
 
 ABRPlayerState* ABRCharacter::GetBRPlayerState() const
@@ -779,6 +811,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	if (WornHat == EBRHat::CowboyHat)
 	{
 		Multiplier *= 1.12f; // Cowboy Hat: rodeo legs
+	}
+	if (bInBox)
+	{
+		Multiplier *= 0.5f; // shuffling along in a box
 	}
 	if (GrabbedBy)
 	{
@@ -904,7 +940,17 @@ void ABRCharacter::Input_Crouch()
 	}
 }
 
-void ABRCharacter::Input_Eat() { Server_UseItem(SelectedSlot); } // F = use the selected item
+void ABRCharacter::Input_Eat()
+{
+	// F = use the selected item. The lasso is thrown where you're looking.
+	const ABRPlayerState* PS = GetBRPlayerState();
+	if (PS && PS->Inventory.IsValidIndex(SelectedSlot) && PS->Inventory[SelectedSlot] == EBRItem::Lasso && FollowCamera)
+	{
+		Server_Lasso(FollowCamera->GetComponentLocation(), FollowCamera->GetForwardVector());
+		return;
+	}
+	Server_UseItem(SelectedSlot);
+}
 void ABRCharacter::Input_Trumpet() { Server_PlayTrumpet(); }
 void ABRCharacter::Input_Drop() { Server_DropItem(SelectedSlot); }
 
@@ -945,6 +991,8 @@ void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
 	case EBRItem::Taco: Server_Eat_Implementation(); break;
 	case EBRItem::Trumpet: PlayTrumpet(); break;
 	case EBRItem::TacoPlatter: PlaceTacoPlatter(); break;
+	case EBRItem::CardboardBox: ToggleBox(); break;
+	case EBRItem::Lasso: Notify(LOCTEXT("UseLasso", "Aim at someone with your view and press F to throw the lasso.")); break;
 	case EBRItem::Ladder: Notify(LOCTEXT("UseLadder", "Walk up to the Wall and press E to lean your ladder on it.")); break;
 	case EBRItem::WireCutters: Notify(LOCTEXT("UseCutters", "Walk up to the razor wire and hold E to cut it.")); break;
 	case EBRItem::GasCan: Notify(LOCTEXT("UseGas", "Walk up to the truck and press E to fill it up.")); break;
@@ -1723,7 +1771,7 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	{
 		Notify(LOCTEXT("ScanWarden", "SCAN: that's a fellow agent."));
 	}
-	else if (!Target->IsNPC() && !Target->IsDisguised())
+	else if (!Target->IsNPC() && !Target->IsDisguised() && !Target->IsHiddenFromPatrol())
 	{
 		Target->Spot(8.f);
 		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
@@ -2075,6 +2123,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	}
 	TickShake(DeltaSeconds);
 	TickReachVisuals();
+	TickRope();
 	TickEmoteWheel();
 	TickHeadTag();
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
@@ -2447,6 +2496,30 @@ void ABRCharacter::Server_Grab_Implementation()
 		}
 		Multicast_Sfx(2);
 		return;
+	}
+
+	// K9: Z on a dog puts it on your leash; Z again lets it loose to chase.
+	if (ABRDog* Dog = LeashedDog.Get())
+	{
+		Dog->ReleaseLeash();
+		LeashedDog = nullptr;
+		Notify(LOCTEXT("DogLoose", "SIC 'EM! The dog's off the leash."));
+		ForceNetUpdate();
+		return;
+	}
+	if (IsWarden())
+	{
+		for (TActorIterator<ABRDog> It(GetWorld()); It; ++It)
+		{
+			if (!It->HasHandler() && FVector::Dist2D(It->GetActorLocation(), GetActorLocation()) < 220.f)
+			{
+				It->SetHandler(this);
+				LeashedDog = *It;
+				Notify(LOCTEXT("DogLeashed", "Dog on the leash. It'll pull toward Runners it smells. Z = let it loose."));
+				ForceNetUpdate();
+				return;
+			}
+		}
 	}
 
 	// Find the closest thing in front of us.
@@ -2966,6 +3039,148 @@ void ABRCharacter::TickReachVisuals()
 		}
 		const FVector Hand = Body->GetBoneLocation(HandBones[i]);
 		Body->SetPhysicsLinearVelocity(((Point - Hand) * 9.f).GetClampedToMaxSize(900.f), false, HandBones[i]);
+	}
+}
+
+// -------------------------------------------------------------------------------------------
+// Hiding spots, cardboard box, lasso, K9 leash
+
+ABRDog* ABRCharacter::GetLeashedDog() const
+{
+	return LeashedDog.Get();
+}
+
+bool ABRCharacter::IsHiddenFromPatrol() const
+{
+	return bHiddenInSpot || (bInBox && GetVelocity().Size2D() < 30.f);
+}
+
+void ABRCharacter::SetHiddenInSpot(bool bHide, const FVector& ExitAt)
+{
+	if (!HasAuthority() || bHide == bHiddenInSpot)
+	{
+		return;
+	}
+	bHiddenInSpot = bHide;
+	if (bHide)
+	{
+		ReleaseHandGrab();
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+	}
+	else
+	{
+		TeleportTo(ExitAt, GetActorRotation(), false, true);
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	}
+	OnRep_HiddenInSpot();
+	ForceNetUpdate();
+}
+
+void ABRCharacter::OnRep_HiddenInSpot()
+{
+	SetActorHiddenInGame(bHiddenInSpot);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, bHiddenInSpot ? ECR_Ignore : ECR_Block);
+}
+
+void ABRCharacter::ToggleBox()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	bInBox = !bInBox;
+	OnRep_Box();
+	Notify(bInBox ? LOCTEXT("BoxOn", "In the box. Stand still and nobody sees you. Don't run!") : LOCTEXT("BoxOff", "Out of the box."));
+	ForceNetUpdate();
+}
+
+void ABRCharacter::OnRep_Box()
+{
+	if (BoxMesh)
+	{
+		BoxMesh->SetVisibility(bInBox);
+	}
+	UpdateMovementSpeed();
+}
+
+void ABRCharacter::Server_Lasso_Implementation(FVector_NetQuantize From, FVector_NetQuantizeNormal Dir)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	const ABRPlayerState* PS = GetBRPlayerState();
+	if (!PS || !PS->HasItem(EBRItem::Lasso) || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || Now - LastLassoTime < 4.f)
+	{
+		return;
+	}
+	LastLassoTime = Now;
+	BlowDisguise();
+	// Throw from your shoulder, along your view.
+	const FVector Start = GetActorLocation() + FVector(0.f, 0.f, 60.f);
+	const FVector Aim = FVector(Dir).GetSafeNormal();
+	const FVector End = Start + Aim * 1800.f;
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRLasso), false, this);
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_Pawn);
+	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	const bool bHit = GetWorld()->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, Objects, FCollisionShape::MakeSphere(35.f), Params);
+	ABRCharacter* Victim = bHit ? Cast<ABRCharacter>(Hit.GetActor()) : nullptr;
+	Multicast_LassoRope(bHit ? FVector(Hit.ImpactPoint) : End);
+	if (!Victim || Victim->GetCarrier() || Victim->GetCurrentBoat() || Victim->IsHidingInSpot() || Victim->GetCondition() == EPVVCondition::Detained)
+	{
+		return;
+	}
+	// YEEHAW: yank them off their feet toward you (and off walls / ladders).
+	Victim->StopClimbing(true);
+	Victim->BlowDisguise();
+	const FVector Yank = (GetActorLocation() - Victim->GetActorLocation()).GetSafeNormal2D() * 900.f + FVector(0.f, 0.f, 300.f);
+	Victim->ApplyKnockdown(this, Yank);
+	Multicast_Sfx(2);
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->Feed(FString::Printf(TEXT("%s LASSOED %s"), *GetPlayerDisplayName(), *Victim->GetPlayerDisplayName()));
+	}
+}
+
+void ABRCharacter::Multicast_LassoRope_Implementation(FVector_NetQuantize End)
+{
+	LassoRopeEnd = End;
+	LassoRopeUntil = GetWorld()->GetTimeSeconds() + 0.6f;
+}
+
+void ABRCharacter::DrawRope(const FVector& From, const FVector& To)
+{
+	const FVector Span = To - From;
+	const float Len = Span.Size();
+	if (Len < 1.f)
+	{
+		RopeMesh->SetVisibility(false);
+		return;
+	}
+	RopeMesh->SetWorldLocationAndRotation((From + To) * 0.5f, FRotationMatrix::MakeFromZ(Span / Len).Rotator());
+	RopeMesh->SetWorldScale3D(FVector(0.03f, 0.03f, Len / 100.f));
+	RopeMesh->SetVisibility(true);
+}
+
+void ABRCharacter::TickRope()
+{
+	if (!RopeMesh || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	const FVector Hand = GetMesh() && GetMesh()->GetBoneIndex(TEXT("hand_r")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("hand_r")) : GetActorLocation() + FVector(0.f, 0.f, 40.f);
+	if (GetWorld()->GetTimeSeconds() < LassoRopeUntil)
+	{
+		DrawRope(Hand, LassoRopeEnd);
+	}
+	else if (const ABRDog* Dog = LeashedDog.Get())
+	{
+		DrawRope(Hand, Dog->GetActorLocation() + FVector(0.f, 0.f, 20.f));
+	}
+	else if (RopeMesh->IsVisible())
+	{
+		RopeMesh->SetVisibility(false);
 	}
 }
 
@@ -3578,6 +3793,11 @@ void ABRCharacter::Server_SelectSlot_Implementation(int32 Slot)
 
 void ABRCharacter::BlowDisguise()
 {
+	if (HasAuthority() && bInBox)
+	{
+		bInBox = false; // the box falls off
+		OnRep_Box();
+	}
 	if (!HasAuthority() || !bDisguised || bIsNPC)
 	{
 		return;

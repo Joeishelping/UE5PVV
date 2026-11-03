@@ -35,7 +35,9 @@ enum class EBRItem : uint8
 	Trumpet			UMETA(DisplayName = "Mariachi Trumpet"),
 	TacoPlatter		UMETA(DisplayName = "Taco Platter"),
 	Drugs			UMETA(DisplayName = "Drug Package"),
-	Poncho			UMETA(DisplayName = "Disguise Poncho")
+	Poncho			UMETA(DisplayName = "Disguise Poncho"),
+	Lasso			UMETA(DisplayName = "Lasso"),
+	CardboardBox	UMETA(DisplayName = "Cardboard Box")
 };
 
 /** Hats: each one gives a skill. Get knocked out and it may fly off - anyone can pick it up. */
@@ -71,6 +73,15 @@ enum class EBRStationKind : uint8
 	LuchaChallenge,	// fight the luchador in the ring for Price (win = double)
 	LuchaBet,		// bet Price on the fight (BetSide 0 = the challenger, 1 = the luchador)
 	WardenSupply	// Border Patrol only: buy gear with the government budget (pick Warden Gear, or an Item)
+};
+
+/** Look of a hiding spot. */
+UENUM(BlueprintType)
+enum class EBRHideStyle : uint8
+{
+	Dumpster,
+	PortaPotty	UMETA(DisplayName = "Porta-Potty"),
+	HayBale		UMETA(DisplayName = "Hay Bales")
 };
 
 /** Game-wide sound effects (set them all in Project Settings -> Border Run -> Sounds). */

@@ -426,6 +426,8 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Station(-11500.f, -3300.f, EBRStationKind::BuyItem, EBRItem::Shovel, 80, TEXT("SHOVEL $80"), Shop);
 	Station(-11500.f, -2700.f, EBRStationKind::BuyItem, EBRItem::Trumpet, 120, TEXT("MARIACHI TRUMPET $120"), FLinearColor(0.9f, 0.6f, 0.1f));
 	Station(-12000.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Poncho, 200, TEXT("PONCHO DISGUISE $200"), FLinearColor(0.75f, 0.25f, 0.15f));
+	Station(-11600.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Lasso, 150, TEXT("LASSO $150"), Shop);
+	Station(-11200.f, -2200.f, EBRStationKind::BuyItem, EBRItem::CardboardBox, 30, TEXT("CARDBOARD BOX $30"), Shop);
 	Station(-11000.f, -2600.f, EBRStationKind::Job, EBRItem::None, 20, TEXT("Work the register"), Job, 5.f, 3.f);
 	Station(-10300.f, -4000.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS PUMP $25"), Shop);
 	Station(-11700.f, 1550.f, EBRStationKind::Job, EBRItem::None, 15, TEXT("Cook & sell tacos"), Job, 4.f, 2.f);
@@ -520,6 +522,24 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Supply(7800.f, 0.f, EBRWardenGear::HardHat, EBRItem::None, 400, 0.f);
 	Supply(7800.f, 400.f, EBRWardenGear::PatrolDog, EBRItem::None, 1500, 30.f);
 	Supply(7800.f, 800.f, EBRWardenGear::None, EBRItem::Taco, 20, 0.f);
+	Supply(7800.f, 1150.f, EBRWardenGear::None, EBRItem::Lasso, 250, 0.f);
+
+	// --- Hiding spots (dumpsters, porta-potties, hay bales) on both sides
+	auto Hide = [&](float X, float Y, float Yaw, EBRHideStyle HideStyle)
+	{
+		const FTransform T = At(X, Y, Ground, Yaw);
+		if (ABRHidingSpot* H = World->SpawnActorDeferred<ABRHidingSpot>(ABRHidingSpot::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			H->Style = HideStyle;
+			H->FinishSpawning(T);
+		}
+	};
+	Hide(-9800.f, -3500.f, 0.f, EBRHideStyle::Dumpster);
+	Hide(-13300.f, 700.f, 0.f, EBRHideStyle::PortaPotty);
+	Hide(-7600.f, -1900.f, 90.f, EBRHideStyle::HayBale);
+	Hide(-4300.f, -3000.f, 0.f, EBRHideStyle::PortaPotty);
+	Hide(5400.f, -4300.f, 180.f, EBRHideStyle::HayBale);
+	Hide(6200.f, 5600.f, 180.f, EBRHideStyle::Dumpster);
 
 	// --- Warden base
 	World->SpawnActor<APVVDetentionZone>(APVVDetentionZone::StaticClass(), At(7000.f, 4000.f, Ground + 150.f), Params);

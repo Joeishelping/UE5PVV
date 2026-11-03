@@ -385,7 +385,7 @@ void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 			{
 				ABRCharacter* R = *It;
 				const ABRPlayerState* RPS = Cast<ABRPlayerState>(R->GetPVVPlayerState());
-				if (!R->IsRunner() || R->IsNPC() || !RPS || !RPS->bHasCrossedLine || R->GetCondition() == EPVVCondition::Detained || R->GetCarrier() || R->IsDisguised())
+				if (!R->IsRunner() || R->IsNPC() || !RPS || !RPS->bHasCrossedLine || R->GetCondition() == EPVVCondition::Detained || R->GetCarrier() || R->IsDisguised() || R->IsHiddenFromPatrol())
 				{
 					continue;
 				}

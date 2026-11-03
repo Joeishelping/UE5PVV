@@ -2211,7 +2211,7 @@ void ABRWatchtower::Tick(float DeltaSeconds)
 	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 	{
 		ABRCharacter* C = *It;
-		if (!C->IsRunner() || C->IsNPC() || C->IsDisguised() || C->GetCondition() == EPVVCondition::Restrained)
+		if (!C->IsRunner() || C->IsNPC() || C->IsDisguised() || C->IsHiddenFromPatrol() || C->GetCondition() == EPVVCondition::Restrained)
 		{
 			continue;
 		}
@@ -3586,6 +3586,142 @@ void ABRLuchaRing::UpdateBoard(float ServerNow)
 		{
 			B->SetText(FText::FromString(Text));
 		}
+	}
+}
+
+// ===========================================================================================
+// Hiding spots
+
+ABRHidingSpot::ABRHidingSpot()
+{
+	// All three looks are built; BeginPlay shows the chosen one.
+	const FLinearColor Green(0.15f, 0.35f, 0.2f), Blue(0.2f, 0.4f, 0.75f), Straw(0.85f, 0.72f, 0.35f);
+	AddMesh(TEXT("Dumpster_Body"), CubeMesh, FVector(0.f, 0.f, 70.f), FVector(220.f, 130.f, 140.f), Green);
+	AddMesh(TEXT("Dumpster_Lid"), CubeMesh, FVector(-10.f, 0.f, 145.f), FVector(230.f, 140.f, 10.f), FLinearColor(0.1f, 0.1f, 0.1f), FRotator(0.f, 0.f, 0.f), false);
+	AddMesh(TEXT("Potty_Body"), CubeMesh, FVector(0.f, 0.f, 120.f), FVector(120.f, 120.f, 240.f), Blue);
+	AddMesh(TEXT("Potty_Roof"), CylinderMesh, FVector(0.f, 0.f, 245.f), FVector(130.f, 130.f, 15.f), FLinearColor(0.9f, 0.9f, 0.9f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Potty_Door"), CubeMesh, FVector(61.f, 0.f, 105.f), FVector(4.f, 80.f, 190.f), FLinearColor(0.15f, 0.3f, 0.6f), FRotator::ZeroRotator, false);
+	AddMesh(TEXT("Hay_A"), CubeMesh, FVector(0.f, -60.f, 50.f), FVector(180.f, 110.f, 100.f), Straw);
+	AddMesh(TEXT("Hay_B"), CubeMesh, FVector(0.f, 60.f, 50.f), FVector(180.f, 110.f, 100.f), Straw);
+	AddMesh(TEXT("Hay_C"), CubeMesh, FVector(0.f, 0.f, 150.f), FVector(180.f, 110.f, 100.f), Straw, FRotator(0.f, 90.f, 0.f));
+	AddPickupZone(130.f);
+}
+
+void ABRHidingSpot::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRHidingSpot, Style);
+	DOREPLIFETIME(ABRHidingSpot, Hider);
+}
+
+void ABRHidingSpot::BeginPlay()
+{
+	Super::BeginPlay();
+	const TCHAR* Prefix = Style == EBRHideStyle::PortaPotty ? TEXT("Potty") : (Style == EBRHideStyle::HayBale ? TEXT("Hay") : TEXT("Dumpster"));
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		const bool bMine = Mesh->GetName().StartsWith(Prefix);
+		Mesh->SetVisibility(bMine);
+		Mesh->SetCollisionEnabled(bMine ? Mesh->GetCollisionEnabled() : ECollisionEnabled::NoCollision);
+	}
+}
+
+FString ABRHidingSpot::StyleName() const
+{
+	return Style == EBRHideStyle::PortaPotty ? TEXT("porta-potty") : (Style == EBRHideStyle::HayBale ? TEXT("hay bales") : TEXT("dumpster"));
+}
+
+bool ABRHidingSpot::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	if (!BRC || BRC->IsNPC())
+	{
+		return false;
+	}
+	if (Hider.Get() == BRC)
+	{
+		return true; // climb out
+	}
+	if (BRC->IsHidingInSpot() || Interactor->GetCondition() != EPVVCondition::Normal || Interactor->GetCarriedCharacter())
+	{
+		return false;
+	}
+	if (BRC->IsWarden())
+	{
+		return true; // search it
+	}
+	return BRC->IsRunner() && !Hider;
+}
+
+float ABRHidingSpot::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
+{
+	if (Hider.Get() == Interactor)
+	{
+		return 0.f;
+	}
+	return Interactor && Interactor->GetFaction() == BR::Wardens ? 1.5f : 0.8f;
+}
+
+FText ABRHidingSpot::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	const FText Where = FText::FromString(StyleName());
+	if (Hider.Get() == Interactor)
+	{
+		return LOCTEXT("HideOut", "Climb out");
+	}
+	if (Interactor && Interactor->GetFaction() == BR::Wardens)
+	{
+		return FText::Format(LOCTEXT("HideSearch", "Search the {0} (hold)"), Where);
+	}
+	return FText::Format(LOCTEXT("HideIn", "Hide in the {0}"), Where);
+}
+
+void ABRHidingSpot::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	if (!HasAuthority() || !BRC)
+	{
+		return;
+	}
+	const FVector Out = GetActorLocation() + GetActorForwardVector() * 170.f + FVector(0.f, 0.f, 100.f);
+	if (Hider.Get() == BRC)
+	{
+		BRC->SetHiddenInSpot(false, Out);
+		Hider = nullptr;
+		ForceNetUpdate();
+		return;
+	}
+	if (BRC->IsWarden())
+	{
+		if (ABRCharacter* Found = Hider.Get())
+		{
+			// Dragged out by the collar.
+			Hider = nullptr;
+			Found->SetHiddenInSpot(false, Out);
+			Found->ApplyKnockdown(BRC, GetActorForwardVector() * 300.f + FVector(0.f, 0.f, 200.f));
+			Found->Spot(8.f);
+			if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+			{
+				GM->Feed(FString::Printf(TEXT("%s found %s hiding in a %s"), *BRC->GetPlayerDisplayName(), *Found->GetPlayerDisplayName(), *StyleName()));
+			}
+		}
+		else
+		{
+			Tell(Interactor, Style == EBRHideStyle::PortaPotty ? LOCTEXT("SearchPotty", "Empty. You'll never get that smell out of your uniform.")
+				: LOCTEXT("SearchEmpty", "Nobody in there."));
+		}
+		ForceNetUpdate();
+		return;
+	}
+	if (!Hider)
+	{
+		Hider = BRC;
+		BRC->SetHiddenInSpot(true, Out);
+		BRC->TeleportTo(GetActorLocation() + FVector(0.f, 0.f, 100.f), BRC->GetActorRotation(), false, true);
+		Tell(Interactor, LOCTEXT("Hidden", "Hidden! Border Patrol can't see you. Press E to climb out."));
+		ForceNetUpdate();
 	}
 }
 

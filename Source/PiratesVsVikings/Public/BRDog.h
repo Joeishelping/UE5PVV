@@ -28,6 +28,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Dog") float ChaseSpeed = 680.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Dog") float PatrolSpeed = 260.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Dog") TObjectPtr<USoundBase> BarkSound;
+	/** Leash length (cm) when a Border Patrol agent walks the dog. */
+	UPROPERTY(EditAnywhere, Category = "BR|Dog") float LeashLength = 380.f;
+
+	/** Server: a Border Patrol agent takes the leash (Z) / lets the dog loose to chase (Z again). */
+	void SetHandler(ABRCharacter* NewHandler);
+	void ReleaseLeash();
+	bool HasHandler() const { return Handler.IsValid(); }
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Visual;
@@ -38,6 +45,7 @@ private:
 	FVector Home = FVector::ZeroVector;
 	FVector PatrolTarget = FVector::ZeroVector;
 	TWeakObjectPtr<ABRCharacter> Target;
+	TWeakObjectPtr<ABRCharacter> Handler;
 	float NextThink = 0.f;
 	float NextBark = 0.f;
 	float NextBite = 0.f;

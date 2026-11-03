@@ -80,6 +80,18 @@ void ABRDog::PickPatrolPoint()
 	PatrolTarget = Home + FVector(Offset.X, Offset.Y, 0.f);
 }
 
+void ABRDog::SetHandler(ABRCharacter* NewHandler)
+{
+	Handler = NewHandler;
+}
+
+void ABRDog::ReleaseLeash()
+{
+	Handler = nullptr;
+	Home = GetActorLocation(); // patrols from here now
+	NextThink = 0.f; // sniff around right away
+}
+
 void ABRDog::Think()
 {
 	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
@@ -92,7 +104,7 @@ void ABRDog::Think()
 		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 		{
 			ABRCharacter* C = *It;
-			if (!C->IsRunner() || C->IsNPC() || C->GetCondition() != EPVVCondition::Normal || C->GetCurrentBoat() || C->GetCarrier())
+			if (!C->IsRunner() || C->IsNPC() || C->GetCondition() != EPVVCondition::Normal || C->GetCurrentBoat() || C->GetCarrier() || C->IsHidingInSpot())
 			{
 				continue;
 			}
@@ -132,7 +144,31 @@ void ABRDog::Tick(float DeltaSeconds)
 	}
 
 	ABRCharacter* Prey = Target.Get();
-	const FVector Goal = Prey ? Prey->GetActorLocation() : PatrolTarget;
+	FVector Goal = Prey ? Prey->GetActorLocation() : PatrolTarget;
+	// On the leash: heel next to the handler, or strain toward a Runner it smells (only as far as the leash lets it).
+	if (ABRCharacter* Boss = Handler.Get())
+	{
+		if (Boss->GetCondition() != EPVVCondition::Normal || Boss->GetCurrentBoat() || Boss->GetLeashedDog() != this)
+		{
+			Handler = nullptr; // dropped the leash
+		}
+		else
+		{
+			const FVector Heel = Boss->GetActorLocation() - Boss->GetActorForwardVector() * 120.f + Boss->GetActorRightVector() * 80.f;
+			Goal = Prey ? Prey->GetActorLocation() : Heel;
+			const FVector FromBoss = (Goal - Boss->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			if (FromBoss.Size() > LeashLength)
+			{
+				Goal = Boss->GetActorLocation() + FromBoss.GetSafeNormal() * LeashLength;
+				if (Prey)
+				{
+					// Pulling hard: drags the handler along a little.
+					Boss->AddMovementInput(FromBoss.GetSafeNormal(), 0.35f);
+				}
+			}
+			GetCharacterMovement()->MaxWalkSpeed = Prey ? ChaseSpeed : FMath::Max(PatrolSpeed, Boss->GetVelocity().Size2D() + 60.f);
+		}
+	}
 	const FVector ToGoal = (Goal - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	if (ToGoal.Size() > 60.f)
 	{
