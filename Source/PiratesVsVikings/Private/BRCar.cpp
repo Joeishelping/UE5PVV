@@ -11,6 +11,7 @@
 #include "PVVInputUtils.h"
 #include "Components/AudioComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -78,6 +79,15 @@ ABRCar::ABRCar()
 	RadioAudio->AttenuationOverrides.bSpatialize = true;
 	RadioAudio->AttenuationOverrides.AttenuationShapeExtents = FVector(500.f, 0.f, 0.f);
 	RadioAudio->AttenuationOverrides.FalloffDistance = 2500.f;
+
+	PriceTag = CreateDefaultSubobject<UTextRenderComponent>(TEXT("PriceTag"));
+	PriceTag->SetupAttachment(SeatRoot);
+	PriceTag->SetRelativeLocation(FVector(0.f, 0.f, 330.f));
+	PriceTag->SetHorizontalAlignment(EHTA_Center);
+	PriceTag->SetWorldSize(42.f);
+	PriceTag->SetTextRenderColor(FColor(120, 255, 120));
+	PriceTag->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PriceTag->SetHiddenInGame(true);
 }
 
 void ABRCar::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -86,6 +96,24 @@ void ABRCar::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimePr
 	DOREPLIFETIME(ABRCar, Fuel);
 	DOREPLIFETIME(ABRCar, RadioStation);
 	DOREPLIFETIME(ABRCar, RadioStartTime);
+	DOREPLIFETIME(ABRCar, PaintColor);
+	DOREPLIFETIME(ABRCar, bForSale);
+	DOREPLIFETIME(ABRCar, SalePrice);
+	DOREPLIFETIME(ABRCar, OwnerPlayer);
+}
+
+void ABRCar::OnRep_ForSale()
+{
+	if (PriceTag)
+	{
+		PriceTag->SetText(FText::FromString(FString::Printf(TEXT("FOR SALE\n%s  $%d"), *GetModelName().ToUpper(), SalePrice)));
+		PriceTag->SetHiddenInGame(!bForSale);
+	}
+}
+
+bool ABRCar::WantsBuy(const APVVCharacter* Interactor) const
+{
+	return bForSale && Interactor && Interactor->GetCondition() == EPVVCondition::Normal && !Interactor->GetCurrentBoat() && !Interactor->GetCarriedCharacter();
 }
 
 void ABRCar::BeginPlay()
@@ -95,6 +123,7 @@ void ABRCar::BeginPlay()
 	{
 		Fuel = 1.f;
 	}
+	OnRep_ForSale();
 
 	// Paint the greybox: hull + "Body*" parts in the paint colour, wheels black, lights yellow.
 	TArray<UStaticMeshComponent*> Meshes;
@@ -167,6 +196,17 @@ float ABRCar::GetDriveScale() const
 
 bool ABRCar::CanDrive(const APVVCharacter* Character) const
 {
+	if (bForSale)
+	{
+		return false; // buy it first
+	}
+	if (OwnerPlayer)
+	{
+		const APlayerState* PS = Character ? Character->GetPlayerState() : nullptr;
+		const ABRPlayerState* BRPS = Cast<ABRPlayerState>(PS);
+		const ABRPlayerState* OwnerBR = Cast<ABRPlayerState>(OwnerPlayer);
+		return PS == OwnerPlayer || (BRPS && OwnerBR && BRPS->GetFaction() == OwnerBR->GetFaction());
+	}
 	if (!bRequiresKey)
 	{
 		return true;
@@ -220,6 +260,10 @@ APVVCharacter* ABRCar::FindPrisonerToUnload(const APVVCharacter* Interactor) con
 
 bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
+	if (bForSale)
+	{
+		return WantsBuy(Interactor);
+	}
 	if (FindPrisonerToUnload(Interactor))
 	{
 		return true;
@@ -237,6 +281,7 @@ bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 
 float ABRCar::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
+	if (WantsBuy(Interactor)) return 1.f;
 	if (FindPrisonerToUnload(Interactor)) return 0.6f;
 	if (WantsSearch(Interactor)) return 2.5f;
 	if (WantsRefuel(Interactor)) return 2.f;
@@ -245,6 +290,10 @@ float ABRCar::GetInteractDuration_Implementation(APVVCharacter* Interactor) cons
 
 FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
+	if (WantsBuy(Interactor))
+	{
+		return FText::Format(LOCTEXT("BuyCar", "BUY this {0} - ${1} (hold)"), FText::FromString(GetModelName()), SalePrice);
+	}
 	if (const APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))
 	{
 		return FText::Format(LOCTEXT("Unload", "Take {0} out (carry them to the pen or the catapult)"), FText::FromString(Prisoner->GetPlayerDisplayName()));
@@ -275,6 +324,35 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 {
 	if (!HasAuthority() || !Interactor)
 	{
+		return;
+	}
+	if (WantsBuy(Interactor))
+	{
+		ABRPlayerState* PS = Cast<ABRPlayerState>(Interactor->GetPVVPlayerState());
+		ABRCharacter* Buyer = Cast<ABRCharacter>(Interactor);
+		if (!PS || PS->Money < SalePrice)
+		{
+			if (Buyer)
+			{
+				Buyer->Notify(FText::Format(LOCTEXT("CarBroke", "You need ${0} for this one."), SalePrice));
+			}
+			return;
+		}
+		PS->AddMoney(-SalePrice);
+		bForSale = false;
+		OwnerPlayer = PS;
+		Fuel = 1.f;
+		OnRep_ForSale();
+		ForceNetUpdate();
+		ABRGameState::Sfx(this, EBRSfx::Buy, GetActorLocation());
+		if (Buyer)
+		{
+			Buyer->Notify(FText::Format(LOCTEXT("CarBought", "SOLD! The {0} is yours (your team can drive it too). Full tank."), FText::FromString(GetModelName())));
+		}
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->Feed(FString::Printf(TEXT("%s bought a %s"), *Interactor->GetPlayerDisplayName(), *GetModelName()));
+		}
 		return;
 	}
 	if (APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))
@@ -592,6 +670,18 @@ ABRTruck::ABRTruck()
 	WheelPart(TEXT("Wheel_SteeringRim"), CylMesh, FVector(42.f, 42.f, 4.f), FRotator(90.f, 0.f, 0.f));
 	WheelPart(TEXT("Trim_SteeringSpoke"), CubeMesh, FVector(3.f, 40.f, 5.f), FRotator::ZeroRotator);
 
+	// Extra body parts for the other car models (hidden on the pickup - see ApplyModel).
+	Part(TEXT("Body_VanBox"), CubeMesh, FVector(-140.f, 0.f, 140.f), FVector(250.f, 218.f, 210.f));
+	Part(TEXT("Body_VanRoof"), CubeMesh, FVector(65.f, 0.f, 240.f), FVector(185.f, 218.f, 12.f));
+	Part(TEXT("Body_Trunk"), CubeMesh, FVector(-185.f, 0.f, 70.f), FVector(150.f, 212.f, 50.f));
+	Part(TEXT("Body_RearRoof"), CubeMesh, FVector(-60.f, 0.f, 238.f), FVector(90.f, 215.f, 8.f));
+	Part(TEXT("Body_RearPillarL"), CubeMesh, FVector(-105.f, -102.f, 170.f), FVector(8.f, 8.f, 130.f));
+	Part(TEXT("Body_RearPillarR"), CubeMesh, FVector(-105.f, 102.f, 170.f), FVector(8.f, 8.f, 130.f));
+	Part(TEXT("Trim_Spoiler"), CubeMesh, FVector(-245.f, 0.f, 130.f), FVector(30.f, 210.f, 6.f));
+	Part(TEXT("Trim_SpoilerPostL"), CubeMesh, FVector(-245.f, -80.f, 108.f), FVector(6.f, 6.f, 40.f));
+	Part(TEXT("Trim_SpoilerPostR"), CubeMesh, FVector(-245.f, 80.f, 108.f), FVector(6.f, 6.f, 40.f));
+	Part(TEXT("Trim_HoodScoop"), CubeMesh, FVector(200.f, 0.f, 85.f), FVector(60.f, 50.f, 14.f));
+
 	// Headlights (night driving - and they make you easy to spot).
 	USpotLightComponent* Beam = CreateDefaultSubobject<USpotLightComponent>(TEXT("Headlights"));
 	Beam->SetupAttachment(SeatRoot);
@@ -602,6 +692,96 @@ ABRTruck::ABRTruck()
 	Beam->SetInnerConeAngle(15.f);
 	Beam->SetCastShadows(false);
 	Beam->SetMobility(EComponentMobility::Movable);
+}
+
+void ABRTruck::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRTruck, Model);
+}
+
+FString ABRTruck::GetModelName() const
+{
+	switch (Model)
+	{
+	case EBRCarModel::Sedan: return TEXT("Sedan");
+	case EBRCarModel::Lowrider: return TEXT("Lowrider");
+	case EBRCarModel::Van: return TEXT("Van");
+	default: return TEXT("Pickup Truck");
+	}
+}
+
+void ABRTruck::BeginPlay()
+{
+	ApplyModel(); // seats must be set before the boat code sizes the seat list
+	Super::BeginPlay();
+}
+
+void ABRTruck::ApplyModel()
+{
+	const bool bVan = Model == EBRCarModel::Van;
+	const bool bSedan = Model == EBRCarModel::Sedan;
+	const bool bLow = Model == EBRCarModel::Lowrider;
+	auto Show = [this](const TCHAR* Name, bool bOn)
+	{
+		TArray<UStaticMeshComponent*> Meshes;
+		GetComponents<UStaticMeshComponent>(Meshes);
+		for (UStaticMeshComponent* M : Meshes)
+		{
+			if (M->GetName() == Name)
+			{
+				M->SetVisibility(bOn);
+			}
+		}
+	};
+	Show(TEXT("Body_VanBox"), bVan);
+	Show(TEXT("Body_VanRoof"), bVan);
+	Show(TEXT("Body_Roof"), !bVan);
+	Show(TEXT("Body_Trunk"), bSedan || bLow);
+	Show(TEXT("Body_RearRoof"), bSedan);
+	Show(TEXT("Body_RearPillarL"), bSedan);
+	Show(TEXT("Body_RearPillarR"), bSedan);
+	Show(TEXT("Body_CabBack"), !bSedan);
+	Show(TEXT("Trim_Spoiler"), bLow);
+	Show(TEXT("Trim_SpoilerPostL"), bLow);
+	Show(TEXT("Trim_SpoilerPostR"), bLow);
+	Show(TEXT("Trim_HoodScoop"), bLow);
+	for (const TCHAR* Bed : { TEXT("Body_BedL"), TEXT("Body_BedR"), TEXT("Body_Tailgate") })
+	{
+		Show(Bed, Model == EBRCarModel::Pickup);
+	}
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// Seats + handling.
+	const ABRTruck* Defaults = GetClass()->GetDefaultObject<ABRTruck>();
+	ForwardAcceleration = Defaults->ForwardAcceleration;
+	MassKg = Defaults->MassKg;
+	RideHeight = Defaults->RideHeight;
+	switch (Model)
+	{
+	case EBRCarModel::Sedan:
+		SeatOffsets = { FVector(80.f, -50.f, 125.f), FVector(80.f, 50.f, 125.f), FVector(-70.f, -50.f, 125.f), FVector(-70.f, 50.f, 125.f) };
+		ForwardAcceleration *= 1.15f;
+		MassKg *= 0.85f;
+		break;
+	case EBRCarModel::Lowrider:
+		SeatOffsets = { FVector(80.f, -50.f, 115.f), FVector(80.f, 50.f, 115.f) };
+		ForwardAcceleration *= 1.5f; // FAST
+		MassKg *= 0.8f;
+		RideHeight *= 0.75f;
+		break;
+	case EBRCarModel::Van:
+		// Six seats - the four in the back are inside the box where nobody can see you.
+		SeatOffsets = { FVector(80.f, -50.f, 125.f), FVector(80.f, 50.f, 125.f), FVector(-70.f, -50.f, 125.f), FVector(-70.f, 50.f, 125.f),
+			FVector(-190.f, -50.f, 125.f), FVector(-190.f, 50.f, 125.f) };
+		ForwardAcceleration *= 0.8f;
+		MassKg *= 1.3f;
+		break;
+	default:
+		break; // pickup: the constructor's 4 seats
+	}
 }
 
 void ABRTruck::StartNPCRoute(const TArray<FVector>& InRoute, int32 InCheckpointIndex, AActor* InGate)

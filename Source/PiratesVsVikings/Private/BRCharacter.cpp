@@ -185,6 +185,11 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bHanging);
 	DOREPLIFETIME(ABRCharacter, bLastClimbLeft);
 	DOREPLIFETIME(ABRCharacter, ClimbNormal);
+	DOREPLIFETIME(ABRCharacter, bPeaceful);
+	DOREPLIFETIME(ABRCharacter, TipsyUntil);
+	DOREPLIFETIME_CONDITION(ABRCharacter, bChugging, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ABRCharacter, ChugMine, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ABRCharacter, ChugRival, COND_OwnerOnly);
 }
 
 void ABRCharacter::StartBrawling(ABRCharacter* Target, float Seconds, float Aggression)
@@ -818,6 +823,12 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		{
 			const FVector ToFoe = (Foe->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 			GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
+			if (MugTarget.Get() == Foe && ToFoe.Size() < 170.f)
+			{
+				MugTarget = nullptr;
+				MugPlayer(Foe); // shove, grab, go
+				return;
+			}
 			if (ToFoe.Size() > 130.f)
 			{
 				AddMovementInput(ToFoe.GetSafeNormal(), 1.f);
@@ -1337,6 +1348,11 @@ void ABRCharacter::PlayTrumpet()
 	Notify(Dancers > 0
 		? FText::Format(LOCTEXT("TrumpetHit", "AY AY AY! {0} Border Patrol dancing - RUN!"), Dancers)
 		: LOCTEXT("TrumpetMiss", "Beautiful solo. Nobody was close enough to dance."));
+}
+
+void ABRCharacter::Multicast_TrumpetPose_Implementation()
+{
+	PlayOneShot(TrumpetAnim);
 }
 
 void ABRCharacter::Multicast_Trumpet_Implementation()
@@ -2009,21 +2025,40 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	{
 		Notify(LOCTEXT("ScanWarden", "SCAN: that's a fellow agent."));
 	}
-	else if (!Target->IsNPC() && !Target->IsDisguised() && !Target->IsHiddenFromPatrol())
+	else if (Target->IsHiddenFromPatrol())
 	{
+		Notify(LOCTEXT("ScanNothing3", "SCAN: nobody there."));
+	}
+	else if ((!Target->IsNPC() && Target->IsRunner()) || Target->bIllegal || Target->bCarriesContraband
+		|| (Target->GetBRPlayerState() && Target->GetBRPlayerState()->Inventory.ContainsByPredicate([](EBRItem I) { return BR::IsIllegal(I); })))
+	{
+		// Players and NPCs read the SAME: "no papers" - the scanner never says who's a player.
+		const bool bNoPapers = (!Target->IsNPC() && Target->IsRunner()) || Target->bIllegal;
+		TArray<FString> Found;
+		if (Target->bCarriesContraband)
+		{
+			Found.AddUnique(BR::ItemName(Target->ContrabandItem));
+		}
+		if (const ABRPlayerState* TPS = Target->GetBRPlayerState())
+		{
+			for (const EBRItem I : TPS->Inventory)
+			{
+				if (BR::IsIllegal(I))
+				{
+					Found.AddUnique(BR::ItemName(I));
+				}
+			}
+		}
+		FString Line = bNoPapers ? TEXT("SCAN: NO PAPERS - ILLEGAL!") : TEXT("SCAN: papers OK...");
+		if (Found.Num() > 0)
+		{
+			Line += TEXT("  CONTRABAND: ") + FString::Join(Found, TEXT(", ")).ToUpper();
+		}
+		Line += TEXT("  (tagged - order them out / zip-tie them)");
 		Target->Spot(8.f);
 		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
-		Notify(LOCTEXT("ScanRunner", "SCAN: RUNNER! (tagged) - order them out / zip-tie them!"));
-	}
-	else if (Target->bIllegal)
-	{
-		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
-		Notify(LOCTEXT("ScanIllegal", "SCAN: NO PAPERS! Order them out of the truck and arrest them."));
-	}
-	else if (Target->bCarriesContraband)
-	{
-		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
-		Notify(LOCTEXT("ScanContraband", "SCAN: CONTRABAND! Order them out of the truck to seize it."));
+		ABRGameState::FX(this, EBRFX::PointsText, Target->GetActorLocation() + FVector(0.f, 0.f, 130.f), bNoPapers ? TEXT("ILLEGAL") : TEXT("CONTRABAND"));
+		Notify(FText::FromString(Line));
 	}
 	else
 	{
@@ -2170,7 +2205,7 @@ void ABRCharacter::TickWobble()
 		AppliedReachMuscles = 0xFF; // re-loosen any reaching arm
 	}
 	// Getting beaten up makes you woozy: weaker muscles, floppier body (Gang Beasts).
-	const float WantDizzy = GetCondition() == EPVVCondition::Normal ? FMath::Lerp(0.3f, 1.f, GetBalanceFraction()) : 1.f;
+	const float WantDizzy = GetCondition() == EPVVCondition::Normal ? FMath::Lerp(0.3f, 1.f, GetBalanceFraction()) * (IsTipsy() ? 0.55f : 1.f) : 1.f;
 	if (FMath::Abs(WantDizzy - DizzyScale) > 0.08f && PunchArmRestoreAt < 0.f)
 	{
 		DizzyScale = WantDizzy;
@@ -2181,7 +2216,7 @@ void ABRCharacter::TickWobble()
 	if (Now >= NextSwayTime && GetCondition() == EPVVCondition::Normal && !bAiming && !IsDriving())
 	{
 		NextSwayTime = Now + FMath::FRandRange(0.5f, 1.4f);
-		const float Woozy = 1.f + (Hunger < WeakHunger ? 1.5f : 0.f) + (1.f - GetBalanceFraction()) * 2.f;
+		const float Woozy = 1.f + (Hunger < WeakHunger ? 1.5f : 0.f) + (1.f - GetBalanceFraction()) * 2.f + (IsTipsy() ? 2.5f : 0.f);
 		const FVector Shove = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f) * SwayStrength * Woozy;
 		GetMesh()->AddImpulseToAllBodiesBelow(Shove, TEXT("spine_02"), true, true);
 	}
@@ -2250,6 +2285,23 @@ void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 	if (HasAuthority())
 	{
 		BlowDisguise();
+		// Hit an NPC and they fight you back (Gang Beasts style). Starting fights is trouble.
+		ABRCharacter* BRAttacker = Cast<ABRCharacter>(Attacker);
+		if (bIsNPC && !bNoFightBack && !bPeaceful && BRAttacker && BRAttacker != this && GetCondition() == EPVVCondition::Normal)
+		{
+			if (!IsBrawling() || FMath::FRand() < 0.3f)
+			{
+				StartBrawling(BRAttacker, 25.f, FMath::FRandRange(0.55f, 0.9f));
+			}
+			if (!BRAttacker->IsNPC() && LastHitBy.Get() != Attacker)
+			{
+				LastHitBy = Attacker;
+				if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+				{
+					GM->AddTrouble(BRAttacker, 1);
+				}
+			}
+		}
 	}
 	if (IsLocallyControlled())
 	{
@@ -2660,6 +2712,11 @@ bool ABRCharacter::HandleJumpPressed()
 	if (GetCondition() == EPVVCondition::KnockedDown)
 	{
 		Server_Mash(); // mash Space to wake up
+		return true;
+	}
+	if (bChugging)
+	{
+		Server_Chug(); // drinking contest: mash Space to chug
 		return true;
 	}
 	if (GrabbedBy)
@@ -3981,7 +4038,7 @@ void ABRCharacter::TickClimb(float DeltaSeconds)
 void ABRCharacter::TickHands(float DeltaSeconds)
 {
 	USkeletalMeshComponent* Body = GetMesh();
-	if (!Body || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon || bOnShoulders
+	if (!Body || bPeaceful || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon || bOnShoulders
 		|| Body->GetBoneIndex(TEXT("hand_l")) == INDEX_NONE || DeltaSeconds <= 0.f)
 	{
 		bHandsTracked = false;
@@ -4019,7 +4076,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 		{
 			APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
 			if (!Victim || Victim == this || Victim == GetCarriedCharacter() || Victim->GetCarrier() || Victim->GetCondition() != EPVVCondition::Normal
-				|| Victim == HandGrabTarget.Get())
+				|| Victim == HandGrabTarget.Get() || (Cast<ABRCharacter>(Victim) && Cast<ABRCharacter>(Victim)->bPeaceful))
 			{
 				continue; // (the person you're holding gets hit by your punches instead - see HandlePunchHit)
 			}
@@ -4152,7 +4209,77 @@ void ABRCharacter::KnockOffHat()
 
 float ABRCharacter::GetDamageTakenMultiplier() const
 {
-	return WornHat == EBRHat::HardHat ? 0.6f : 1.f;
+	return (WornHat == EBRHat::HardHat ? 0.6f : 1.f) * (IsTipsy() ? 0.7f : 1.f); // liquid courage
+}
+
+bool ABRCharacter::IsTipsy() const
+{
+	const ABRGameState* GS = GetBRGameState();
+	return GS && TipsyUntil > GS->GetServerWorldTimeSeconds();
+}
+
+void ABRCharacter::MakeTipsy(float Seconds)
+{
+	const ABRGameState* GS = GetBRGameState();
+	if (!HasAuthority() || !GS)
+	{
+		return;
+	}
+	TipsyUntil = FMath::Max(TipsyUntil, GS->GetServerWorldTimeSeconds()) + Seconds;
+	ForceNetUpdate();
+}
+
+void ABRCharacter::Server_Chug_Implementation()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!bChugging || Now - LastChugTime < 0.06f)
+	{
+		return;
+	}
+	LastChugTime = Now;
+	ChugMine = FMath::Min(1.f, ChugMine + 0.028f);
+}
+
+bool ABRCharacter::MugPlayer(ABRCharacter* Victim)
+{
+	ABRPlayerState* VPS = Victim ? Victim->GetBRPlayerState() : nullptr;
+	if (!HasAuthority() || !bIsNPC || !VPS || Victim->GetCondition() != EPVVCondition::Normal || StolenItem != EBRItem::None)
+	{
+		return false;
+	}
+	TArray<int32> Slots;
+	for (int32 i = 0; i < VPS->Inventory.Num(); ++i)
+	{
+		if (VPS->Inventory[i] != EBRItem::None)
+		{
+			Slots.Add(i);
+		}
+	}
+	if (Slots.Num() == 0)
+	{
+		return false;
+	}
+	EBRItem Taken = EBRItem::None;
+	if (!VPS->RemoveItemAt(Slots[FMath::RandRange(0, Slots.Num() - 1)], Taken) || Taken == EBRItem::None)
+	{
+		return false;
+	}
+	StolenItem = Taken;
+	StolenFrom = VPS;
+	SetNPCHeldItem(Taken);
+	// Shove them over and leg it (or stand and fight).
+	SetActorRotation(FRotator(0.f, (Victim->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
+	Victim->ApplyKnockdown(this, GetActorForwardVector() * 350.f + FVector(0.f, 0.f, 200.f));
+	if (FMath::FRand() < 0.5f)
+	{
+		StartFleeing(40.f);
+	}
+	else
+	{
+		StartBrawling(Victim, 40.f, 0.75f);
+	}
+	Victim->Notify(FText::Format(LOCTEXT("Mugged", "A local MUGGED you and took your {0}! Beat them up to get it back."), FText::FromString(BR::ItemName(Taken))));
+	return true;
 }
 
 void ABRCharacter::Server_SelectSlot_Implementation(int32 Slot)
@@ -4432,6 +4559,7 @@ void ABRCharacter::MakeLuchador(const FString& RingName, float Toughness)
 		return;
 	}
 	LuchaName = RingName;
+	bNoFightBack = true; // the ring runs the fight
 	SetCombatStats(100.f * Toughness, 25.f * (0.8f + 0.25f * Toughness));
 	BaseAttackDamage = -1.f; // re-read the new damage next time it holds something
 	SetHat(EBRHat::LuchaMask);

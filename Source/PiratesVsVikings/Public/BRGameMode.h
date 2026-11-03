@@ -42,6 +42,18 @@ public:
 	virtual void NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause) override;
 	/** Kill-feed line on everyone's screen. */
 	void Feed(const FString& Line);
+	/** Server: someone started trouble (punched a local, kicked off a bar fight). Too much = a bounty on them. */
+	void AddTrouble(class ABRCharacter* Who, int32 Amount);
+	/** Server: cash / an item on the ground (ReservedFor = only that player can pick it up). */
+	void DropCash(const FVector& At, int32 Amount, APlayerState* ReservedFor = nullptr);
+	void DropItem(const FVector& At, EBRItem Item, APlayerState* ReservedFor = nullptr);
+	/** Trouble points before a Runner gets a bounty for being a menace. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") int32 TroubleForBounty = 6;
+	/** Chance an NPC carries a fat wad of cash (knock them out to get it). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") float LootWadChance = 0.05f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") int32 LootWadAmount = 200;
+	/** Roughly how many seconds between locals mugging someone in town. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") float MuggingEverySeconds = 150.f;
 	/** Server: a Runner takes on a smuggling client (an NPC who follows them; paid on arrival in the Safe Zone). */
 	void HireClient(class ABRCharacter* Runner, const FVector& At, int32 Pay);
 	/** Server: Border Patrol seized contraband. */
@@ -62,6 +74,8 @@ public:
 
 	/** Server: spawn a luchador for a ring fight (your Luchador Class, or the NPC class). */
 	class ABRCharacter* SpawnLuchador(const FTransform& Where, UClass* LuchadorClass);
+	/** Server: spawn one ordinary NPC (random look). */
+	class ABRCharacter* SpawnNPC(const FTransform& Where);
 
 	// --- Bots ------------------------------------------------------------------------------
 	/** Server: add a computer player to this team (None = whichever team is smaller). */
@@ -181,6 +195,8 @@ private:
 	void TickBots();
 	void TickLobby(class ABRGameState* GS);
 	void TickBounty(class ABRGameState* GS);
+	void TickTownLife(class ABRGameState* GS);
+	TMap<TWeakObjectPtr<class ABRCharacter>, float> WardenInTown;
 	UPROPERTY() TObjectPtr<ABRDesertArena> Arena;
 
 	FTimerHandle TickTimer;
@@ -202,7 +218,6 @@ private:
 	void TickClients();
 	bool bWarnedNoRoad = false;
 	UClass* GetNPCClass() const;
-	class ABRCharacter* SpawnNPC(const FTransform& Where);
 	void SendHomeLater(APVVCharacter* Character, float Seconds);
 	FString NameOf(const APVVCharacter* Character) const;
 };

@@ -97,6 +97,12 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> RequisitionSound;
 	/** A vehicle smashes through the checkpoint barrier (crunch / wood splintering). */
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> GateSmashSound;
+	/** Cantina: saloon piano / music that loops inside. */
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> CantinaMusic;
+	/** Cantina: a bar fight kicks off (bell, crowd roar, glass smash). */
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> BarFightSound;
+	/** Cantina: buying a drink (glug glug, "salud!"). */
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> DrinkSound;
 
 	USoundBase* GetSound(EBRSfx Sfx) const;
 

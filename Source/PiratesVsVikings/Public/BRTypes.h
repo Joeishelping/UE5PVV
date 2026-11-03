@@ -76,6 +76,16 @@ enum class EBRStationKind : uint8
 	WardenSupply	// Border Patrol only: buy gear with the government budget (pick Warden Gear, or an Item)
 };
 
+/** Body style of a car (test-map greybox trucks). */
+UENUM(BlueprintType)
+enum class EBRCarModel : uint8
+{
+	Pickup		UMETA(DisplayName = "Pickup Truck"),
+	Sedan,
+	Lowrider	UMETA(DisplayName = "Lowrider (fast, 2 seats)"),
+	Van			UMETA(DisplayName = "Van (6 seats, hidden back)")
+};
+
 /** Look of a hiding spot. */
 UENUM(BlueprintType)
 enum class EBRHideStyle : uint8

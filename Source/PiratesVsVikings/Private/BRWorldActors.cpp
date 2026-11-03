@@ -2170,45 +2170,71 @@ void ABRChicken::Tick(float DeltaSeconds)
 	{
 		return;
 	}
-	const FVector Vel = Mesh->GetPhysicsLinearVelocity();
-	if (Vel.Size() < 40.f)
+	// Keep it on its feet: no rolling around like a ball (thrown chickens still fly).
+	if (FBodyInstance* Body = Mesh->GetBodyInstance(); Body && !Body->bLockXRotation)
 	{
-		// Landed: stand back up.
-		const FRotator Rot = GetActorRotation();
-		if (FMath::Abs(Rot.Pitch) > 5.f || FMath::Abs(Rot.Roll) > 5.f)
-		{
-			SetActorRotation(FRotator(0.f, Rot.Yaw, 0.f), ETeleportType::TeleportPhysics);
-			Mesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
-		}
+		Body->bLockXRotation = true;
+		Body->bLockYRotation = true;
+		Body->SetDOFLock(EDOFMode::SixDOF);
 	}
-	NextHop -= DeltaSeconds;
-	if (NextHop > 0.f || Vel.Size() > 60.f)
+	const FVector Vel = Mesh->GetPhysicsLinearVelocity();
+	const FRotator Rot = GetActorRotation();
+	if (!bPecking && (FMath::Abs(Rot.Pitch) > 10.f || FMath::Abs(Rot.Roll) > 10.f))
+	{
+		SetActorRotation(FRotator(0.f, Rot.Yaw, 0.f), ETeleportType::TeleportPhysics);
+		Mesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+	}
+	// In the air (thrown / hopping): let physics do its thing.
+	if (FMath::Abs(Vel.Z) > 120.f)
 	{
 		return;
 	}
-	NextHop = FMath::FRandRange(1.2f, 3.5f);
-	FVector Dir = FMath::VRand() * FVector(1.f, 1.f, 0.f);
-	const FVector ToHome = (Home - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
-	if (ToHome.Size() > WanderRadius)
-	{
-		Dir = ToHome; // head back to the yard
-	}
-	Dir = Dir.GetSafeNormal();
-	// Run away from people nearby.
+	const float Now = GetWorld()->GetTimeSeconds();
+	// Somebody close? RUN (and flap).
+	bool bScared = false;
 	for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
 	{
 		const FVector Away = (GetActorLocation() - It->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
-		if (Away.Size() < 250.f)
+		if (Away.Size() < 320.f)
 		{
-			Dir = Away.GetSafeNormal();
+			Heading = Away.GetSafeNormal();
+			bScared = true;
 			break;
 		}
 	}
-	SetActorRotation(FRotator(0.f, Dir.Rotation().Yaw, 0.f), ETeleportType::TeleportPhysics);
-	Mesh->SetPhysicsLinearVelocity(Dir * FMath::FRandRange(150.f, 260.f) + FVector(0.f, 0.f, 230.f));
-	if (FMath::FRand() < 0.35f)
+	NextHop -= DeltaSeconds;
+	if (!bScared && NextHop <= 0.f)
 	{
-		Multicast_Cluck();
+		// Pick something new to do: wander somewhere, or stop and peck.
+		NextHop = FMath::FRandRange(1.f, 3.f);
+		bPecking = FMath::FRand() < 0.35f;
+		FVector Dir = FMath::VRand() * FVector(1.f, 1.f, 0.f);
+		const FVector ToHome = (Home - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+		if (ToHome.Size() > WanderRadius)
+		{
+			Dir = ToHome; // head back to the yard
+		}
+		Heading = Dir.GetSafeNormal();
+		if (FMath::FRand() < 0.3f)
+		{
+			Multicast_Cluck();
+		}
+	}
+	const float Speed = bScared ? 380.f : (bPecking ? 0.f : 110.f);
+	if (!Heading.IsNearlyZero())
+	{
+		const float Yaw = FMath::FixedTurn(Rot.Yaw, Heading.Rotation().Yaw, 540.f * DeltaSeconds);
+		SetActorRotation(FRotator(0.f, Yaw, 0.f), ETeleportType::TeleportPhysics);
+	}
+	FVector Walk = Heading * Speed;
+	// Little steps: a tiny bob up and down as it walks (and a flappy hop when scared).
+	Walk.Z = Speed > 0.f && FMath::Fmod(Now * (bScared ? 7.f : 4.f), 1.f) < 0.12f ? (bScared ? 220.f : 80.f) : Vel.Z;
+	Mesh->SetPhysicsLinearVelocity(Walk);
+	if (bPecking)
+	{
+		// Peck the ground.
+		const float Peck = FMath::Max(0.f, FMath::Sin(Now * 9.f)) * 25.f;
+		SetActorRotation(FRotator(-Peck, GetActorRotation().Yaw, 0.f), ETeleportType::TeleportPhysics);
 	}
 }
 
@@ -2377,6 +2403,7 @@ void ABRItemPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ABRItemPickup, Item);
 	DOREPLIFETIME(ABRItemPickup, Charges);
+	DOREPLIFETIME(ABRItemPickup, ReservedFor);
 }
 
 void ABRItemPickup::BeginPlay()
@@ -2393,6 +2420,11 @@ void ABRItemPickup::BeginPlay()
 
 bool ABRItemPickup::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
+	if (ReservedFor)
+	{
+		const ABRPlayerState* Claimer = BRState(Interactor);
+		return Claimer && Claimer == ReservedFor && Interactor->GetCondition() == EPVVCondition::Normal && Claimer->HasFreeSlot();
+	}
 	if (IsFreeWarden(Interactor))
 	{
 		return BR::IsIllegal(Item); // confiscate
@@ -2403,6 +2435,10 @@ bool ABRItemPickup::CanInteract_Implementation(APVVCharacter* Interactor) const
 
 FText ABRItemPickup::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
+	if (ReservedFor)
+	{
+		return FText::Format(LOCTEXT("GetBack", "Get your {0} back!"), FText::FromString(BR::ItemName(Item)));
+	}
 	if (Interactor && Interactor->GetFaction() == BR::Wardens)
 	{
 		return FText::Format(LOCTEXT("Confiscate", "Confiscate the {0}"), FText::FromString(BR::ItemName(Item)));
@@ -2416,7 +2452,7 @@ void ABRItemPickup::OnInteract_Implementation(APVVCharacter* Interactor)
 	{
 		return;
 	}
-	if (Interactor->GetFaction() == BR::Wardens)
+	if (Interactor->GetFaction() == BR::Wardens && !ReservedFor)
 	{
 		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 		{
@@ -2528,6 +2564,7 @@ void ABRCashPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(ABRCashPickup, Amount);
 	DOREPLIFETIME(ABRCashPickup, DropperName);
 	DOREPLIFETIME(ABRCashPickup, DropperTeam);
+	DOREPLIFETIME(ABRCashPickup, ReservedFor);
 }
 
 void ABRCashPickup::BeginPlay()
@@ -2553,12 +2590,24 @@ void ABRCashPickup::Tick(float DeltaSeconds)
 bool ABRCashPickup::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
 	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	if (ReservedFor && BRState(Interactor) != ReservedFor)
+	{
+		return false; // somebody else's winnings
+	}
 	return BRC && !BRC->IsNPC() && Interactor->GetCondition() == EPVVCondition::Normal && Amount > 0;
 }
 
 FText ABRCashPickup::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
 	const ABRPlayerState* PS = BRState(Interactor);
+	if (ReservedFor)
+	{
+		return FText::Format(LOCTEXT("Winnings", "Grab your ${0}!"), Amount);
+	}
+	if (DropperName.IsEmpty())
+	{
+		return FText::Format(LOCTEXT("FoundCash", "Pick up ${0}"), Amount);
+	}
 	if (PS && PS->GetPlayerName() == DropperName)
 	{
 		return FText::Format(LOCTEXT("TakeBack", "Pick your ${0} back up"), Amount);
@@ -3878,6 +3927,8 @@ void ABRMariachiBand::BeginPlay()
 			{
 				Player->SetHat(EBRHat::Sombrero);
 				Player->SetNPCHeldItem(EBRItem::Trumpet);
+				Player->bPeaceful = true;	// flailing arms never knock bandmates over
+				Player->bNoFightBack = true;
 				Player->ForceDance(100000.f);
 				Musicians.Add(Player);
 			}
@@ -3990,7 +4041,15 @@ void ABRMariachiBand::PlayNote(ABRCharacter* Who)
 	const float Into = FMath::Fmod(FMath::Max(0.f, T), BeatLen);
 	const float Off = FMath::Min(Into, BeatLen - Into);
 	const bool bGood = Off <= BeatWindow;
-	Who->PlayBandNote();
+	// ONE trumpet sound per note: the band's note sound if set, otherwise your trumpet.
+	if (NoteSounds.Num() > 0 || !bGood)
+	{
+		Who->PlayBandNoteSilent();
+	}
+	else
+	{
+		Who->PlayBandNote();
+	}
 	Multicast_Note(Who->GetActorLocation() + FVector(0.f, 0.f, 120.f), bGood);
 	if (!bGood)
 	{
@@ -4062,12 +4121,24 @@ void ABRMariachiBand::Tick(float DeltaSeconds)
 	}
 	// The band toots along.
 	const float Now = GetWorld()->GetTimeSeconds();
+	// The band toots along - but only ONE trumpet at a time, and it goes quiet while a player is soloing.
 	if (Now >= NextMusicianNote && Musicians.Num() > 0)
 	{
 		NextMusicianNote = Now + 60.f / FMath::Max(30.f, BeatsPerMinute) * 2.f;
-		if (ABRCharacter* Player = Musicians[FMath::RandRange(0, Musicians.Num() - 1)].Get())
+		const int32 Lead = FMath::RandRange(0, Musicians.Num() - 1);
+		for (int32 i = 0; i < Musicians.Num(); ++i)
 		{
-			Player->PlayBandNote();
+			if (ABRCharacter* Player = Musicians[i].Get())
+			{
+				if (i == Lead && Performers.Num() == 0)
+				{
+					Player->PlayBandNote();
+				}
+				else
+				{
+					Player->PlayBandNoteSilent(); // the others just mime along
+				}
+			}
 		}
 	}
 }

@@ -501,6 +501,8 @@ public:
 protected:
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_Cluck();
 	FVector Home = FVector::ZeroVector;
+	FVector Heading = FVector::ZeroVector;
+	bool bPecking = false;
 	float NextHop = 0.f;
 };
 
@@ -563,6 +565,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Pickup") EBRItem Item = EBRItem::Taco;
 	/** Wire cutter cuts left. */
 	UPROPERTY(Replicated) int32 Charges = 0;
+	/** Only this player can pick it up (e.g. the stuff a thief stole from them). */
+	UPROPERTY(Replicated) TObjectPtr<APlayerState> ReservedFor;
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Tag;
@@ -617,6 +621,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Cash") float DespawnSeconds = 60.f;
 	UPROPERTY(Replicated) FString DropperName;
 	UPROPERTY(Replicated) EPVVFaction DropperTeam = EPVVFaction::None;
+	/** Only this player can pick it up (bar-fight winnings). */
+	UPROPERTY(Replicated) TObjectPtr<APlayerState> ReservedFor;
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> Tag;

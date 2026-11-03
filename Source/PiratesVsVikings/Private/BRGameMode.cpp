@@ -177,6 +177,7 @@ void ABRGameMode::TickBR()
 	TickRunners(GS);
 	TickClients();
 	TickBots();
+	TickTownLife(GS);
 	if (GS->Phase == EBRPhase::Invasion)
 	{
 		TickBounty(GS);
@@ -669,11 +670,15 @@ void ABRGameMode::SpawnNPCTruck()
 	{
 		return;
 	}
-	const FLinearColor Paints[] = { {0.8f, 0.8f, 0.75f}, {0.2f, 0.35f, 0.6f}, {0.35f, 0.5f, 0.2f}, {0.6f, 0.55f, 0.1f}, {0.3f, 0.3f, 0.3f} };
+	const FLinearColor Paints[] = { {0.8f, 0.8f, 0.75f}, {0.2f, 0.35f, 0.6f}, {0.35f, 0.5f, 0.2f}, {0.6f, 0.55f, 0.1f}, {0.3f, 0.3f, 0.3f},
+		{0.7f, 0.1f, 0.1f}, {0.1f, 0.1f, 0.12f}, {0.9f, 0.5f, 0.1f}, {0.5f, 0.2f, 0.6f}, {0.1f, 0.5f, 0.5f} };
 	if (TruckClass == ABRTruck::StaticClass())
 	{
 		Truck->PaintColor = Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Paints)) - 1)];
 	}
+	// Same car models the players can buy, so you can't tell who's a player by the car.
+	const float ModelRoll = FMath::FRand();
+	Truck->Model = ModelRoll < 0.35f ? EBRCarModel::Pickup : ModelRoll < 0.65f ? EBRCarModel::Sedan : ModelRoll < 0.8f ? EBRCarModel::Lowrider : EBRCarModel::Van;
 	Truck->bRequiresKey = true;	// players can hide in the back but can't steal it
 	Truck->bInfiniteFuel = true;
 	Truck->FinishSpawning(Spawn);
@@ -688,6 +693,7 @@ void ABRGameMode::SpawnNPCTruck()
 		{
 			NPC->bIllegal = FMath::FRand() < IllegalNPCChance;
 			NPC->bCarriesContraband = FMath::FRand() < ContrabandNPCChance;
+			NPC->ContrabandItem = FMath::FRand() < 0.7f ? EBRItem::Drugs : EBRItem::IllegalGun;
 			Truck->AddNPC(NPC);
 		}
 	}
@@ -723,6 +729,7 @@ ABRCharacter* ABRGameMode::SpawnNPC(const FTransform& Where)
 	}
 	NPC->AutoPossessAI = EAutoPossessAI::Disabled;
 	NPC->InitAsNPC(NPCSkinToneMin, NPCSkinToneMax);
+	NPC->bLootWad = FMath::FRand() < LootWadChance;
 	NPC->FinishSpawning(Where);
 	if (FMath::FRand() < NPCPonchoChance)
 	{
@@ -801,6 +808,36 @@ void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
 		}
 	}
 	APVVCharacter* By = Cast<APVVCharacter>(Cause);
+	ABRCharacter* NPCVictim = Cast<ABRCharacter>(Victim);
+	if (NPCVictim && NPCVictim->IsNPC())
+	{
+		const FVector Floor = Victim->GetActorLocation() - FVector(0.f, 0.f, 85.f);
+		// A thief drops what they stole (only the person they robbed can pick it up).
+		if (NPCVictim->StolenItem != EBRItem::None)
+		{
+			DropItem(Floor + FVector(60.f, 0.f, 0.f), NPCVictim->StolenItem, NPCVictim->StolenFrom.Get());
+			NPCVictim->StolenItem = EBRItem::None;
+			NPCVictim->SetNPCHeldItem(EBRItem::None);
+		}
+		// Knocked out by a player: they drop something (once).
+		const ABRCharacter* BRBy = Cast<ABRCharacter>(By);
+		if (BRBy && !BRBy->IsNPC() && !NPCVictim->bLootDropped && !NPCVictim->bNoFightBack && !NPCVictim->bPeaceful)
+		{
+			NPCVictim->bLootDropped = true;
+			if (NPCVictim->bLootWad)
+			{
+				DropCash(Floor, LootWadAmount);
+				Feed(FString::Printf(TEXT("%s knocked out a local carrying a FAT WAD of cash!"), *NameOf(By)));
+			}
+			else
+			{
+				const float Roll = FMath::FRand();
+				if (Roll < 0.4f) DropItem(Floor, EBRItem::Scrap);
+				else if (Roll < 0.75f) DropItem(Floor, EBRItem::Taco);
+				else if (Roll < 0.87f) DropCash(Floor, 50);
+			}
+		}
+	}
 	if (!By || By == Victim)
 	{
 		return;
@@ -809,9 +846,160 @@ void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
 	{
 		++PS->StatKnockdowns;
 	}
+	// NPCs flattening each other (bar fights, brawls) don't flood the feed.
+	const ABRCharacter* BRByChar = Cast<ABRCharacter>(By);
+	if (NPCVictim && NPCVictim->IsNPC() && BRByChar && BRByChar->IsNPC())
+	{
+		return;
+	}
 	static const TCHAR* Verbs[] = { TEXT("FLATTENED"), TEXT("BONKED"), TEXT("BODY-SLAMMED"), TEXT("SENT FLYING"), TEXT("DROPPED"), TEXT("CLOTHESLINED") };
 	ABRGameState::Highlight(this, Cast<ABRCharacter>(Victim), 30.f, FString::Printf(TEXT("%s knocked out %s"), *NameOf(By), *NameOf(Victim)));
 	Feed(FString::Printf(TEXT("%s %s %s"), *NameOf(By), Verbs[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Verbs)) - 1)], *NameOf(Victim)));
+}
+
+void ABRGameMode::AddTrouble(ABRCharacter* Who, int32 Amount)
+{
+	ABRPlayerState* PS = Who ? Who->GetBRPlayerState() : nullptr;
+	ABRGameState* GS = GetBRGameState();
+	if (!PS || !GS || Who->IsNPC())
+	{
+		return;
+	}
+	PS->Trouble += Amount;
+	if (PS->GetFaction() == BR::Runners && PS->Trouble >= TroubleForBounty && GS->BountyTarget != PS && GS->Phase == EBRPhase::Invasion)
+	{
+		GS->BountyTarget = PS;
+		PS->Trouble = 0;
+		ABRGameState::Sfx(this, EBRSfx::Bounty, FVector::ZeroVector, true);
+		Announce(FText::Format(LOCTEXT("TroubleBounty", "WANTED: {0} for starting fights all over town! Border Patrol gets +{1} for catching them."),
+			FText::FromString(PS->GetPlayerName()), BountyPoints));
+		Feed(FString::Printf(TEXT("BOUNTY on %s - town troublemaker"), *PS->GetPlayerName()));
+	}
+	else if (PS->GetFaction() == BR::Wardens && PS->Trouble >= TroubleForBounty)
+	{
+		PS->Trouble = 0;
+		ChangeApproval(-HarassmentPenalty);
+		Announce(FText::Format(LOCTEXT("CopTrouble", "{0} keeps beating up locals. Approval down!"), FText::FromString(PS->GetPlayerName())));
+	}
+}
+
+void ABRGameMode::DropCash(const FVector& At, int32 Amount, APlayerState* ReservedFor)
+{
+	const FTransform T(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At + FVector(FMath::FRandRange(-40.f, 40.f), FMath::FRandRange(-40.f, 40.f), 0.f));
+	if (ABRCashPickup* Cash = GetWorld()->SpawnActorDeferred<ABRCashPickup>(ABRCashPickup::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Cash->Amount = Amount;
+		Cash->ReservedFor = ReservedFor;
+		Cash->FinishSpawning(T);
+	}
+}
+
+void ABRGameMode::DropItem(const FVector& At, EBRItem Item, APlayerState* ReservedFor)
+{
+	if (Item == EBRItem::None || Item == EBRItem::Knife)
+	{
+		return;
+	}
+	const FTransform T(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At);
+	if (ABRItemPickup* Pickup = GetWorld()->SpawnActorDeferred<ABRItemPickup>(ABRItemPickup::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Pickup->Item = Item;
+		Pickup->ReservedFor = ReservedFor;
+		Pickup->Charges = Item == EBRItem::WireCutters ? 1 : 0;
+		Pickup->FinishSpawning(T);
+	}
+}
+
+void ABRGameMode::TickTownLife(ABRGameState* GS)
+{
+	if (!Arena || !Arena->bBuildTestMap || GS->Phase == EBRPhase::Ended)
+	{
+		return;
+	}
+	auto FindLocal = [this](const FVector& Near, float Range) -> ABRCharacter*
+	{
+		ABRCharacter* Best = nullptr;
+		float BestDist = Range;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			ABRCharacter* L = *It;
+			const float D = FVector::Dist2D(L->GetActorLocation(), Near);
+			if (L->IsNPC() && !L->bPeaceful && !L->bNoFightBack && !L->IsBrawling() && L->GetCondition() == EPVVCondition::Normal
+				&& !L->GetCurrentBoat() && !L->GetCarrier() && !L->Leader.IsValid() && L->ClientPay == 0 && Arena->IsInTown(L->GetActorLocation()) && D < BestDist)
+			{
+				BestDist = D;
+				Best = L;
+			}
+		}
+		return Best;
+	};
+	TArray<ABRCharacter*> PlayersInTown;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* P = *It;
+		if (!P->IsNPC() && P->GetCondition() == EPVVCondition::Normal && !P->GetCurrentBoat() && Arena->IsInTown(P->GetActorLocation()))
+		{
+			PlayersInTown.Add(P);
+		}
+	}
+	// Border Patrol in town: the locals don't like it. The longer you hang around, the likelier someone jumps you.
+	for (auto It = WardenInTown.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid() || !PlayersInTown.Contains(It.Key().Get()))
+		{
+			It.RemoveCurrent();
+		}
+	}
+	for (ABRCharacter* P : PlayersInTown)
+	{
+		if (!P->IsWarden())
+		{
+			continue;
+		}
+		float& Seconds = WardenInTown.FindOrAdd(P);
+		Seconds += 1.f;
+		if (Seconds == 2.f)
+		{
+			P->Notify(LOCTEXT("CopInTown", "You're in TOWN. The locals hate Border Patrol here - don't hang around."));
+		}
+		if (Seconds > 8.f && FMath::FRand() < FMath::Min(0.5f, 0.08f + Seconds * 0.006f))
+		{
+			if (ABRCharacter* Local = FindLocal(P->GetActorLocation(), 1600.f))
+			{
+				Local->StartBrawling(P, 30.f, FMath::FRandRange(0.7f, 1.f));
+				if (FMath::FRand() < 0.15f)
+				{
+					Local->SetNPCHeldItem(EBRItem::Knife);
+				}
+				if (FMath::FRand() < 0.3f)
+				{
+					Feed(FString::Printf(TEXT("A local jumped %s! Border Patrol isn't welcome in town."), *NameOf(P)));
+				}
+			}
+		}
+	}
+	// Now and then a local tries to rob somebody.
+	if (PlayersInTown.Num() > 0 && FMath::FRand() < 1.f / FMath::Max(10.f, MuggingEverySeconds))
+	{
+		ABRCharacter* Mark = PlayersInTown[FMath::RandRange(0, PlayersInTown.Num() - 1)];
+		const ABRPlayerState* MPS = Mark->GetBRPlayerState();
+		bool bHasStuff = false;
+		if (MPS)
+		{
+			for (const EBRItem Item : MPS->Inventory)
+			{
+				bHasStuff |= Item != EBRItem::None;
+			}
+		}
+		if (bHasStuff)
+		{
+			if (ABRCharacter* Thief = FindLocal(Mark->GetActorLocation(), 1400.f))
+			{
+				Thief->MugTarget = Mark;
+				Thief->StartBrawling(Mark, 20.f, 0.6f); // walks right up to you...
+			}
+		}
+	}
 }
 
 void ABRGameMode::Feed(const FString& Line)

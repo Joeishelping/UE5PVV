@@ -539,6 +539,20 @@ void ABRHUD::DrawHUD()
 		Centered(Me->IsHiddenFromPatrol() ? TEXT("In the box: invisible while you stand still") : TEXT("In the box: MOVING (they can see you)"), SY * 0.7f, Me->IsHiddenFromPatrol() ? Green : Yellow, Small, 1.3f);
 	}
 
+	// --- Cantina: drinking contest + tipsy
+	if (Me->bChugging)
+	{
+		Centered(TEXT("DRINKING CONTEST!  MASH SPACE TO CHUG!"), SY * 0.36f, Yellow, Big, 1.6f);
+		Centered(TEXT("YOU"), SY * 0.36f + 40.f, Green, Small, 1.2f);
+		Bar(SX * 0.5f - 200.f, SY * 0.36f + 62.f, 400.f, 18.f, Me->ChugMine, Green);
+		Centered(TEXT("EL BORRACHO"), SY * 0.36f + 90.f, Red, Small, 1.2f);
+		Bar(SX * 0.5f - 200.f, SY * 0.36f + 112.f, 400.f, 18.f, Me->ChugRival, Red);
+	}
+	else if (Me->IsTipsy())
+	{
+		Centered(TEXT("~ tipsy ~  (wobbly, but tough)"), SY - 120.f, Yellow, Small, 1.1f);
+	}
+
 	// --- Climbing
 	if (Me->IsHanging())
 	{

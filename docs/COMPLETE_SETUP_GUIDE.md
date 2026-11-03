@@ -346,6 +346,59 @@ They're already inside **Art/Characters/SK_PVV_Animations.glb** (it has Kick and
 - NPC trucks now start at the edge of town (the narrow town street was where they jammed) and won't spawn on top of each other.
 - **Smash the gate:** drive at the closed checkpoint barrier fast in any vehicle and it SNAPS - pieces fly, everyone hears about it. Border Patrol fixes it after 30 seconds (Gate Smash sound slot: Project Settings -> Border Run -> Sounds -> **Gate Smash Sound**).
 
+## Part 15: Town life (cantina, car lot, muggings...)
+
+Everything here is built on the test map automatically.
+
+- **La Cantina del Diablo** (south of the town street, door faces the road). About 12 locals hang out inside.
+  - **TEQUILA ($15)** at the bar: you're *tipsy* for 60 s, wobblier but you take 30% less damage.
+  - **DRINKING CONTEST ($50, win $150)** at the table: **mash SPACE** to chug faster than El Borracho. Lose and you pass out.
+  - **THE BIG GUY** at the bar: hold E to shove him and start a **BAR FIGHT** (punching anybody in there starts one too). Everybody fights everybody. **Last one standing** gets **$50 per knocked-out local**, lying on the floor (only the winner can pick it up). **Get knocked out and you pay $50** and get nothing.
+  - **El Bouncer** stands at the door. Start 2 bar fights and he throws you out every time you come in.
+  - Locals come back about 2.5 min after a fight.
+- **Car lot "Autos El Gato"** (north of the plaza): walk up to a car and **hold E** to buy it. Pickup $500, Sedan $500, **Lowrider $800** (fast, 2 seats), **Van $1200** (6 seats; the 4 in the back are hidden inside the box, great for smuggling). You and your team can drive it.
+- **NPC trucks** now come in all 4 car types and lots of colours, so you can't tell a player's car from an NPC's.
+- **Punch a local and they fight back.** Knock them out and they drop something: scrap, a taco, sometimes $50. **1 in 20 locals carries a fat wad ($200)**.
+- **Muggings:** now and then a local walks up, shoves you over and **steals an item**. Beat them up and it drops; only you can pick it back up.
+- **Troublemakers:** starting lots of fights puts a **BOUNTY** on you (Border Patrol gets bonus points for catching you). If a Border Patrol player keeps beating up locals, approval drops.
+- **Border Patrol in town:** the locals HATE it. Hang around in town and they start jumping you, sometimes with knives.
+- **Wanted posters** around town show whoever has the bounty (or is winning).
+- **The scanner** now says **"NO PAPERS - ILLEGAL"** for Runner players exactly like it does for illegal NPCs (it never says "player"), and lists any contraband: **Drugs, Illegal Gun**.
+- **Chickens** walk around, peck and run away from you. Grab them while they move (Z).
+- **Mariachi:** the band members can't knock each other over any more, and only ONE trumpet plays at a time (it goes quiet while you solo).
+
+**New sound slots** (Project Settings → Border Run → Sounds): **Cantina Music**, **Bar Fight Sound**, **Drink Sound** (plus **Gate Smash Sound** from last time).
+
+---
+
+## Part 16: Checklist: everything you can plug in
+
+Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
+
+**Art (Content Browser imports, Part 2):**
+- [ ] Body with face shapes (SK_PVV_Body...)
+- [ ] Hairs, beards, outfits, **poncho** (SK_Outfit_Poncho)
+- [ ] All 6 hats: CowboyHat, Sombrero, PatrolCap, HardHat, CannonHelmet, **LuchaMask**
+- [ ] Trumpet (SM_Trumpet)
+- [ ] **SK_PVV_Animations.glb: re-import it.** It has 30 animations including the new **Emote_Smoke, Kick, Headbutt**
+
+**BP_Runner AND BP_Warden (Part 3):**
+- [ ] Every **BR | Animations** slot, especially the new **Emote Smoke Anim, Kick Anim, Headbutt Anim**
+- [ ] **BR | Look**: Hair Styles, Facial Hair Styles
+- [ ] **BR | Hats**: Hat Meshes (6 rows), Default Hat, **Poncho Mesh**, Held Item Meshes (Trumpet)
+- [ ] **BR | Brawl / Mariachi / Weapons** sounds (optional)
+- [ ] Colour parameters in the materials (optional, 3e)
+
+**BP_BRGameMode (Part 4):** character classes + GameMode Override in World Settings.
+
+**Project Settings → Border Run (all optional):**
+- [ ] **Sounds**: every slot, including the new Gate Smash, Cantina Music, Bar Fight, Drink
+- [ ] **Body Sounds**: footsteps, thumps, grunts, yells, whooshes
+- [ ] **Effects**: Niagara effects (dust, splash, smoke, punch hit, cigarette smoke, sparks)
+- [ ] **Test Map Look**: the World Texture material + textures (Part 9)
+
+**Level:** an **Empty Level** saved as L_TestMap, GameMode Override = BP_BRGameMode, and set as the default map (Project Settings → Maps & Modes).
+
 ## If something's wrong
 | Problem | Fix |
 |---|---|

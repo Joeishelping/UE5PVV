@@ -50,6 +50,10 @@ public:
 
 	// --- Points race + end-of-round awards ---------------------------------------------
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 Points = 0;
+	/** Fights started this round (punching locals, bar fights). Enough of it = WANTED. */
+	int32 Trouble = 0;
+	/** Thrown out of the cantina by the bouncer (too much trouble). */
+	int32 CantinaStrikes = 0;
 	/** Lobby: pressed Y. */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR") bool bReady = false;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 StatCrossings = 0;

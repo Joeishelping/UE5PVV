@@ -2,8 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "PVVBoat.h"
+#include "BRTypes.h"
 #include "BRCar.generated.h"
 
+class APlayerState;
 class UAudioComponent;
 class UInputAction;
 class USoundBase;
@@ -38,7 +40,13 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Car") bool bRequiresKey = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Car") bool bInfiniteFuel = false;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Car") FLinearColor PaintColor = FLinearColor(0.15f, 0.3f, 0.7f);
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "BR|Car") FLinearColor PaintColor = FLinearColor(0.15f, 0.3f, 0.7f);
+	/** Car lot: nobody can drive it until somebody buys it (E, hold) for SalePrice. */
+	UPROPERTY(ReplicatedUsing = OnRep_ForSale, EditAnywhere, BlueprintReadWrite, Category = "BR|Car") bool bForSale = false;
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "BR|Car") int32 SalePrice = 500;
+	/** Whoever bought it (they and their teammates can drive it). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") TObjectPtr<APlayerState> OwnerPlayer;
+	virtual FString GetModelName() const { return TEXT("Car"); }
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float FuelPerSecond = 1.f / 60.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float RideHeight = 45.f;
@@ -60,6 +68,10 @@ protected:
 	virtual void EnsureDefaultInput() override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Radio") TObjectPtr<UAudioComponent> RadioAudio;
+	/** "FOR SALE $500" sign on the roof. */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UTextRenderComponent> PriceTag;
+	UFUNCTION() void OnRep_ForSale();
+	bool WantsBuy(const APVVCharacter* Interactor) const;
 
 	UPROPERTY() TObjectPtr<UInputAction> RadioNextAction;
 	UPROPERTY() TObjectPtr<UInputAction> RadioPrevAction;
@@ -105,6 +117,12 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual FString GetModelName() const override;
+
+	/** Body style: set it before it spawns (or in your truck Blueprint). Changes seats, speed and looks. */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "BR|Truck") EBRCarModel Model = EBRCarModel::Pickup;
 
 	/** Server: make this an NPC truck following Route (world points). CheckpointIndex = where it waits for the gate. */
 	void StartNPCRoute(const TArray<FVector>& InRoute, int32 InCheckpointIndex, AActor* InGate);
@@ -147,6 +165,8 @@ private:
 	bool bRunningGate = false;
 
 	void DriveNPC(float DeltaSeconds);
+	/** Show/hide the body parts and set seats + handling for Model. */
+	void ApplyModel();
 	FVector LaneTarget(int32 Index, float InLane) const;
 	/** Another vehicle in my lane ahead within Range? */
 	bool IsLaneBlocked(float InLane, float Range, float BehindToo) const;

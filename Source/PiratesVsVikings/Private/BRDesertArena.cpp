@@ -2,6 +2,7 @@
 #include "BRSettings.h"
 #include "BRAudio.h"
 #include "BRCar.h"
+#include "BRCantina.h"
 #include "BRDog.h"
 #include "BRGameState.h"
 #include "BRWorldActors.h"
@@ -115,6 +116,67 @@ ABRDesertArena::ABRDesertArena()
 	// Safe zone.
 	AddBlock(TEXT("Safe_Stripe"), FVector(SafeX + (EastX - SafeX) * 0.5f, 0.f, Ground + 2.f), FVector(EastX - SafeX, HalfY * 2.f, 4.f), FLinearColor(0.1f, 0.8f, 0.2f), FRotator::ZeroRotator, false);
 	AddSign(TEXT("Sign_Safe"), TEXT("SAFE ZONE"), FVector(SafeX - 50.f, 0.f, Ground + 400.f), 180.f, 220.f, FColor(80, 255, 120));
+
+	// --- Dressing: street lamps along the big road, a welcome arch, cacti out in the desert.
+	{
+		const FLinearColor Iron(0.12f, 0.12f, 0.13f), Glow(1.f, 0.85f, 0.45f), Cactus(0.22f, 0.5f, 0.22f), ArchColor(0.7f, 0.45f, 0.28f);
+		int32 LampIndex = 0;
+		for (float X = TownEdgeX + 500.f; X < EastX - 800.f; X += 2000.f)
+		{
+			if (FMath::Abs(X) < BankX + 300.f || FMath::Abs(X - WallX) < 500.f || FMath::Abs(X - FenceX) < 400.f || FMath::Abs(X - LineX) < 400.f)
+			{
+				continue; // bridge, Wall, fence, Line
+			}
+			for (const float Side : { -1.f, 1.f })
+			{
+				const float Y = RoadY + Side * (RoadHalfWidth + 90.f);
+				AddBlock(*FString::Printf(TEXT("Lamp_Post%d"), LampIndex), FVector(X, Y, Ground + 250.f), FVector(18.f, 18.f, 500.f), Iron);
+				AddBlock(*FString::Printf(TEXT("Lamp_Arm%d"), LampIndex), FVector(X, Y - Side * 70.f, Ground + 495.f), FVector(12.f, 150.f, 10.f), Iron, FRotator::ZeroRotator, false);
+				AddBlock(*FString::Printf(TEXT("Lamp_Light%d"), LampIndex), FVector(X, Y - Side * 135.f, Ground + 480.f), FVector(40.f, 40.f, 20.f), Glow, FRotator::ZeroRotator, false);
+				++LampIndex;
+			}
+		}
+		// "Welcome to San Pedrito" arch where the town street meets the big road.
+		AddBlock(TEXT("Arch_PillarN"), FVector(TownEdgeX + 150.f, RoadY + RoadHalfWidth + 80.f, Ground + 300.f), FVector(90.f, 90.f, 600.f), ArchColor);
+		AddBlock(TEXT("Arch_PillarS"), FVector(TownEdgeX + 150.f, RoadY - RoadHalfWidth - 80.f, Ground + 300.f), FVector(90.f, 90.f, 600.f), ArchColor);
+		AddBlock(TEXT("Arch_Beam"), FVector(TownEdgeX + 150.f, RoadY, Ground + 640.f), FVector(70.f, RoadHalfWidth * 2.f + 250.f, 90.f), ArchColor, FRotator::ZeroRotator, false);
+		AddSign(TEXT("Sign_ArchEast"), TEXT("BIENVENIDOS A SAN PEDRITO"), FVector(TownEdgeX + 195.f, RoadY, Ground + 625.f), 0.f, 60.f, FColor(255, 230, 120));
+		AddSign(TEXT("Sign_ArchWest"), TEXT("BUEN VIAJE - BORDER AHEAD"), FVector(TownEdgeX + 105.f, RoadY, Ground + 625.f), 180.f, 60.f, FColor(255, 230, 120));
+		AddSign(TEXT("Sign_Checkpoint"), TEXT("CHECKPOINT 1 KM - HAVE YOUR PAPERS READY"), FVector(-BankX - 1600.f, RoadY - RoadHalfWidth - 150.f, Ground + 300.f), 180.f, 50.f, FColor(255, 255, 255));
+		// Cacti out in the desert (same every time).
+		FRandomStream Rand(1337);
+		int32 CactusIndex = 0;
+		for (int32 Try = 0; Try < 140 && CactusIndex < 45; ++Try)
+		{
+			const float X = Rand.FRandRange(BankX + 1500.f, EastX - 600.f);
+			const float Y = Rand.FRandRange(-HalfY + 400.f, HalfY - 400.f);
+			const bool bNearRoad = FMath::Abs(Y - RoadY) < RoadHalfWidth + 600.f;
+			const bool bBorderPatrolBase = X < 10000.f && Y > -800.f && Y < 5200.f; // HQ, pen, supply counters
+			const bool bNearWall = FMath::Abs(X - WallX) < 900.f;
+			if (bNearRoad || bBorderPatrolBase || bNearWall || (X > SafeX - 500.f && X < SafeX + 500.f))
+			{
+				continue;
+			}
+			const float Tall = Rand.FRandRange(180.f, 380.f);
+			AddBlock(*FString::Printf(TEXT("Cactus_Trunk%d"), CactusIndex), FVector(X, Y, Ground + Tall * 0.5f), FVector(55.f, 55.f, Tall), Cactus);
+			AddBlock(*FString::Printf(TEXT("Cactus_ArmA%d"), CactusIndex), FVector(X + 50.f, Y, Ground + Tall * 0.55f), FVector(30.f, 30.f, Tall * 0.35f), Cactus, FRotator::ZeroRotator, false);
+			AddBlock(*FString::Printf(TEXT("Cactus_ArmB%d"), CactusIndex), FVector(X - 50.f, Y, Ground + Tall * 0.7f), FVector(30.f, 30.f, Tall * 0.3f), Cactus, FRotator::ZeroRotator, false);
+			++CactusIndex;
+		}
+		// Car lot (north of the plaza): ground, fence, flags and a sign. The cars for sale are spawned in BeginPlay.
+		const FLinearColor LotGround(0.3f, 0.3f, 0.32f), Fence(0.85f, 0.85f, 0.85f);
+		AddBlock(TEXT("Road_CarLot"), FVector(-7550.f, 3000.f, Ground + 3.f), FVector(2000.f, 900.f, 6.f), LotGround, FRotator::ZeroRotator, false);
+		AddBlock(TEXT("Lot_FenceN"), FVector(-7550.f, 3470.f, Ground + 50.f), FVector(2000.f, 15.f, 100.f), Fence);
+		AddBlock(TEXT("Lot_FenceW"), FVector(-8560.f, 3000.f, Ground + 50.f), FVector(15.f, 940.f, 100.f), Fence);
+		AddBlock(TEXT("Lot_FenceE"), FVector(-6540.f, 3000.f, Ground + 50.f), FVector(15.f, 940.f, 100.f), Fence);
+		for (int32 i = 0; i < 6; ++i)
+		{
+			const FLinearColor Flag = (i % 3 == 0) ? FLinearColor(0.1f, 0.55f, 0.25f) : (i % 3 == 1 ? FLinearColor(0.95f, 0.95f, 0.92f) : FLinearColor(0.8f, 0.1f, 0.12f));
+			AddBlock(*FString::Printf(TEXT("Lot_Flag%d"), i), FVector(-8450.f + i * 380.f, 3470.f, Ground + 280.f), FVector(4.f, 120.f, 70.f), Flag, FRotator::ZeroRotator, false);
+			AddBlock(*FString::Printf(TEXT("Lot_FlagPole%d"), i), FVector(-8450.f + i * 380.f, 3470.f, Ground + 160.f), FVector(8.f, 8.f, 320.f), Iron, FRotator::ZeroRotator, false);
+		}
+		AddSign(TEXT("Sign_CarLot"), TEXT("AUTOS EL GATO - CARROS USADOS\nwalk up to a car + hold E to buy"), FVector(-7550.f, 3480.f, Ground + 420.f), -90.f, 60.f, FColor(255, 220, 80));
+	}
 
 	// Lighting (removed at BeginPlay if the level has its own). Day/night + weather are driven by the GameState.
 	Sun = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("Sun"));
@@ -575,6 +637,42 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Car(5200.f, -3000.f, 0.f, true, FLinearColor(0.85f, 0.88f, 0.85f));
 	Car(5200.f, -5000.f, 0.f, true, FLinearColor(0.85f, 0.88f, 0.85f));
 	Car(-9500.f, -2400.f, 0.f, false, FLinearColor(0.5f, 0.2f, 0.1f));
+
+	// --- Car lot: buy your own ride (hold E on a car)
+	{
+		struct FLotCar { float X; EBRCarModel Model; int32 Price; FLinearColor Paint; };
+		const FLotCar Lot[] = {
+			{ -8150.f, EBRCarModel::Pickup, 500, FLinearColor(0.75f, 0.2f, 0.1f) },
+			{ -7700.f, EBRCarModel::Sedan, 500, FLinearColor(0.15f, 0.3f, 0.7f) },
+			{ -7250.f, EBRCarModel::Lowrider, 800, FLinearColor(0.55f, 0.1f, 0.6f) },
+			{ -6800.f, EBRCarModel::Van, 1200, FLinearColor(0.9f, 0.88f, 0.8f) },
+		};
+		for (const FLotCar& Def : Lot)
+		{
+			const FTransform T = At(Def.X, 2950.f, Ground + 80.f, -90.f);
+			if (ABRTruck* C = World->SpawnActorDeferred<ABRTruck>(ABRTruck::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+			{
+				C->Model = Def.Model;
+				C->PaintColor = Def.Paint;
+				C->bForSale = true;
+				C->SalePrice = Def.Price;
+				C->bRequiresKey = true;
+				C->FinishSpawning(T);
+			}
+		}
+	}
+
+	// --- La Cantina del Diablo (bar fights, drinks, drinking contest, bouncer). Door faces the road.
+	World->SpawnActor<ABRCantina>(ABRCantina::StaticClass(), At(-8000.f, -6300.f, Ground, 90.f), Params);
+
+	// --- Wanted posters around town
+	{
+		const FVector Posters[] = { {-11800.f, -420.f, -90.f}, {-8000.f, -420.f, -90.f}, {-11000.f, -1950.f, 90.f}, {-7300.f, -5000.f, 90.f}, {-7550.f, 2420.f, -90.f}, {-5600.f, -2050.f, 90.f} };
+		for (const FVector& P : Posters)
+		{
+			World->SpawnActor<ABRWantedPoster>(ABRWantedPoster::StaticClass(), At(P.X, P.Y, Ground, P.Z), Params);
+		}
+	}
 
 	// --- Patrol dogs (Warden side + the near bank)
 	TArray<FVector> Homes;

@@ -63,6 +63,8 @@ public:
 	FVector GetRiverFlowDirection() const { return FVector(0.f, 1.f, 0.f); }
 	float GetLineX() const { return GetActorLocation().X + LineX; }
 	float GetSafeX() const { return GetActorLocation().X + SafeX; }
+	/** The Runner town side (west of the Line). */
+	bool IsInTown(const FVector& WorldLocation) const { const FVector L = WorldLocation - GetActorLocation(); return L.X < LineX && FMath::Abs(L.Y) < HalfY; }
 	FVector GetCatapultLanding() const;
 	/** Places in town where NPC villagers hang out. */
 	void GetVillageSpots(TArray<FVector>& OutSpots) const;

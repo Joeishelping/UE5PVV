@@ -58,6 +58,8 @@ public:
 	bool bIllegal = false;
 	/** Carrying contraband (found by scanning). */
 	bool bCarriesContraband = false;
+	/** What the contraband is (shows on the scanner). */
+	EBRItem ContrabandItem = EBRItem::Drugs;
 	/** Smuggling client: follows this Runner. */
 	TWeakObjectPtr<ABRCharacter> Leader;
 	int32 ClientPay = 0;
@@ -119,10 +121,47 @@ public:
 	void SetNPCHeldItem(EBRItem Item) { HeldItem = Item; OnRep_HeldItem(); }
 	/** Server: a band musician / performer plays a note (trumpet animation). */
 	void PlayBandNote() { Multicast_Trumpet(); }
+	/** Same, but only the animation (the band plays the sound itself). */
+	void PlayBandNoteSilent() { Multicast_TrumpetPose(); }
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_TrumpetPose();
 	/** Selected inventory slot (mouse wheel). */
 	int32 GetSelectedSlot() const { return SelectedSlot; }
 	/** Server: dance uncontrollably for a while (mariachi). */
 	void ForceDance(float Seconds);
+
+	// --- Town life (NPCs, server) -------------------------------------------------------
+	/** Band musicians etc: their flailing hands never hit anyone and they don't fight back. */
+	UPROPERTY(Replicated) bool bPeaceful = false;
+	/** Scripted fighters (ring luchador): don't start brawls of their own when hit. */
+	bool bNoFightBack = false;
+	/** 1 in 20 NPCs secretly carries a fat wad of cash - knock them out to find out. */
+	bool bLootWad = false;
+	bool bLootDropped = false;
+	/** An item this NPC stole from a player (they're holding it - beat them up to get it back). */
+	EBRItem StolenItem = EBRItem::None;
+	TWeakObjectPtr<APlayerState> StolenFrom;
+	/** Who this NPC last got mad at for hitting them (so trouble only counts once). */
+	TWeakObjectPtr<APVVCharacter> LastHitBy;
+	/** Walking up to this player to rob them (see MugPlayer). */
+	TWeakObjectPtr<ABRCharacter> MugTarget;
+	/** Server (NPC): punch this player, grab one of their items and run/fight. */
+	bool MugPlayer(ABRCharacter* Victim);
+	/** NPC is busy in a brawl right now. */
+	bool IsBrawling() const { return AngryAt.IsValid() && GetWorld() && GetWorld()->GetTimeSeconds() < AngryUntil; }
+	ABRCharacter* GetBrawlTarget() const { return AngryAt.Get(); }
+	/** Server (NPC): stop fighting / running and just hang around again. */
+	void CalmDown() { AngryAt = nullptr; AngryUntil = -1.f; FleeUntil = -1.f; MugTarget = nullptr; }
+	void SetKnockdownSeconds(float Seconds) { KnockdownDuration = Seconds; }
+
+	// --- Cantina ---------------------------------------------------------------------------
+	/** Server: a drink. Wobblier but harder to knock down for this many seconds. */
+	void MakeTipsy(float Seconds);
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsTipsy() const;
+	/** Drinking contest (replicated to the drinker for the HUD). */
+	UPROPERTY(Replicated) bool bChugging = false;
+	UPROPERTY(Replicated) float ChugMine = 0.f;
+	UPROPERTY(Replicated) float ChugRival = 0.f;
+	UFUNCTION(Server, Reliable) void Server_Chug();
 
 	/** Server: set this character's customization (replicates to everyone). */
 	void SetLook(const FBRLook& NewLook);
@@ -519,6 +558,8 @@ private:
 	float FleeUntil = -1.f;
 	TWeakObjectPtr<ABRCharacter> AngryAt;
 	float AngryUntil = -1.f;
+	UPROPERTY(Replicated) float TipsyUntil = -1.f;
+	float LastChugTime = -1.f;
 	float BrawlAggression = 0.5f;
 	FVector WanderHome = FVector::ZeroVector;
 	FVector WanderTarget = FVector::ZeroVector;
