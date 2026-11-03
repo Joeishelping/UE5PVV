@@ -103,6 +103,8 @@ public:
 	void ExtendKnockdown(float Seconds);
 	/** Knocked down: get up in exactly this many seconds (e.g. a quick throw knockdown). */
 	void SetKnockdownTimeLeft(float Seconds);
+	/** Knocked down: the body never flies faster than this (cm/s), so you land nearby instead of across the map. */
+	UPROPERTY(EditDefaultsOnly, Category = "PVV|Combat") float MaxKnockdownSpeed = 550.f;
 	/** Blocking etc: change an incoming melee hit (return the new damage, edit the push). */
 	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) { return Damage; }
 	void ApplyKnockdown(AActor* Cause, const FVector& Impulse);

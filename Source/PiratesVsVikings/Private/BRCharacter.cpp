@@ -183,6 +183,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bLiftOverhead);
 	DOREPLIFETIME(ABRCharacter, ChugGag);
 	DOREPLIFETIME(ABRCharacter, bKnockedOut);
+	DOREPLIFETIME(ABRCharacter, bDropKicking);
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
 	DOREPLIFETIME(ABRCharacter, DragBone);
 	DOREPLIFETIME(ABRCharacter, HandGrabTarget);
@@ -411,7 +412,7 @@ void ABRCharacter::AutoFillSlots()
 	FillAnim(EatAnim, TEXT("Eat")); FillAnim(TrumpetAnim, TEXT("Trumpet")); FillAnim(DanceAnim, TEXT("Dance"));
 	FillAnim(EmoteWaveAnim, TEXT("Emote_Wave")); FillAnim(EmoteFlexAnim, TEXT("Emote_Flex")); FillAnim(EmoteTauntAnim, TEXT("Emote_Taunt"));
 	FillAnim(EmoteBegAnim, TEXT("Emote_Beg")); FillAnim(EmoteCheerAnim, TEXT("Emote_Cheer")); FillAnim(EmoteSmokeAnim, TEXT("Emote_Smoke"));
-	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt")); FillAnim(BlockAnim, TEXT("Block")); FillAnim(LiftAnim, TEXT("Lift_Overhead")); FillAnim(GetUpAnim, TEXT("GetUp"));
+	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt")); FillAnim(BlockAnim, TEXT("Block")); FillAnim(LiftAnim, TEXT("Lift_Overhead")); FillAnim(GetUpAnim, TEXT("GetUp")); FillAnim(ClimbAnim, TEXT("Climb"));
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -2101,7 +2102,16 @@ void ABRCharacter::OnAttackStartedNative()
 			Loose.OrientationStrength = 20.f;
 			Loose.AngularVelocityStrength = 2.f;
 			PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(Clavicle, Loose, true);
-			PunchArmRestoreAt = GetWorld()->GetTimeSeconds() + 0.28f + PunchWindup;
+			PunchArmRestoreAt = GetWorld()->GetTimeSeconds() + PunchWindup + PunchExtendSeconds + 0.2f;
+			// A straight jab: after the wind-up the fist is steered out to the target and HELD there for a moment
+			// (and keeps reaching if you keep holding the button) - no instant snap back.
+			{
+				const int32 Limb = bPunchLeft ? 0 : 1;
+				const FVector Target = Shoulder + Dir * 80.f;
+				SteerTargetLocal[Limb] = GetActorTransform().InverseTransformPositionNoScale(Target);
+				SteerStart[Limb] = GetWorld()->GetTimeSeconds() + PunchWindup * 0.6f;
+				SteerUntil[Limb] = SteerStart[Limb] + PunchExtendSeconds;
+			}
 			// Wind-up: yank the fist back first (and twist the shoulders away)...
 			GetMesh()->AddImpulse(-Dir * PunchImpulse * 0.3f + FVector(0.f, 0.f, PunchImpulse * 0.05f), Hand, true);
 			GetMesh()->AddImpulseToAllBodiesBelow(-Dir * 90.f, TEXT("spine_03"), true, false);
@@ -2254,6 +2264,7 @@ void ABRCharacter::TickAnimationSlots()
 
 	UAnimSequenceBase* Wanted = nullptr;
 	if (GetCarrier()) Wanted = Pick(CarriedAnim, IdleAnim);
+	else if (bClimbing && ClimbAnim) Wanted = ClimbAnim.Get();
 	else if (GetCurrentBoat()) Wanted = (IsDriving() && DriveAnim) ? DriveAnim.Get() : Pick(SeatedAnim, IdleAnim);
 	else if (GetCondition() == EPVVCondition::Restrained) Wanted = (GetStruggleProgress() > 0.f && StruggleAnim) ? StruggleAnim.Get() : Pick(RestrainedAnim, Locomotion);
 	else if (bInDeepWater) Wanted = Pick(SwimAnim, Locomotion);
@@ -2695,7 +2706,11 @@ void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 		}
 		// Hit an NPC and they fight you back (Gang Beasts style). Starting fights is trouble.
 		ABRCharacter* BRAttacker = Cast<ABRCharacter>(Attacker);
-		if (bIsNPC && !bNoFightBack && !bPeaceful && BRAttacker && !BRAttacker->IsNPC() && BRAttacker != this && GetCondition() == EPVVCondition::Normal)
+		// Only a REAL hit starts a fight (a proper punch, or a few hard knocks) - not bumping into someone.
+		// And your own smuggling clients never turn on you.
+		const bool bProvoked = ProvokedBy.Get() == BRAttacker && ProvokeDamage >= FightBackDamage;
+		const bool bMyCoyote = Leader.IsValid() && Leader.Get() == BRAttacker;
+		if (bIsNPC && !bNoFightBack && !bPeaceful && bProvoked && !bMyCoyote && BRAttacker && !BRAttacker->IsNPC() && BRAttacker != this && GetCondition() == EPVVCondition::Normal)
 		{
 			if (!IsBrawling() || FMath::FRand() < 0.3f)
 			{
@@ -2732,6 +2747,10 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		LastSoundCondition = GetCondition();
 		if (Was == EPVVCondition::KnockedDown && GetCondition() == EPVVCondition::Normal && !GetCurrentBoat() && !GetCarrier())
 		{
+			if (HasAuthority())
+			{
+				bDropKicking = false;
+			}
 			// Gang Beasts get-up: push up off the floor (can't walk for a moment - grab them while they're getting up!).
 			GetUpUntil = GetWorld()->GetTimeSeconds() + GetUpSeconds;
 			if (GetUpAnim)
@@ -2801,6 +2820,22 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		// Go fully limp: unhook the muscles completely while knocked down (they're hooked back up when you get up).
 		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
 		bWobbleOn = false;
+		// Drop kick: throw the feet forward and the head back so you fly feet-first.
+		if (bDropKicking && GetMesh()->IsSimulatingPhysics())
+		{
+			const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
+			for (const TCHAR* Foot : { TEXT("foot_l"), TEXT("foot_r") })
+			{
+				if (GetMesh()->GetBoneIndex(Foot) != INDEX_NONE)
+				{
+					GetMesh()->AddImpulse(Fwd * 900.f + FVector(0.f, 0.f, 350.f), Foot, true);
+				}
+			}
+			if (GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE)
+			{
+				GetMesh()->AddImpulse(-Fwd * 450.f - FVector(0.f, 0.f, 150.f), TEXT("head"), true);
+			}
+		}
 	}
 	else if (!bWobbleOn || !GetMesh()->IsSimulatingPhysics(TEXT("spine_02")))
 	{
@@ -2922,6 +2957,11 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority())
 	{
 		GuardMeter = FMath::Min(1.f, GuardMeter + DeltaSeconds * (bBlocking ? 0.05f : 0.3f));
+		if (!bBlocking && bBlockHeld && GuardResumeAt > 0.f && GetWorld()->GetTimeSeconds() >= GuardResumeAt)
+		{
+			GuardResumeAt = -1.f;
+			Server_SetBlock_Implementation(true); // guard back up after the punch
+		}
 		if (bBlocking && ((bIsNPC && GetWorld()->GetTimeSeconds() >= BlockReleaseAt) || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat()))
 		{
 			bBlocking = false;
@@ -3053,6 +3093,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	TickWobble();
 	TickActiveRagdoll(DeltaSeconds);
 	DragHeldBody(DeltaSeconds);
+	TickAttackSteer();
 	UpdateLocalVisibility();
 }
 
@@ -3224,7 +3265,18 @@ void ABRCharacter::UpdateLocalVisibility()
 
 void ABRCharacter::Input_Grab() { Server_Grab(); }
 bool ABRCharacter::IsHoldingProp() const { return HeldProp != nullptr; }
-void ABRCharacter::Input_Dive() { Server_Dive(); }
+void ABRCharacter::Input_Dive()
+{
+	// Clicking (fists out) = superman dive punch. Not clicking = flying DROP KICK.
+	if (bLeftDown || bRightDown)
+	{
+		Server_Dive();
+	}
+	else
+	{
+		Server_DropKick();
+	}
+}
 
 void ABRCharacter::StopJumping()
 {
@@ -3658,9 +3710,15 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 				const float TackleBoost = WornHat == EBRHat::LuchaMask ? 1.5f : 1.f;
 				if (ArmsReaching != 0)
 				{
-					// Diving with your hands out: grab their ankles and FACEPLANT them.
-					Victim->ApplyKnockdown(this, Forward * 250.f + FVector(0.f, 0.f, -80.f));
-					ABRGameState::FX(this, EBRFX::PointsText, Victim->GetActorLocation() + FVector(0.f, 0.f, 80.f), TEXT("ANKLE GRAB!"));
+					// Superman DIVE PUNCH: fists first into them.
+					Victim->ReceiveMeleeHit(this, AttackDamage * 1.4f, Forward * 400.f + FVector(0.f, 0.f, 150.f));
+					if (ABRCharacter* BRV = Cast<ABRCharacter>(Victim))
+					{
+						BRV->AddKO(BRV->HeadHitKO * 1.2f, this);
+						BRV->Multicast_BodyHit(TEXT("head"), Forward * HitReaction * 1.4f);
+					}
+					Victim->ApplyKnockdown(this, (Forward * 450.f + FVector(0.f, 0.f, 200.f)) * TackleBoost);
+					ABRGameState::FX(this, EBRFX::PointsText, Victim->GetActorLocation() + FVector(0.f, 0.f, 80.f), TEXT("DIVE PUNCH!"));
 				}
 				else
 				{
@@ -3832,6 +3890,11 @@ void ABRCharacter::Input_BlockStop() { Server_SetBlock(false); }
 void ABRCharacter::Server_SetBlock_Implementation(bool bOn)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
+	bBlockHeld = bOn;
+	if (!bOn)
+	{
+		GuardResumeAt = -1.f;
+	}
 	const bool bCan = GetCondition() == EPVVCondition::Normal && !GetCarrier() && !GetCurrentBoat() && !GetCarriedCharacter() && !bClimbing && Now >= GuardBrokenUntil;
 	const bool bWant = bOn && bCan;
 	if (bWant != bBlocking)
@@ -3962,6 +4025,18 @@ float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVe
 	// Gang Beasts pacing: hits wear you down slowly, push you less, and the "knockout" hit dazes you first.
 	Damage /= FMath::Max(0.1f, FightToughness);
 	Impulse *= HitPushScale;
+	// Remember how hard this person has been hitting us lately (NPCs only fight back once it's real).
+	if (ABRCharacter* Hitter = Cast<ABRCharacter>(Attacker))
+	{
+		const float NowP = GetWorld()->GetTimeSeconds();
+		if (ProvokedBy.Get() != Hitter || NowP - ProvokeTime > 6.f)
+		{
+			ProvokedBy = Hitter;
+			ProvokeDamage = 0.f;
+		}
+		ProvokeDamage += Damage;
+		ProvokeTime = NowP;
+	}
 	Damage = ApplyBlock(Attacker, Damage, Impulse);
 	const ABRGameState* GS = GetBRGameState();
 	if (!GS || GetCondition() != EPVVCondition::Normal || Damage <= 0.f)
@@ -4032,9 +4107,17 @@ float ABRCharacter::ApplyBlock(APVVCharacter* Attacker, float Damage, FVector& I
 
 void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 {
-	if (bBlocking || IsDazed())
+	if (IsDazed())
 	{
-		return; // guard's up / seeing birds
+		return; // seeing birds
+	}
+	if (bBlocking)
+	{
+		// Punch out of your guard (like a real fight): the guard drops for the punch, then comes back up if you're still holding block.
+		bBlocking = false;
+		GuardResumeAt = GetWorld()->GetTimeSeconds() + 0.45f;
+		UpdateMovementSpeed();
+		ForceNetUpdate();
 	}
 	StopEmote();
 	Multicast_PunchHand(bLeft);
@@ -4216,7 +4299,8 @@ void ABRCharacter::TickThrown()
 	const bool bRag = IsRagdollActive() && Body && Body->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE;
 	const FVector Pos = bRag ? Body->GetBoneLocation(TEXT("pelvis")) : GetActorLocation();
 	const FVector Vel = bRag ? Body->GetPhysicsLinearVelocity(TEXT("pelvis")) : GetVelocity();
-	if (Vel.Size() < 450.f)
+	const bool bDropKick = bDropKicking && Now < DropKickHitUntil;
+	if (Vel.Size() < (bDropKick ? 200.f : 450.f))
 	{
 		return;
 	}
@@ -4241,7 +4325,12 @@ void ABRCharacter::TickThrown()
 		}
 		Other->LastTosser = Thrower;
 		Other->LastTossTime = Now;
-		ABRGameState::FX(this, EBRFX::PointsText, Other->GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("STRIKE!"));
+		if (bDropKick)
+		{
+			Other->AddKO(Other->HeadHitKO, this); // two feet to the chest: that rings your bell
+			Other->Multicast_BodyHit(TEXT("spine_03"), Vel.GetSafeNormal() * HitReaction * 1.5f);
+		}
+		ABRGameState::FX(this, EBRFX::PointsText, Other->GetActorLocation() + FVector(0.f, 0.f, 120.f), bDropKick ? TEXT("DROP KICK!") : TEXT("STRIKE!"));
 		Multicast_Sfx(1);
 		if (Thrower)
 		{
@@ -4477,7 +4566,7 @@ bool ABRCharacter::TryWallGrab(uint8 Hands)
 		Params.AddIgnoredActor(Held);
 	}
 	FHitResult Hit;
-	for (const float Up : { 60.f, 20.f })
+	for (const float Up : { 150.f, 110.f, 60.f, 20.f })
 	{
 		const FVector From = GetActorLocation() + FVector(0.f, 0.f, Up);
 		if (GetWorld()->LineTraceSingleByChannel(Hit, From, From + Fwd * 95.f, ECC_Visibility, Params) && !Cast<APawn>(Hit.GetActor()) && FMath::Abs(Hit.ImpactNormal.Z) < 0.4f)
@@ -4547,9 +4636,19 @@ void ABRCharacter::TickReachVisuals()
 		}
 		return;
 	}
-	// Steer each reaching hand to the person you're holding (or straight out in front).
+	// Steer each reaching hand to the person you're holding (or straight out where you're looking:
+	// move the mouse and your arms swing round with it - swing them into people to hit them, like Gang Beasts).
 	const ABRCharacter* Held = HandGrabTarget.Get();
-	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	if (!bIsNPC)
+	{
+		const FVector AimFwd = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f).Vector();
+		// Arms can swing up to ~100 degrees either side of where your body faces.
+		if (FVector::DotProduct(AimFwd, Forward) > -0.2f)
+		{
+			Forward = AimFwd;
+		}
+	}
 	const FName HandBones[2] = { FName(TEXT("hand_l")), FName(TEXT("hand_r")) };
 	for (int32 i = 0; i < 2; ++i)
 	{
@@ -5089,6 +5188,11 @@ void ABRCharacter::Server_Headbutt_Implementation() { DoHeadbutt(); }
 void ABRCharacter::DoKick()
 {
 	const float Now = GetWorld()->GetTimeSeconds();
+	if (HasAuthority() && GetCondition() == EPVVCondition::Normal && GetCharacterMovement()->IsFalling() && !bClimbing && !GetCurrentBoat() && !GetCarrier())
+	{
+		DoDropKick(); // kick in the air: DROP KICK
+		return;
+	}
 	if (!HasAuthority() || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bClimbing || bInCannon || Now - LastKickTime < 0.9f)
 	{
 		return;
@@ -5114,7 +5218,24 @@ void ABRCharacter::DoHeadbutt()
 
 void ABRCharacter::Multicast_Kick_Implementation()
 {
-	PlayOneShot(KickAnim);
+	if (!bWobbleOn)
+	{
+		PlayOneShot(KickAnim); // no physics body: the animation is the kick
+	}
+	else if (GetMesh() && GetMesh()->GetBoneIndex(TEXT("thigh_r")) != INDEX_NONE)
+	{
+		// Physics kick: the leg goes loose and is driven out and up through the kick, then eases back.
+		FPhysicalAnimationData Loose;
+		Loose.bIsLocalSimulation = false;
+		Loose.OrientationStrength = 60.f;
+		Loose.AngularVelocityStrength = 6.f;
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_r"), Loose, true);
+		const float NowK = GetWorld()->GetTimeSeconds();
+		PunchArmRestoreAt = FMath::Max(PunchArmRestoreAt, NowK + KickExtendSeconds + 0.25f);
+		SteerTargetLocal[2] = FVector(95.f, 12.f, -15.f); // out in front, about waist high
+		SteerStart[2] = NowK;
+		SteerUntil[2] = NowK + KickExtendSeconds;
+	}
 	PlayBodySound(GetDefault<UBRSettings>()->WhooshSounds, GetActorLocation(), 0.8f);
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("foot_r")) != INDEX_NONE)
 	{
@@ -5481,9 +5602,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 		const FVector HandVel = RelVel.SizeSquared() >= (WorldVel * 0.7f).SizeSquared() ? RelVel : WorldVel * 0.7f;
 		LastHandPos[i] = Pos;
 		const bool bPunching = Now < PunchUntil && (i == 0) == bPunchLeft;
-		if ((ArmsReaching & (1 << i)) && !bPunching)
+		const bool bGripping = (HandGrabMask & (1 << i)) || (WallHandMask & (1 << i)) || bClimbing || (bPropInHands && HeldProp);
+		if ((ArmsReaching & (1 << i)) && !bPunching && (!bSwingAttacks || bGripping))
 		{
-			continue; // a hand that's reaching / holding doesn't slap
+			continue; // a hand that's holding something doesn't slap (a swinging empty hand does)
 		}
 		const float Speed = HandVel.Size();
 		if (Now < HandReadyAt[i] || (Speed < SlapSpeed && !bPunching) || Speed > 6000.f)

@@ -40,6 +40,16 @@ void ABRCharacter::TickActiveRagdoll(float DeltaSeconds)
 	{
 		return;
 	}
+	// Diving: the whole body goes flat out in front of you (superman), arms first.
+	if (bDiving && GetCondition() == EPVVCondition::Normal && !IsRagdollActive() && !GetCurrentBoat())
+	{
+		DiveTilt = FMath::FInterpTo(DiveTilt, 72.f, DeltaSeconds, 12.f);
+		Body->SetRelativeRotation(FQuat(FVector(0.f, 1.f, 0.f), FMath::DegreesToRadians(DiveTilt)) * GetMeshRelativeTransform().GetRotation());
+		bLeanApplied = true;
+		UpdateGrabTethers();
+		return;
+	}
+	DiveTilt = 0.f;
 	const bool bStanding = bActiveRagdoll && GetCondition() == EPVVCondition::Normal && !GetCurrentBoat() && !GetCarrier()
 		&& !bClimbing && !bOnShoulders && !bInCannon && !bHiddenInSpot && !IsRagdollActive();
 	if (!bStanding)
@@ -346,6 +356,8 @@ void ABRCharacter::EndLift()
 
 void ABRCharacter::Multicast_FlingBody_Implementation(FVector_NetQuantize Velocity)
 {
+	const FVector Clamped = FVector(Velocity).GetClampedToMaxSize(MaxFlingSpeed);
+	Velocity = Clamped;
 	USkeletalMeshComponent* Body = GetMesh();
 	if (Body && IsRagdollActive() && Body->IsSimulatingPhysics())
 	{
@@ -468,4 +480,77 @@ void ABRCharacter::TickKOMeter(float DeltaSeconds)
 		bWasKnockedOut = false;
 		ForceNetUpdate();
 	}
+}
+
+// -------------------------------------------------------------------------------------------
+// Fluid physical attacks: fists and feet are steered through the move (no canned snap-back)
+
+void ABRCharacter::Multicast_AttackSteer_Implementation(uint8 Limb, FVector_NetQuantize TargetLocal, float Seconds)
+{
+	if (Limb > 2)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	SteerTargetLocal[Limb] = TargetLocal;
+	SteerStart[Limb] = Now;
+	SteerUntil[Limb] = Now + Seconds;
+}
+
+void ABRCharacter::TickAttackSteer()
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body || !bWobbleOn || GetCondition() != EPVVCondition::Normal)
+	{
+		return;
+	}
+	static const FName Bones[3] = { FName(TEXT("hand_l")), FName(TEXT("hand_r")), FName(TEXT("foot_r")) };
+	const float Now = GetWorld()->GetTimeSeconds();
+	for (int32 i = 0; i < 3; ++i)
+	{
+		if (Now < SteerStart[i] || Now > SteerUntil[i] || Body->GetBoneIndex(Bones[i]) == INDEX_NONE || !Body->IsSimulatingPhysics(Bones[i]))
+		{
+			continue;
+		}
+		// Fast at first (the snap of the punch / kick), easing off as it reaches full extension.
+		const float T = FMath::Clamp((Now - SteerStart[i]) / FMath::Max(0.05f, SteerUntil[i] - SteerStart[i]), 0.f, 1.f);
+		const float Gain = FMath::Lerp(22.f, 9.f, T);
+		const FVector Target = GetActorTransform().TransformPositionNoScale(SteerTargetLocal[i]);
+		const FVector At = Body->GetBoneLocation(Bones[i]);
+		const FVector Want = ((Target - At) * Gain).GetClampedToMaxSize(i == 2 ? 1500.f : 1800.f) + GetVelocity();
+		Body->SetPhysicsLinearVelocity(Want, false, Bones[i]);
+	}
+}
+
+void ABRCharacter::Server_DropKick_Implementation()
+{
+	DoDropKick();
+}
+
+void ABRCharacter::DoDropKick()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!HasAuthority() || GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || GetCarriedCharacter() || bInCannon
+		|| bOnShoulders || bClimbing || Now - LastDropKickTime < 1.6f)
+	{
+		return;
+	}
+	LastDropKickTime = Now;
+	BlowDisguise();
+	ReleaseHandGrab();
+	const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
+	// Launch feet-first: the body goes flying (a ragdoll) and whoever it slams into goes down.
+	bDropKicking = true;
+	DropKickHitUntil = Now + 0.9f;
+	MarkThrown(this);
+	const float Saved = MaxKnockdownSpeed;
+	MaxKnockdownSpeed = FMath::Max(Saved, DropKickSpeed);
+	ApplyKnockdown(nullptr, (Fwd * DropKickSpeed + FVector(0.f, 0.f, GetCharacterMovement()->IsFalling() ? 120.f : 380.f)) / FMath::Max(0.1f, KnockbackScale));
+	MaxKnockdownSpeed = Saved;
+	if (GetCondition() == EPVVCondition::KnockedDown)
+	{
+		SetKnockdownTimeLeft(DropKickDownSeconds); // you land on your back and get up quickly
+	}
+	Multicast_Sfx(2);
+	ForceNetUpdate();
 }

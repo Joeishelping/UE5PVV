@@ -253,6 +253,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HitFlopSeconds = 0.3f;
 	/** Both people grabbing each other: tug of war (more hands, more balance, pulling away and mashing Space win). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bTugOfWar = true;
+	/** Thrown / flung bodies never fly faster than this (cm/s): ~4-5 m throws, like Gang Beasts. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float MaxFlingSpeed = 750.f;
 	float HitFlopUntil = -1.f;
 	float GetUpUntil = -1.f;
 	float TugPull() const;
@@ -277,6 +279,28 @@ public:
 	float ClimbStamina = 1.f;
 	float ClimbHandSwapAt = 0.f;
 	bool bWarnedClimbTired = false;
+	// --- Fluid physical attacks ---------------------------------------------------------
+	/** Punch: the fist is steered out to the target this long (then stays out if you keep holding the button). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float PunchExtendSeconds = 0.3f;
+	/** Kick: the leg is steered through the kick this long. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KickExtendSeconds = 0.35f;
+	/** Swinging your arms out (move the mouse while holding the buttons) hits people if the hand is fast enough. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bSwingAttacks = true;
+	/** Drop kick (kick in the air, or Alt without clicking): how hard you launch and how long you're down after. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float DropKickSpeed = 850.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float DropKickDownSeconds = 1.3f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> ClimbAnim;
+	UFUNCTION(Server, Reliable) void Server_DropKick();
+	UFUNCTION(NetMulticast, Reliable) void Multicast_AttackSteer(uint8 Limb, FVector_NetQuantize TargetLocal, float Seconds);
+	void DoDropKick();
+	void TickAttackSteer();
+	UPROPERTY(Replicated) bool bDropKicking = false;
+	float DropKickHitUntil = -1.f;
+	float LastDropKickTime = -10.f;
+	/** 0 = left hand, 1 = right hand, 2 = right foot: steered toward a point (in our local space) until the time runs out. */
+	FVector SteerTargetLocal[3];
+	float SteerUntil[3] = { -1.f, -1.f, -1.f };
+	float SteerStart[3] = { -1.f, -1.f, -1.f };
 	bool bDazedSpeedApplied = false;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */
@@ -318,6 +342,14 @@ public:
 	TWeakObjectPtr<ABRCharacter> LastAggressionTarget;
 	float GuardBrokenUntil = -1.f;
 	float BlockReleaseAt = -1.f;
+	/** Block button held (the guard comes back up after you punch out of it). */
+	bool bBlockHeld = false;
+	/** NPCs fight back once someone has done at least this much damage to them in a few seconds (a real punch - not a bump). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float FightBackDamage = 11.f;
+	TWeakObjectPtr<ABRCharacter> ProvokedBy;
+	float ProvokeDamage = 0.f;
+	float ProvokeTime = -100.f;
+	float GuardResumeAt = -1.f;
 
 	// --- Cantina ---------------------------------------------------------------------------
 	/** Server: a drink. Wobblier but harder to knock down for this many seconds. */
@@ -534,7 +566,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> KnockoutSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> GrabSound;
 	/** Throw speed for people and objects (cm/s). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ThrowSpeed = 1500.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ThrowSpeed = 1200.f;
 	/** Seconds you can hold someone who isn't zip-tied before they wriggle free. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float GrabHoldSeconds = 3.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveSpeed = 1300.f;
@@ -660,6 +692,7 @@ protected:
 	FVector BodyLeanVel = FVector::ZeroVector;
 	FVector LastLeanVelocity = FVector::ZeroVector;
 	bool bLeanApplied = false;
+	float DiveTilt = 0.f;
 	TWeakObjectPtr<ABRCharacter> LastLeanPusher;
 	/** Tip the body (world-space push). Any machine; the server decides who falls. */
 	void AddLean(const FVector& WorldPush, ABRCharacter* By);
@@ -674,7 +707,7 @@ protected:
 	/** Seconds to heave someone up over your head. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float LiftSeconds = 0.6f;
 	/** Throws from over your head are this much stronger. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float OverheadThrowScale = 1.5f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Ragdoll") float OverheadThrowScale = 1.25f;
 	/** Arms-up pose while holding someone overhead (optional; leave empty to just use the reaching arms). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> LiftAnim;
 	UPROPERTY(Replicated) bool bLiftOverhead = false;

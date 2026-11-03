@@ -523,9 +523,10 @@ void APVVCharacter::ApplyKnockdown(AActor* Cause, const FVector& Impulse)
 	CancelHold();
 
 	Balance = 0.f;
-	LastHitImpulse = Impulse * KnockbackScale;
+	const FVector Push = (Impulse * KnockbackScale).GetClampedToMaxSize(MaxKnockdownSpeed);
+	LastHitImpulse = Push;
 	SetState(EPVVCondition::KnockedDown);
-	LaunchCharacter(Impulse * KnockbackScale, true, true);
+	LaunchCharacter(Push, true, true);
 
 	FTimerDelegate RecoverDelegate = FTimerDelegate::CreateUObject(this, &APVVCharacter::Recover, 0.5f);
 	GetWorldTimerManager().SetTimer(KnockdownTimer, RecoverDelegate, KnockdownDuration, false);

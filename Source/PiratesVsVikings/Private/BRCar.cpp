@@ -370,6 +370,10 @@ bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 	{
 		return WantsBuy(Interactor);
 	}
+	if (WantsRefuel(Interactor) && Interactor->GetCondition() == EPVVCondition::Normal && !Interactor->GetCarriedCharacter())
+	{
+		return true; // holding a gas can next to a thirsty car: pour it in (hold E)
+	}
 	if (WantsDrive(Interactor))
 	{
 		return true; // (prisoners in the back come along for the ride - O takes one out)
@@ -392,6 +396,7 @@ bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 float ABRCar::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
 	if (WantsBuy(Interactor)) return 1.f;
+	if (WantsRefuel(Interactor)) return 2.f;
 	if (WantsDrive(Interactor)) return 0.f;
 	if (FindPrisonerToUnload(Interactor)) return 0.6f;
 	if (WantsSearch(Interactor)) return 2.5f;
@@ -404,6 +409,10 @@ FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 	if (WantsBuy(Interactor))
 	{
 		return FText::Format(LOCTEXT("BuyCar", "BUY this {0} - ${1} (hold)"), FText::FromString(GetModelName()), SalePrice);
+	}
+	if (WantsRefuel(Interactor))
+	{
+		return LOCTEXT("Refuel", "Pour in gas (hold)");
 	}
 	if (WantsDrive(Interactor) && FindPrisonerToUnload(Interactor))
 	{
@@ -420,7 +429,7 @@ FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 	}
 	if (WantsRefuel(Interactor))
 	{
-		return LOCTEXT("Refuel", "Pour in gas (hold)");
+		return LOCTEXT("RefuelB", "Pour in gas (hold)");
 	}
 	if (Interactor && !Interactor->GetCarriedCharacter() && Occupants.Num() > 0 && !Occupants[0])
 	{
@@ -555,6 +564,15 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 		{
 			GM->Feed(FString::Printf(TEXT("%s bought a %s"), *Interactor->GetPlayerDisplayName(), *GetModelName()));
+		}
+		return;
+	}
+	if (WantsRefuel(Interactor))
+	{
+		if (ABRPlayerState* PS = Cast<ABRPlayerState>(Interactor->GetPVVPlayerState()); PS && PS->RemoveItem(EBRItem::GasCan))
+		{
+			Fuel = FMath::Min(1.f, Fuel + 0.5f);
+			ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 200.f), TEXT("+GAS"));
 		}
 		return;
 	}
