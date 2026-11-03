@@ -388,13 +388,13 @@ void ABRDesertArena::BeginPlay()
 	if (GetNetMode() != NM_DedicatedServer)
 	{
 		const UBRSettings* FXSettings = GetDefault<UBRSettings>();
-		if (UNiagaraSystem* Rain = FXSettings->RainEffect.LoadSynchronous())
+		if (UNiagaraSystem* RainSystem = FXSettings->RainEffect.LoadSynchronous())
 		{
-			RainFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, Rain, GetActorLocation(), FRotator::ZeroRotator, FVector(1.f), false, false);
+			RainFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, RainSystem, GetActorLocation(), FRotator::ZeroRotator, FVector(1.f), false, false);
 		}
-		if (UNiagaraSystem* Sand = FXSettings->SandstormEffect.LoadSynchronous())
+		if (UNiagaraSystem* SandSystem = FXSettings->SandstormEffect.LoadSynchronous())
 		{
-			SandFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, Sand, GetActorLocation(), FRotator::ZeroRotator, FVector(1.f), false, false);
+			SandFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, SandSystem, GetActorLocation(), FRotator::ZeroRotator, FVector(1.f), false, false);
 		}
 		RainAudio->SetSound(FXSettings->RainLoopSound.LoadSynchronous());
 		WindAudio->SetSound(FXSettings->WindLoopSound.LoadSynchronous());
