@@ -208,6 +208,22 @@ ABRDesertArena::ABRDesertArena()
 		{
 			AddNightLight(*FString::Printf(TEXT("Night_Light%d"), ExtraIndex++), At, 1.3f, 2800.f);
 		}
+		// Floodlights along both river banks and the Wall, so you can SEE people sneaking across at night.
+		int32 FloodIndex = 0;
+		for (const float LineXs : { -BankX - 250.f, BankX + 250.f, WallX - 350.f })
+		{
+			for (float Y = -HalfY + 900.f; Y <= HalfY - 900.f; Y += 1700.f)
+			{
+				if (FMath::Abs(Y - RoadY) < RoadHalfWidth + 300.f)
+				{
+					continue; // the road has its own lamps
+				}
+				AddBlock(*FString::Printf(TEXT("Flood_Pole%d"), FloodIndex), FVector(LineXs, Y, Ground + 350.f), FVector(20.f, 20.f, 700.f), Iron);
+				AddBlock(*FString::Printf(TEXT("Flood_Head%d"), FloodIndex), FVector(LineXs, Y, Ground + 700.f), FVector(60.f, 90.f, 30.f), Glow, FRotator::ZeroRotator, false);
+				AddNightLight(*FString::Printf(TEXT("Flood_Light%d"), FloodIndex), FVector(LineXs, Y, Ground + 680.f), 1.6f, 3200.f);
+				++FloodIndex;
+			}
+		}
 	}
 
 	// Lighting (removed at BeginPlay if the level has its own). Day/night + weather are driven by the GameState.
@@ -947,6 +963,12 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Station(-11000.f, -3400.f, EBRStationKind::SellItem, EBRItem::Scrap, 25, TEXT("WE BUY SCRAP"), Shop);
 	Station(-11000.f, -3000.f, EBRStationKind::BuyItem, EBRItem::CannonSuit, 500, TEXT("CANNONBALL SUIT $500"), FLinearColor(0.8f, 0.15f, 0.1f));
 	Station(-11500.f, -3300.f, EBRStationKind::BuyItem, EBRItem::Shovel, 80, TEXT("SHOVEL $80"), Shop);
+	// Weapon store (expensive): a knife doubles your punch damage; a gun is contraband (shows up on a scan!).
+	{
+		const FLinearColor Armas(0.25f, 0.25f, 0.28f);
+		Station(-12600.f, -3400.f, EBRStationKind::BuyItem, EBRItem::Knife, 600, TEXT("ARMAS DON CHUY\nKNIFE $600"), Armas);
+		Station(-12600.f, -3000.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 1800, TEXT("ARMAS DON CHUY\nPISTOL $1800 (contraband!)"), Armas);
+	}
 	Station(-11500.f, -2700.f, EBRStationKind::BuyItem, EBRItem::Trumpet, 120, TEXT("MARIACHI TRUMPET $120"), FLinearColor(0.9f, 0.6f, 0.1f));
 	Station(-12000.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Poncho, 200, TEXT("PONCHO DISGUISE $200"), FLinearColor(0.75f, 0.25f, 0.15f));
 	Station(-11600.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Lasso, 150, TEXT("LASSO $150"), Shop);
@@ -978,6 +1000,16 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 			continue; // the road goes through
 		}
 		World->SpawnActor<ABRSpikeFence>(ABRSpikeFence::StaticClass(), At(FenceX, Y, Ground), Params);
+	}
+	// Spike fences along both sides of the road from the border fence to the checkpoint: stay on the road
+	// (the legal way, through the checkpoint) or cut through with wire cutters to get at the river / Wall.
+	for (float X = FenceX + 450.f; X <= WallX - 700.f; X += 400.f)
+	{
+		for (const float Side : { -1.f, 1.f })
+		{
+			const bool bBridge = FMath::Abs(X) < RiverHalfWidth + 900.f; // on the bridge: just inside the rails, standing on the deck
+			World->SpawnActor<ABRSpikeFence>(ABRSpikeFence::StaticClass(), At(X, RoadY + Side * (RoadHalfWidth + (bBridge ? 25.f : 120.f)), Ground, 90.f), Params);
+		}
 	}
 	World->SpawnActor<ABRWall>(ABRWall::StaticClass(), At(WallX, 0.f, Ground), Params);
 	Gate = World->SpawnActor<ABRCheckpointGate>(ABRCheckpointGate::StaticClass(), At(WallX, RoadY, Ground), Params);

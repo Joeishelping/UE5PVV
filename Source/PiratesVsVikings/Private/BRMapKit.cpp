@@ -126,6 +126,38 @@ namespace BRMap
 		return Arena && Location.X > Arena->GetLineX();
 	}
 
+	bool IsOnSafeRoad(const UWorld* World, const FVector& Location)
+	{
+		if (!World)
+		{
+			return false;
+		}
+		// Your own map: within 7 m of the road points, up to the checkpoint.
+		TArray<FVector> Route;
+		int32 CheckpointIndex = INDEX_NONE;
+		FTransform Spawn;
+		ABRCheckpointGate* RoadGate = nullptr;
+		if (GetRoadRoute(World, Route, CheckpointIndex, Spawn, RoadGate))
+		{
+			const int32 Last = CheckpointIndex != INDEX_NONE ? CheckpointIndex : Route.Num() - 1;
+			for (int32 i = 0; i < Last; ++i)
+			{
+				if (FMath::PointDistToSegment(FVector(Location.X, Location.Y, Route[i].Z), Route[i], Route[i + 1]) < 700.f)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+		const ABRDesertArena* Arena = BuiltInMap(World);
+		if (!Arena)
+		{
+			return false;
+		}
+		const FVector L = Location - Arena->GetActorLocation();
+		return FMath::Abs(L.Y - ABRDesertArena::RoadY) < ABRDesertArena::RoadHalfWidth + 80.f && L.X < ABRDesertArena::WallX - 150.f;
+	}
+
 	bool IsInSafeZone(const UWorld* World, const FVector& Location)
 	{
 		if (!World)

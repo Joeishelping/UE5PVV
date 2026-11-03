@@ -176,6 +176,10 @@ private:
 	bool bCheckpointDone = false;
 	/** Made it all the way to the US side (anyone illegal aboard scores for the Runners). */
 	bool bReachedFarSide = false;
+	float DriverSpeedTaste = 1.f;
+	float DriverWobble = 0.f;
+	float DriverWobbleRate = 0.7f;
+	float DriverPhase = 0.f;
 	float NoDriverSince = -1.f;
 	/** Driver got pulled out: somebody else aboard takes the wheel (or bails). */
 	void TickDriverTakeover(float Now);

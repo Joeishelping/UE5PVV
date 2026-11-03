@@ -38,6 +38,8 @@ namespace BRMap
 	/** Direction the river pushes swimmers at this spot (zero if not in a river). */
 	PIRATESVSVIKINGS_API FVector RiverFlow(const UWorld* World, const FVector& Location);
 	PIRATESVSVIKINGS_API bool HasCrossedLine(const UWorld* World, const FVector& Location);
+	/** On the legal road to the checkpoint (before the gate): crossing the Line there is fine - you're queuing. */
+	PIRATESVSVIKINGS_API bool IsOnSafeRoad(const UWorld* World, const FVector& Location);
 	PIRATESVSVIKINGS_API bool IsInSafeZone(const UWorld* World, const FVector& Location);
 	/** Where to head for the Safe Zone from here (nearest zone, or straight east on the test map). */
 	PIRATESVSVIKINGS_API FVector GetSafeZoneGoal(const UWorld* World, const FVector& From);

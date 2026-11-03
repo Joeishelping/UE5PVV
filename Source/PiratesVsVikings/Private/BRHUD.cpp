@@ -585,6 +585,13 @@ void ABRHUD::DrawHUD()
 		Bar(SX * 0.5f - 120.f, SY * 0.78f + 26.f, 240.f, 10.f, Me->GuardMeter, Me->GuardMeter > 0.3f ? Green : Red);
 	}
 
+	// --- Sprint stamina (only shows while it's not full)
+	if (Me->SprintStamina < 0.999f && !Me->GetCurrentBoat())
+	{
+		const FLinearColor StamColor = Me->SprintStamina < 0.3f ? FLinearColor(1.f, 0.35f, 0.2f) : FLinearColor(0.95f, 0.85f, 0.3f);
+		Bar(SX * 0.5f - 140.f, SY - 46.f, 280.f, 9.f, Me->SprintStamina, StamColor);
+	}
+
 	// --- Cantina: drinking contest + tipsy
 	if (Me->bChugging)
 	{

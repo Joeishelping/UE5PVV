@@ -306,6 +306,13 @@ public:
 	FVector SteerTargetLocal[3];
 	float SteerUntil[3] = { -1.f, -1.f, -1.f };
 	float SteerStart[3] = { -1.f, -1.f, -1.f };
+	// --- Sprint stamina (players): sprinting drains it, resting refills it; empty = winded (no sprint for a bit) ---
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Sprint") float SprintSeconds = 7.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Sprint") float SprintRefillSeconds = 6.f;
+	UPROPERTY(Replicated) float SprintStamina = 1.f;
+	bool bWinded = false;
+	float LastSprintDrainTime = -10.f;
+	void TickSprintStamina(float DeltaSeconds);
 	bool bDazedSpeedApplied = false;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */

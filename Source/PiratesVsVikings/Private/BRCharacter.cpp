@@ -184,6 +184,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, ChugGag);
 	DOREPLIFETIME(ABRCharacter, bKnockedOut);
 	DOREPLIFETIME(ABRCharacter, bDropKicking);
+	DOREPLIFETIME_CONDITION(ABRCharacter, SprintStamina, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
 	DOREPLIFETIME(ABRCharacter, DragBone);
 	DOREPLIFETIME(ABRCharacter, HandGrabTarget);
@@ -1324,6 +1325,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	if (IsDazed())
 	{
 		Multiplier *= 0.35f; // staggering
+	}
+	if (bWinded && IsSprinting())
+	{
+		Move->MaxWalkSpeed = FMath::Min(Move->MaxWalkSpeed, WalkSpeed); // out of breath: no sprinting
 	}
 	if (bInBox)
 	{
@@ -3130,6 +3135,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	TickActiveRagdoll(DeltaSeconds);
 	DragHeldBody(DeltaSeconds);
 	TickAttackSteer();
+	TickSprintStamina(DeltaSeconds);
 	UpdateLocalVisibility();
 }
 
@@ -4996,6 +5002,36 @@ void ABRCharacter::TickRope()
 // -------------------------------------------------------------------------------------------
 // Kick + headbutt
 
+void ABRCharacter::TickSprintStamina(float DeltaSeconds)
+{
+	if (bIsNPC || (!HasAuthority() && !IsLocallyControlled()))
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	const bool bRunning = IsSprinting() && !bWinded && Move && Move->IsMovingOnGround() && GetVelocity().Size2D() > 250.f;
+	if (bRunning)
+	{
+		SprintStamina = FMath::Max(0.f, SprintStamina - DeltaSeconds / FMath::Max(1.f, SprintSeconds));
+		LastSprintDrainTime = Now;
+		if (SprintStamina <= 0.f)
+		{
+			bWinded = true;
+			UpdateMovementSpeed();
+		}
+	}
+	else if (Now - LastSprintDrainTime > 0.8f)
+	{
+		SprintStamina = FMath::Min(1.f, SprintStamina + DeltaSeconds / FMath::Max(1.f, SprintRefillSeconds));
+	}
+	if (bWinded && SprintStamina >= 0.3f)
+	{
+		bWinded = false; // got your breath back
+		UpdateMovementSpeed();
+	}
+}
+
 void ABRCharacter::BotDive()
 {
 	Server_Dive_Implementation();
@@ -5987,7 +6023,7 @@ void ABRCharacter::TickOutfitState()
 	switch (Want)
 	{
 	case EBRItem::Trumpet: case EBRItem::Taco: case EBRItem::TacoPlatter: case EBRItem::Drugs:
-	case EBRItem::GasCan: case EBRItem::WireCutters: case EBRItem::Shovel: break;
+	case EBRItem::GasCan: case EBRItem::WireCutters: case EBRItem::Shovel: case EBRItem::Knife: break;
 	default: Want = EBRItem::None; break;
 	}
 	if (bAiming || HeldProp || GetCurrentBoat() || bInCannon)

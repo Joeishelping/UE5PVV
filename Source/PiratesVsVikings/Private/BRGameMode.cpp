@@ -313,7 +313,7 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 		}
 
 		const FVector Where = C->GetActorLocation();
-		if (!PS->bHasCrossedLine && BRMap::HasCrossedLine(GetWorld(), Where))
+		if (!PS->bHasCrossedLine && BRMap::HasCrossedLine(GetWorld(), Where) && !BRMap::IsOnSafeRoad(GetWorld(), Where)) // the road to the checkpoint is legal
 		{
 			PS->bHasCrossedLine = true;
 			if (ABRCharacter* BRC = Cast<ABRCharacter>(C))

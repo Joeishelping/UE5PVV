@@ -701,6 +701,41 @@ Everything is in Class Defaults -> search **GangBeasts**.
 
 ---
 
+## Part 15o: Big batch 1 (combat feel, fixes, world)
+
+Nothing to set up. Just update the code. What's new:
+
+**Fighting**
+- **Punch from your guard:** while blocking, click to punch. The guard drops for the punch and comes back up if you're still holding block.
+- **Punches are straight jabs:** the arm pulls back, then the fist is driven out at their head and stays out for a moment (no instant snap back). Keep holding the button and the arm stays out, grabbing whatever it touches.
+- **Swing attacks:** with your arms out, move the mouse and your arms swing round with it. Swing them into people to hit them (fast swings hurt).
+- **Kicks (R)** are physical now: the leg goes loose and is driven out through the kick, then eases back.
+- **Drop kick:** press R while in the air (jump first), or press **Alt without clicking**. You fly feet-first, knock down whoever you hit, and land on your back (up again after about 1.3 s).
+- **Dive punch:** press **Alt while holding a mouse button**. Superman dive, fists first. The body goes flat out like a real dive.
+- **Hands grab walls at more heights** (reach up for ledges).
+- **Climb animation** is now used while climbing (it's "Climb" in the animation pack; it fills itself in).
+- **Tune:** Class Defaults -> search **GangBeasts** (Punch Extend Seconds, Kick Extend Seconds, Swing Attacks, Drop Kick Speed / Down Seconds, Max Fling Speed).
+
+**Fixes**
+- **Gas:** holding a gas can next to a car that needs fuel = **Pour in gas (hold)** again (it beats getting in).
+- **Flying too far:** knocked-down bodies fly at most ~5.5 m/s (**Max Knockdown Speed**) and throws at most ~7.5 m/s (**Max Fling Speed**). No more flying across the map.
+- **Bumping people:** NPCs only fight back once you've really hurt them (a proper punch, or a few hard knocks), not from a bump. Tune with **Fight Back Damage** under BR | NPC.
+- **Your smuggling clients** never fight you, and now they **defend you**: anyone who hits, grabs or carries off their coyote gets jumped.
+
+**Luchador:** always faces you, charges faster, launches flying dive punches and drop kicks from a few metres away, and half the time picks you up off the canvas and throws you. His own drop kicks don't count as knockdowns.
+
+**World**
+- **Sprint bar:** sprinting drains stamina (about 7 s). Run out and you're winded (no sprint) until it refills a bit. The bar shows at the bottom of the screen. Tune: **Sprint Seconds**, **Sprint Refill Seconds**.
+- **The road is legal:** walking or driving on the road to the checkpoint doesn't count as crossing the Line. Leaving the road (toward the river / Wall) or getting past the Wall does.
+- **Spike fences along both sides of the road** from the border fence to the checkpoint (on the bridge too). To get at the river or the Wall from the road, cut through with **wire cutters** (hold E).
+- **Floodlights** along both river banks and the whole Wall, so you can see people crossing at night.
+- **NPC drivers** each have their own speed and drift around a bit in their lane, so players driving blend in.
+- **Weapon store "ARMAS DON CHUY"** in town by the other shops:
+  - **Knife $600:** doubles your punch damage. Select it to hold it.
+  - **Pistol $1800:** contraband, and it shows up on a scan!
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

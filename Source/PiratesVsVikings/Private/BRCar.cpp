@@ -955,6 +955,11 @@ void ABRTruck::ApplyModel()
 void ABRTruck::StartNPCRoute(const TArray<FVector>& InRoute, int32 InCheckpointIndex, AActor* InGate)
 {
 	bNPCDriven = true;
+	// This driver's personality (speed and how wobbly).
+	DriverSpeedTaste = FMath::FRandRange(0.72f, 1.25f);
+	DriverWobble = FMath::FRand() < 0.25f ? FMath::FRandRange(0.06f, 0.14f) : FMath::FRandRange(0.f, 0.05f);
+	DriverWobbleRate = FMath::FRandRange(0.4f, 1.1f);
+	DriverPhase = FMath::FRandRange(0.f, 6.28f);
 	Route = InRoute;
 	RouteIndex = 0;
 	CheckpointIndex = InCheckpointIndex;
@@ -1166,9 +1171,13 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 	}
 
 	const float Delta = FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, ToTarget.Rotation().Yaw);
-	SteerInput = FMath::Clamp(Delta / 35.f, -1.f, 1.f);
+	// Every driver is a little different: some crawl, some floor it, and they wander about in the lane a bit
+	// (like a person driving - so a player behind the wheel blends right in).
+	const float Wander = DriverWobble * FMath::Sin(Now * DriverWobbleRate + DriverPhase) + DriverWobble * 0.5f * FMath::Sin(Now * DriverWobbleRate * 2.3f);
+	SteerInput = FMath::Clamp(Delta / 35.f + Wander, -1.f, 1.f);
 	const bool bNearCheckpoint = RouteIndex == CheckpointIndex && Distance < 2000.f;
-	ThrottleInput = FMath::Clamp(0.75f * (1.f - FMath::Abs(Delta) / 120.f), 0.25f, bNearCheckpoint ? 0.35f : 0.75f);
+	const float Cruise = 0.75f * DriverSpeedTaste * (1.f + 0.12f * FMath::Sin(Now * 0.23f + DriverPhase)); // eases on and off the gas
+	ThrottleInput = FMath::Clamp(Cruise * (1.f - FMath::Abs(Delta) / 120.f), 0.25f, bNearCheckpoint ? 0.35f : FMath::Min(1.f, Cruise));
 
 	// Keep a big gap to whatever's in front in my lane (spaced-out queue at the border, no pile-ups).
 	if (IsLaneBlocked(Lane, bNearCheckpoint ? 1250.f : 1500.f, 0.f))
