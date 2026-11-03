@@ -432,6 +432,18 @@ Everything here is built on the test map automatically.
 
 ---
 
+## Part 15e: Slots fill themselves
+
+If you leave a slot **empty** in BP_Runner / BP_Warden Class Defaults, the game fills it with the matching asset you imported, by name:
+- **Hats** (SK_Hat_CowboyHat, SK_Hat_Sombrero, SK_Hat_PatrolCap, SK_Hat_HardHat, SK_Hat_CannonHelmet, SK_Hat_LuchaMask), **Poncho Mesh** (SK_Outfit_Poncho)
+- **Hair Styles** (SK_Hair_...), **Facial Hair Styles** (SK_Face_...), **Shirt Styles** (SK_Shirt_... + SK_Outfit_WorkShirt), **Pants Styles** (SK_Pants_... + SK_Outfit_Jeans), **Glasses Styles** (SK_Glasses_... + SK_Outfit_Sunglasses)
+- **Every animation slot** (Idle, Walk, ..., Emote_Smoke, Kick, Headbutt), matched on your body's skeleton.
+
+So all you have to do is **import the files** (keep their names). Anything you set yourself is kept. Untick **BR | Look → Auto Fill Empty Slots** to turn this off.
+(When you package the game later, fill the slots in by hand, because packaging only includes assets something points to.)
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

@@ -1,4 +1,7 @@
 #include "BRCharacter.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Animation/AnimSequence.h"
+#include "Engine/SkeletalMesh.h"
 #include "BRSettings.h"
 #include "BRCar.h"
 #include "BRDesertArena.h"
@@ -267,8 +270,132 @@ void ABRCharacter::StartFleeing(float Seconds)
 	}
 }
 
+namespace
+{
+	/** Every asset of a class in the project (scanned once). */
+	const TArray<FAssetData>& BRAllAssets(UClass* Class)
+	{
+		static TMap<UClass*, TArray<FAssetData>> Cache;
+		if (TArray<FAssetData>* Found = Cache.Find(Class))
+		{
+			return *Found;
+		}
+		TArray<FAssetData>& List = Cache.Add(Class);
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		Registry.GetAssetsByClass(Class->GetClassPathName(), List, true);
+		List.Sort([](const FAssetData& A, const FAssetData& B) { return A.AssetName.LexicalLess(B.AssetName); });
+		return List;
+	}
+}
+
+void ABRCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	AutoFillSlots();
+}
+
+void ABRCharacter::AutoFillSlots()
+{
+	if (!bAutoFillEmptySlots || bSlotsAutoFilled)
+	{
+		return;
+	}
+	bSlotsAutoFilled = true;
+	const TArray<FAssetData>& Meshes = BRAllAssets(USkeletalMesh::StaticClass());
+	auto FillList = [&Meshes](TArray<TObjectPtr<USkeletalMesh>>& Slot, std::initializer_list<const TCHAR*> Prefixes, std::initializer_list<const TCHAR*> Exact)
+	{
+		if (Slot.Num() > 0)
+		{
+			return; // you filled it yourself
+		}
+		for (const FAssetData& A : Meshes)
+		{
+			const FString Name = A.AssetName.ToString();
+			bool bMatch = false;
+			for (const TCHAR* P : Prefixes) { bMatch |= Name.StartsWith(P); }
+			for (const TCHAR* E : Exact) { bMatch |= Name == E; }
+			if (bMatch)
+			{
+				if (USkeletalMesh* M = Cast<USkeletalMesh>(A.GetAsset()))
+				{
+					Slot.Add(M);
+				}
+			}
+		}
+	};
+	auto FindMesh = [&Meshes](const FString& Wanted) -> USkeletalMesh*
+	{
+		for (const FAssetData& A : Meshes)
+		{
+			if (A.AssetName.ToString() == Wanted)
+			{
+				return Cast<USkeletalMesh>(A.GetAsset());
+			}
+		}
+		return nullptr;
+	};
+	FillList(HairStyles, { TEXT("SK_Hair_") }, {});
+	FillList(FacialHairStyles, { TEXT("SK_Face_") }, {});
+	FillList(ShirtStyles, { TEXT("SK_Shirt_") }, { TEXT("SK_Outfit_WorkShirt") });
+	FillList(PantsStyles, { TEXT("SK_Pants_") }, { TEXT("SK_Outfit_Jeans") });
+	FillList(GlassesStyles, { TEXT("SK_Glasses_") }, { TEXT("SK_Outfit_Sunglasses") });
+	if (!PonchoMesh)
+	{
+		PonchoMesh = FindMesh(TEXT("SK_Outfit_Poncho"));
+	}
+	const TPair<EBRHat, const TCHAR*> Hats[] = { { EBRHat::CowboyHat, TEXT("SK_Hat_CowboyHat") }, { EBRHat::Sombrero, TEXT("SK_Hat_Sombrero") },
+		{ EBRHat::PatrolCap, TEXT("SK_Hat_PatrolCap") }, { EBRHat::HardHat, TEXT("SK_Hat_HardHat") }, { EBRHat::CannonHelmet, TEXT("SK_Hat_CannonHelmet") },
+		{ EBRHat::LuchaMask, TEXT("SK_Hat_LuchaMask") } };
+	for (const TPair<EBRHat, const TCHAR*>& H : Hats)
+	{
+		if (!HatMeshes.FindRef(H.Key))
+		{
+			if (USkeletalMesh* M = FindMesh(H.Value))
+			{
+				HatMeshes.Add(H.Key, M);
+			}
+		}
+	}
+	// Animations: by name ("Kick", or "..._Kick"), on the same skeleton as the body.
+	const USkeleton* BodySkeleton = GetMesh() && GetMesh()->GetSkeletalMeshAsset() ? GetMesh()->GetSkeletalMeshAsset()->GetSkeleton() : nullptr;
+	const TArray<FAssetData>& Anims = BRAllAssets(UAnimSequence::StaticClass());
+	auto FillAnim = [&Anims, BodySkeleton](TObjectPtr<UAnimSequenceBase>& Slot, const TCHAR* Wanted)
+	{
+		if (Slot)
+		{
+			return;
+		}
+		const FString Suffix = FString(TEXT("_")) + Wanted;
+		for (const FAssetData& A : Anims)
+		{
+			const FString Name = A.AssetName.ToString();
+			if (Name != Wanted && !Name.EndsWith(Suffix))
+			{
+				continue;
+			}
+			UAnimSequence* Seq = Cast<UAnimSequence>(A.GetAsset());
+			if (Seq && (!BodySkeleton || Seq->GetSkeleton() == BodySkeleton))
+			{
+				Slot = Seq;
+				return;
+			}
+		}
+	};
+	FillAnim(IdleAnim, TEXT("Idle")); FillAnim(WalkAnim, TEXT("Walk")); FillAnim(RunAnim, TEXT("Run"));
+	FillAnim(CrouchIdleAnim, TEXT("CrouchIdle")); FillAnim(CrouchWalkAnim, TEXT("CrouchWalk")); FillAnim(FallAnim, TEXT("Fall"));
+	FillAnim(SwimAnim, TEXT("Swim")); FillAnim(SeatedAnim, TEXT("Seated")); FillAnim(DriveAnim, TEXT("Drive"));
+	FillAnim(RestrainedAnim, TEXT("Restrained")); FillAnim(StruggleAnim, TEXT("Struggle")); FillAnim(CarriedAnim, TEXT("Carried"));
+	FillAnim(WorkAnim, TEXT("Work")); FillAnim(AimAnim, TEXT("Aim")); FillAnim(AimWalkAnim, TEXT("AimWalk"));
+	FillAnim(PunchAnim, TEXT("Punch")); FillAnim(FireAnim, TEXT("Fire")); FillAnim(ReloadAnim, TEXT("Reload"));
+	FillAnim(EatAnim, TEXT("Eat")); FillAnim(TrumpetAnim, TEXT("Trumpet")); FillAnim(DanceAnim, TEXT("Dance"));
+	FillAnim(EmoteWaveAnim, TEXT("Emote_Wave")); FillAnim(EmoteFlexAnim, TEXT("Emote_Flex")); FillAnim(EmoteTauntAnim, TEXT("Emote_Taunt"));
+	FillAnim(EmoteBegAnim, TEXT("Emote_Beg")); FillAnim(EmoteCheerAnim, TEXT("Emote_Cheer")); FillAnim(EmoteSmokeAnim, TEXT("Emote_Smoke"));
+	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt"));
+}
+
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 {
+	AutoFillSlots(); // NPCs pick random clothes from these lists right away
 	bIsNPC = true;
 	KnockdownDuration = NPCKnockdownSeconds; // stay down long enough to be zip-tied
 	DefaultFaction = BR::Runners;

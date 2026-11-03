@@ -154,6 +154,12 @@ public:
 	/** Server (NPC): stop fighting / running and just hang around again. */
 	void CalmDown() { AngryAt = nullptr; AngryUntil = -1.f; FleeUntil = -1.f; MugTarget = nullptr; }
 	void SetKnockdownSeconds(float Seconds) { KnockdownDuration = Seconds; }
+	/** Fills any EMPTY Class Defaults slot (hats, poncho, hair, beards, shirts, pants, glasses, animations) with the
+	 *  matching asset you imported, found by name (SK_Shirt_..., SK_Hat_Sombrero, Kick, Emote_Smoke...). Slots you filled are kept. */
+	void AutoFillSlots();
+	virtual void PostInitializeComponents() override;
+	/** Off = only use what you put in the slots yourself. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") bool bAutoFillEmptySlots = true;
 	/** Server: play an emote right now (round-end poses), ignoring the cooldown. */
 	void ForceEmote(int32 Index);
 	/** Coyote whistle (Runners, Q): your smuggling clients sprint to you. Loud: Border Patrol hears it. */
@@ -616,6 +622,7 @@ private:
 	TWeakObjectPtr<ABRCharacter> AngryAt;
 	float AngryUntil = -1.f;
 	UPROPERTY() TObjectPtr<USkeletalMesh> DefaultTopMesh;
+	bool bSlotsAutoFilled = false;
 	UPROPERTY() TObjectPtr<USkeletalMesh> DefaultBottomMesh;
 	UPROPERTY(Replicated) float TipsyUntil = -1.f;
 	/** Eyes: random blinks (needs the "Blink" shape key on the body). Shut while knocked out. */
