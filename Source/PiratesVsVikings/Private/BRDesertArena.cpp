@@ -684,7 +684,7 @@ void ABRDesertArena::TickAmbience()
 			if (USoundBase* Bark = Barks[FMath::RandRange(0, Barks.Num() - 1)].LoadSynchronous())
 			{
 				const FVector Far = Cam->GetCameraLocation() + FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f).Vector() * FMath::FRandRange(2500.f, 5000.f);
-				UGameplayStatics::PlaySoundAtLocation(this, Bark, Far, FMath::FRandRange(0.5f, 0.9f));
+				BRAudio::PlayAt(this, Bark, Far, 8000.f, FMath::FRandRange(0.5f, 0.9f));
 			}
 		}
 	}

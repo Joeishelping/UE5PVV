@@ -1,4 +1,5 @@
 #include "BRDog.h"
+#include "BRAudio.h"
 #include "AIController.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
@@ -200,7 +201,7 @@ void ABRDog::Multicast_Bark_Implementation()
 {
 	if (BarkSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, BarkSound, GetActorLocation());
+		BRAudio::PlayAt(this, BarkSound, GetActorLocation(), BRAudio::Medium);
 	}
 }
 

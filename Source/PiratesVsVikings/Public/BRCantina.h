@@ -80,8 +80,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") TObjectPtr<USoundBase> FightSound;
 	/** Glug glug / cheers. */
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") TObjectPtr<USoundBase> DrinkSound;
-	/** Saloon piano music (loops). */
+	/** Saloon piano music (loops). Only heard while you're inside (a little bit at the door). */
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") TObjectPtr<USoundBase> Music;
+	/** How far outside the walls you still hear the music faintly (cm). 0 = only inside. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float MusicSpillDistance = 250.f;
 
 	bool IsInside(const FVector& WorldLocation) const;
 	bool IsFightOn() const { return bFight; }
@@ -113,6 +115,7 @@ protected:
 	UPROPERTY() TObjectPtr<ABRCharacter> ContestDrinker;
 	UPROPERTY() TObjectPtr<UAudioComponent> MusicAudio;
 	float FightStartTime = 0.f;
+	float MusicFade = 0.f;
 	float RefillAt = -1.f;
 	float ContestStart = 0.f;
 	float RivalRate = 0.15f;

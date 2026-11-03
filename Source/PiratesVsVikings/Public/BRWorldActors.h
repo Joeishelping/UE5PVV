@@ -992,6 +992,8 @@ public:
 
 	/** The band's song (loops). Set Beats Per Minute to match it so the beat lines up. */
 	UPROPERTY(EditAnywhere, Category = "BR|Band") TObjectPtr<USoundBase> Music;
+	/** How far away you can hear the band (cm). */
+	UPROPERTY(EditAnywhere, Category = "BR|Band") float MusicRange = 3000.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Band") float BeatsPerMinute = 110.f;
 	/** Short trumpet notes played when you hit the beat (random). */
 	UPROPERTY(EditAnywhere, Category = "BR|Band") TArray<TObjectPtr<USoundBase>> NoteSounds;

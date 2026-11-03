@@ -665,7 +665,7 @@ void ABRCar::Multicast_Horn_Implementation()
 {
 	if (HornSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, HornSound, GetActorLocation());
+		BRAudio::PlayAt(this, HornSound, GetActorLocation(), BRAudio::Loud);
 	}
 }
 

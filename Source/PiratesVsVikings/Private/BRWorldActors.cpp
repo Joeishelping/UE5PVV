@@ -1,4 +1,5 @@
 #include "BRWorldActors.h"
+#include "BRAudio.h"
 #include "Components/CapsuleComponent.h"
 #include "BRSettings.h"
 #include "BRCharacter.h"
@@ -923,7 +924,7 @@ void ABRCatapult::Multicast_Fling_Implementation()
 	FlingTime = GetWorld()->GetTimeSeconds();
 	if (LaunchSound && GetNetMode() != NM_DedicatedServer)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, LaunchSound, GetActorLocation());
+		BRAudio::PlayAt(this, LaunchSound, GetActorLocation(), BRAudio::Loud);
 	}
 }
 
@@ -1914,7 +1915,7 @@ void ABRCannon::OnInteract_Implementation(APVVCharacter* Interactor)
 		LastFuseCount = -1;
 		if (FuseSound)
 		{
-			UGameplayStatics::SpawnSoundAtLocation(this, FuseSound, FusePoint());
+			UGameplayStatics::SpawnSoundAtLocation(this, FuseSound, FusePoint(), FRotator::ZeroRotator, 1.f, 1.f, 0.f, BRAudio::Falloff(BRAudio::Near));
 		}
 		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 		{
@@ -1991,7 +1992,7 @@ void ABRCannon::Multicast_Boom_Implementation()
 	BoomTime = GetWorld()->GetTimeSeconds();
 	if (FireSound && GetNetMode() != NM_DedicatedServer)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, FireSound, Muzzle->GetComponentLocation());
+		BRAudio::PlayAt(this, FireSound, Muzzle->GetComponentLocation(), BRAudio::Huge);
 	}
 }
 
@@ -2409,7 +2410,7 @@ void ABRChicken::Multicast_Cluck_Implementation()
 {
 	if (CluckSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, CluckSound, GetActorLocation());
+		BRAudio::PlayAt(this, CluckSound, GetActorLocation(), BRAudio::Near);
 	}
 }
 
@@ -3076,7 +3077,7 @@ void ABRPinata::Multicast_Whack_Implementation(bool bBurst)
 	}
 	if (USoundBase* Sound = bBurst ? BurstSound.Get() : WhackSound.Get())
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, Swing->GetComponentLocation());
+		BRAudio::PlayAt(this, Sound, Swing->GetComponentLocation(), BRAudio::Near);
 	}
 }
 
@@ -4206,7 +4207,8 @@ void ABRMariachiBand::BeginPlay()
 	Super::BeginPlay();
 	if (Music && GetNetMode() != NM_DedicatedServer)
 	{
-		MusicAudio = UGameplayStatics::SpawnSoundAttached(Music, Root, NAME_None, FVector(0.f, 0.f, 150.f), EAttachLocation::KeepRelativeOffset, true);
+		MusicAudio = UGameplayStatics::SpawnSoundAttached(Music, Root, NAME_None, FVector(0.f, 0.f, 150.f), EAttachLocation::KeepRelativeOffset, true,
+			1.f, 1.f, 0.f, BRAudio::Falloff(MusicRange));
 	}
 	if (!HasAuthority())
 	{
@@ -4403,7 +4405,7 @@ void ABRMariachiBand::Multicast_Note_Implementation(FVector_NetQuantize Where, b
 	USoundBase* Sound = bGood ? (NoteSounds.Num() > 0 ? NoteSounds[FMath::RandRange(0, NoteSounds.Num() - 1)].Get() : nullptr) : MissSound.Get();
 	if (Sound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, Where);
+		BRAudio::PlayAt(this, Sound, Where, BRAudio::Medium);
 	}
 }
 
@@ -4433,12 +4435,13 @@ void ABRMariachiBand::Tick(float DeltaSeconds)
 	if (Now >= NextMusicianNote && Musicians.Num() > 0)
 	{
 		NextMusicianNote = Now + 60.f / FMath::Max(30.f, BeatsPerMinute) * 2.f;
-		const int32 Lead = FMath::RandRange(0, Musicians.Num() - 1);
 		for (int32 i = 0; i < Musicians.Num(); ++i)
 		{
 			if (ABRCharacter* Player = Musicians[i].Get())
 			{
-				if (i == Lead && Performers.Num() == 0)
+				// The band's own song is the music: the musicians just mime to it. With no song set, ONE musician
+				// (always the same one) plays the trumpet tune - and never starts it again while it's still playing.
+				if (!Music && i == 0 && Performers.Num() == 0)
 				{
 					Player->PlayBandNote();
 				}

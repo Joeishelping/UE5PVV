@@ -1,4 +1,6 @@
 #include "BRCharacter.h"
+#include "BRAudio.h"
+#include "Components/AudioComponent.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "PVVDetentionZone.h"
 #include "Animation/AnimSequence.h"
@@ -1612,7 +1614,21 @@ void ABRCharacter::Multicast_Trumpet_Implementation()
 	PlayOneShot(TrumpetAnim);
 	if (TrumpetSound && GetNetMode() != NM_DedicatedServer)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, TrumpetSound, GetActorLocation());
+		// One tune at a time per trumpet: never start it again on top of itself.
+		if (TrumpetAudio && TrumpetAudio->IsPlaying())
+		{
+			return;
+		}
+		if (!TrumpetAudio)
+		{
+			TrumpetAudio = UGameplayStatics::SpawnSoundAttached(TrumpetSound, GetRootComponent(), NAME_None, FVector::ZeroVector,
+				EAttachLocation::KeepRelativeOffset, true, 1.f, 1.f, 0.f, BRAudio::Falloff(BRAudio::Medium), nullptr, false);
+		}
+		else
+		{
+			TrumpetAudio->SetSound(TrumpetSound);
+			TrumpetAudio->Play();
+		}
 	}
 }
 void ABRCharacter::Input_Drone()
@@ -1871,7 +1887,7 @@ void ABRCharacter::Server_Reload_Implementation()
 	Multicast_ReloadStarted();
 	if (ReloadSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, ReloadSound, GetActorLocation());
+		BRAudio::PlayAt(this, ReloadSound, GetActorLocation(), BRAudio::Quiet);
 	}
 }
 
@@ -2055,7 +2071,7 @@ void ABRCharacter::OnAttackStartedNative()
 	}
 	if (PunchSwingSound && GetNetMode() != NM_DedicatedServer)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, PunchSwingSound, GetActorLocation());
+		BRAudio::PlayAt(this, PunchSwingSound, GetActorLocation(), BRAudio::Quiet);
 	}
 	else if (GetNetMode() != NM_DedicatedServer)
 	{
@@ -2215,7 +2231,7 @@ void ABRCharacter::Multicast_Shot_Implementation(FVector_NetQuantize Start, FVec
 	}
 	if (USoundBase* Sound = bLethal ? GunSound.Get() : TaserSound.Get())
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, Start);
+		BRAudio::PlayAt(this, Sound, Start, BRAudio::Loud);
 	}
 }
 
@@ -2655,7 +2671,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 			{
 				if (USoundBase* Wave = GetDefault<UBRSettings>()->GetSound(Which))
 				{
-					UGameplayStatics::PlaySoundAtLocation(this, Wave, GetActorLocation());
+					BRAudio::PlayAt(this, Wave, GetActorLocation(), BRAudio::Medium);
 				}
 			}
 		}
@@ -2700,7 +2716,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		KnockedDownAt = GetWorld()->GetTimeSeconds();
 		if (KnockoutSound && GetNetMode() != NM_DedicatedServer)
 		{
-			UGameplayStatics::PlaySoundAtLocation(this, KnockoutSound, GetActorLocation());
+			BRAudio::PlayAt(this, KnockoutSound, GetActorLocation(), BRAudio::Medium);
 		}
 		// Go fully limp: unhook the muscles completely while knocked down (they're hooked back up when you get up).
 		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
@@ -3199,7 +3215,7 @@ void ABRCharacter::Multicast_Sfx_Implementation(uint8 Which)
 	}
 	if (Sound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
+		BRAudio::PlayAt(this, Sound, GetActorLocation(), BRAudio::Near);
 	}
 }
 
@@ -4298,11 +4314,16 @@ void ABRCharacter::ApplyCameraOptions()
 	}
 }
 
-void ABRCharacter::PlayBodySound(const TArray<TSoftObjectPtr<USoundBase>>& List, const FVector& Where, float Volume)
+void ABRCharacter::PlayBodySound(const TArray<TSoftObjectPtr<USoundBase>>& List, const FVector& Where, float Volume, float Range)
 {
+	FVector Ear;
+	if (BRAudio::GetListener(this, Ear) && FVector::DistSquared(Ear, Where) > FMath::Square(Range))
+	{
+		return; // too far to hear: don't even load/pick one
+	}
 	if (USoundBase* Sound = UBRSettings::PickSound(List))
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, Where, FMath::Clamp(Volume, 0.05f, 1.5f), FMath::FRandRange(0.92f, 1.08f));
+		BRAudio::PlayAt(this, Sound, Where, Range, FMath::Clamp(Volume, 0.05f, 1.5f), FMath::FRandRange(0.92f, 1.08f));
 	}
 }
 
@@ -4315,21 +4336,53 @@ void ABRCharacter::TickBodySounds(float DeltaSeconds)
 	const UBRSettings* Sounds = GetDefault<UBRSettings>();
 	const float Now = GetWorld()->GetTimeSeconds();
 	const float Half = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	// Footsteps in time with your stride.
+	// Footsteps: a step sound the moment each foot comes down on the ground (not on a timer).
 	const float Speed = GetVelocity().Size2D();
 	const UCharacterMovementComponent* Move = GetCharacterMovement();
-	if (GetCondition() == EPVVCondition::Normal && Move && Move->IsMovingOnGround() && Speed > 80.f && !GetCurrentBoat() && !GetCarrier())
+	const bool bWalking = GetCondition() == EPVVCondition::Normal && Move && Move->IsMovingOnGround() && Speed > 60.f && !GetCurrentBoat() && !GetCarrier();
+	const float Range = FootstepRange * (bIsNPC ? 0.8f : 1.f);
+	const float Vol = FootstepVolume * (bIsCrouched ? 0.5f : 1.f) * (bIsNPC ? 0.7f : 1.f) * FMath::Clamp(Speed / 450.f, 0.6f, 1.3f);
+	const float FeetZ = GetActorLocation().Z - Half;
+	USkeletalMeshComponent* Body = GetMesh();
+	static const FName FootBones[2] = { FName(TEXT("foot_l")), FName(TEXT("foot_r")) };
+	const bool bHasFeet = Body && Body->GetBoneIndex(FootBones[0]) != INDEX_NONE && Body->GetBoneIndex(FootBones[1]) != INDEX_NONE;
+	FVector Ear;
+	const bool bInEarshot = BRAudio::GetListener(this, Ear) && FVector::DistSquared(Ear, GetActorLocation()) < FMath::Square(Range);
+	if (bWalking && bHasFeet && bInEarshot)
 	{
+		for (int32 i = 0; i < 2; ++i)
+		{
+			const FVector Foot = Body->GetBoneLocation(FootBones[i]);
+			const float Height = Foot.Z - FeetZ;
+			// Learn where this foot sits when it's planted (slowly forgets, so slopes/stairs are fine).
+			FootFloor[i] = FMath::Min(FootFloor[i] + DeltaSeconds * 6.f, Height);
+			if (Height > FootFloor[i] + 5.f)
+			{
+				bFootUp[i] = true; // lifted
+			}
+			else if (bFootUp[i] && Height < FootFloor[i] + 2.f && Now - LastStepTime[i] > 0.18f)
+			{
+				bFootUp[i] = false; // ...and it just touched down: STEP
+				LastStepTime[i] = Now;
+				PlayBodySound(Sounds->FootstepSounds, FVector(Foot.X, Foot.Y, FeetZ), Vol, Range);
+			}
+		}
+	}
+	else if (bWalking && !bHasFeet && bInEarshot)
+	{
+		// No foot bones on this mesh: fall back to stepping in time with the stride.
 		StepClock -= DeltaSeconds;
 		if (StepClock <= 0.f)
 		{
 			StepClock = FMath::Clamp(165.f / Speed, 0.25f, 0.7f);
-			PlayBodySound(Sounds->FootstepSounds, GetActorLocation() - FVector(0.f, 0.f, Half), bIsCrouched ? 0.3f : 0.6f);
+			PlayBodySound(Sounds->FootstepSounds, GetActorLocation() - FVector(0.f, 0.f, Half), Vol, Range);
 		}
 	}
 	else
 	{
 		StepClock = 0.05f;
+		bFootUp[0] = bFootUp[1] = false;
+		FootFloor[0] = FootFloor[1] = 1000.f;
 	}
 	// Ragdoll tumbling: thump when the body slams into the ground.
 	if (GetCondition() == EPVVCondition::KnockedDown && GetMesh() && GetMesh()->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE)
@@ -4338,7 +4391,7 @@ void ABRCharacter::TickBodySounds(float DeltaSeconds)
 		if (PelvisFallSpeed < -350.f && Vz > -80.f && Now - LastThumpTime > 0.25f)
 		{
 			LastThumpTime = Now;
-			PlayBodySound(Sounds->BodyThumpSounds, GetMesh()->GetBoneLocation(TEXT("pelvis")), FMath::Clamp(-PelvisFallSpeed / 900.f, 0.3f, 1.2f));
+			PlayBodySound(Sounds->BodyThumpSounds, GetMesh()->GetBoneLocation(TEXT("pelvis")), FMath::Clamp(-PelvisFallSpeed / 900.f, 0.3f, 1.2f), BRAudio::Near);
 		}
 		PelvisFallSpeed = Vz;
 	}
@@ -4350,7 +4403,7 @@ void ABRCharacter::TickBodySounds(float DeltaSeconds)
 	if (bFlying && !bYelled)
 	{
 		bYelled = true;
-		PlayBodySound(Sounds->FlyingYellSounds, GetActorLocation());
+		PlayBodySound(Sounds->FlyingYellSounds, GetActorLocation(), 1.f, BRAudio::Medium);
 	}
 	else if (!bFlying)
 	{

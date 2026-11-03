@@ -578,6 +578,31 @@ Before/after picture: **Art/Characters/Previews/hair_before_after.png**
 
 ---
 
+## Part 15k: Sound fixes (distance, cantina, trumpets, footsteps)
+
+Nothing to set up. Just update the code.
+
+- **Distance:** every sound in the world now fades with distance, so you only hear what's near you. Roughly:
+  - Footsteps, reloads and swings: about 12 m.
+  - Punches and grunts: about 20 m.
+  - Trumpets, dogs and game sounds: about 35 m.
+  - Horns, guns and crashes: about 60 m.
+  - Cannon boom: about 150 m.
+- **Cantina music** only plays while **you** are inside the cantina. You hear a little of it in the doorway, and it fades out as you walk away.
+  - Tune it on the BR Cantina: **Music Spill Distance** (0 = inside only).
+- **Trumpets:**
+  - A trumpet never starts its tune again while it's still playing.
+  - If the Mariachi Band has its own **Music** song, the musicians just mime to it.
+  - If it has no song, only one musician plays.
+  - Hearing distance of the band: **Music Range** on the band.
+- **Footsteps:**
+  - A step plays the moment each foot touches the ground (not on a timer).
+  - Steps only play near you. NPC steps are a bit quieter than players'.
+  - Tune it in your character Blueprint: Class Defaults -> **Footstep Range**, **Footstep Volume**.
+- **Tip:** for looping sounds (cantina music, the band song), open the sound and tick **Looping**.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

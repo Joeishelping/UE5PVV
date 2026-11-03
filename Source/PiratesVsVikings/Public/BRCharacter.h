@@ -484,6 +484,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float TrumpetCooldown = 25.f;
 	/** Your mariachi music (drag a sound in). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") TObjectPtr<USoundBase> TrumpetSound;
+	/** How far away footsteps can be heard (cm). NPC steps are quieter than players'. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Sound") float FootstepRange = 1200.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Sound") float FootstepVolume = 0.6f;
 	/** Played while you blow the trumpet (the animation pack has "Trumpet"). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> TrumpetAnim;
 	/** Dancing animation for whoever got hit by the music (Mixamo "Samba Dancing"). */
@@ -844,8 +847,14 @@ private:
 	float NextSmokePuff = 0.f;
 	// Body sounds (local, every screen)
 	void TickBodySounds(float DeltaSeconds);
-	void PlayBodySound(const TArray<TSoftObjectPtr<USoundBase>>& List, const FVector& Where, float Volume = 1.f);
+	void PlayBodySound(const TArray<TSoftObjectPtr<USoundBase>>& List, const FVector& Where, float Volume = 1.f, float Range = 2000.f);
 	float StepClock = 0.f;
+	/** Footsteps: each foot was up in the air last frame (so we step when it comes down). */
+	bool bFootUp[2] = { false, false };
+	float LastStepTime[2] = { -1.f, -1.f };
+	float FootFloor[2] = { 1000.f, 1000.f };
+	/** The trumpet tune that's playing (a new one never starts on top of it). */
+	UPROPERTY() TObjectPtr<class UAudioComponent> TrumpetAudio;
 	float PelvisFallSpeed = 0.f;
 	float LastThumpTime = -100.f;
 	float LastGruntTime = -100.f;

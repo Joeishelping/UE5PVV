@@ -1,4 +1,5 @@
 #include "BRGameState.h"
+#include "BRAudio.h"
 #include "BRReplay.h"
 #include "BRCharacter.h"
 #include "EngineUtils.h"
@@ -93,7 +94,7 @@ void ABRGameState::Multicast_Sfx_Implementation(EBRSfx Sound, FVector_NetQuantiz
 		}
 		else
 		{
-			UGameplayStatics::PlaySoundAtLocation(this, Wave, Location);
+			BRAudio::PlayAt(this, Wave, Location, BRAudio::Medium);
 		}
 	}
 }

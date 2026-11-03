@@ -1,4 +1,5 @@
 #include "BRCantina.h"
+#include "BRAudio.h"
 #include "BRCharacter.h"
 #include "BRGameMode.h"
 #include "BRGameState.h"
@@ -196,7 +197,13 @@ void ABRCantina::BeginPlay()
 	if (!DrinkSound) DrinkSound = Settings->DrinkSound.LoadSynchronous();
 	if (Music && GetNetMode() != NM_DedicatedServer)
 	{
-		MusicAudio = UGameplayStatics::SpawnSoundAttached(Music, Root, NAME_None, FVector(0.f, 0.f, 200.f), EAttachLocation::KeepRelativeOffset, true);
+		// Plays "in your head" (not from a point), but only while YOU are inside the cantina - see Tick.
+		MusicAudio = UGameplayStatics::CreateSound2D(this, Music, 1.f, 1.f, 0.f, nullptr, false, false);
+		if (MusicAudio)
+		{
+			MusicAudio->SetVolumeMultiplier(0.001f);
+			MusicAudio->Play();
+		}
 	}
 	if (!HasAuthority())
 	{
@@ -258,6 +265,12 @@ void ABRCantina::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (IsValid(Bouncer))
 	{
 		Bouncer->Destroy();
+	}
+	if (MusicAudio)
+	{
+		MusicAudio->Stop();
+		MusicAudio->DestroyComponent();
+		MusicAudio = nullptr;
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -357,7 +370,7 @@ void ABRCantina::Use(EBRCantinaSpot Kind, APVVCharacter* Who)
 		ABRGameState::Sfx(this, EBRSfx::Buy, Who->GetActorLocation());
 		if (DrinkSound)
 		{
-			UGameplayStatics::PlaySoundAtLocation(this, DrinkSound, Who->GetActorLocation());
+			BRAudio::PlayAt(this, DrinkSound, Who->GetActorLocation(), BRAudio::Near);
 		}
 		BRC->Notify(LOCTEXT("Tipsy", "TEQUILA! You're tipsy: wobblier, but you take hits like a champ."));
 		return;
@@ -449,7 +462,7 @@ void ABRCantina::StartFight(ABRCharacter* Starter)
 	}
 	if (FightSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, FightSound, GetActorLocation());
+		BRAudio::PlayAt(this, FightSound, GetActorLocation(), BRAudio::Loud);
 	}
 	ABRGameState::Sfx(this, EBRSfx::Whistle, GetActorLocation());
 	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
@@ -521,7 +534,23 @@ void ABRCantina::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (MusicAudio)
 	{
-		MusicAudio->SetVolumeMultiplier(FPVVPlayerOptions::MusicVolume * (bFight ? 0.4f : 1.f));
+		// Inside: full music. Standing in the doorway: faint. Anywhere else: silent.
+		FVector Ear;
+		float Want = 0.f;
+		if (BRAudio::GetListener(this, Ear))
+		{
+			const FVector L = GetActorTransform().InverseTransformPositionNoScale(Ear);
+			const float Out = FMath::Max(FMath::Abs(L.X) - HalfX, FMath::Abs(L.Y) - HalfY); // cm outside the walls (<0 = inside)
+			const bool bHeight = L.Z < 700.f && L.Z > -200.f;
+			Want = bHeight ? FMath::Clamp(1.f - Out / MusicSpillDistance, 0.f, 1.f) : 0.f;
+			Want = Out <= 0.f && bHeight ? 1.f : Want * 0.35f;
+		}
+		MusicFade = FMath::FInterpTo(MusicFade, Want, DeltaSeconds, 3.f);
+		if (!MusicAudio->IsPlaying())
+		{
+			MusicAudio->Play(); // keep it looping even if the song isn't set to loop
+		}
+		MusicAudio->SetVolumeMultiplier(FMath::Max(0.001f, MusicFade * FPVVPlayerOptions::MusicVolume * (bFight ? 0.5f : 1.f)));
 	}
 	if (!HasAuthority())
 	{
