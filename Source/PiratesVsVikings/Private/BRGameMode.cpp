@@ -1309,21 +1309,8 @@ void ABRGameMode::AddBot(EPVVFaction Team)
 	PS->SetIsABot(true);
 	PS->SetFaction(Team);
 	// Random look from the full range (same options as people get).
-	PS->Look.SkinTone = FMath::FRand();
-	PS->Look.ShirtColor = FMath::FRand();
-	PS->Look.PantsColor = FMath::FRand();
+	BR::RandomizeLook(PS->Look, 0.f, 1.f, 8, 4, 5, 4, 4);
 	PS->Look.bHat = true;
-	PS->Look.HeadSize = FMath::FRandRange(.4f, .6f);
-	PS->Look.NoseSize = FMath::FRandRange(.35f, .65f);
-	PS->Look.LipSize = FMath::FRandRange(.4f, .6f);
-	PS->Look.EarSize = FMath::FRandRange(.4f, .6f);
-	BR::RandomizeFace(PS->Look, 0.38f);
-	PS->Look.ShirtStyle = FMath::RandRange(0, 5);
-	PS->Look.PantsStyle = FMath::RandRange(0, 4);
-	PS->Look.Glasses = FMath::FRand() < 0.2f ? FMath::RandRange(1, 4) : 0;
-	PS->Look.HairStyle = FMath::RandRange(0, 8);
-	PS->Look.HairColor = FMath::RandBool() ? 0.f : FMath::FRandRange(.05f, .35f);
-	PS->Look.FacialHair = FMath::RandRange(0, 4);
 	// Spawn the body ourselves (step by step, logged) instead of the engine's RestartPlayer.
 	UE_LOG(LogTemp, Warning, TEXT("[Bots] %s: spawning body"), *PS->GetPlayerName());
 	const AActor* Start = ChooseStartForFaction(Team);

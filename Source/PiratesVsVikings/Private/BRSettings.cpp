@@ -239,6 +239,54 @@ namespace BR
 		return FMath::Lerp(FLinearColor::FromSRGBColor(Stops[A]), FLinearColor::FromSRGBColor(Stops[A + 1]), T - A);
 	}
 
+	void RandomizeLook(FBRLook& L, float SkinMin, float SkinMax, int32 HairCount, int32 FacialHairCount,
+		int32 ShirtCount, int32 PantsCount, int32 GlassesCount)
+	{
+		// One feature: usually anywhere in the normal-ish range, sometimes really small or really big.
+		auto Feature = [](float Lo, float Hi)
+		{
+			const float R = FMath::FRand();
+			if (R < 0.22f)
+			{
+				return FMath::RandBool() ? FMath::FRandRange(0.f, 0.18f) : FMath::FRandRange(0.82f, 1.f);
+			}
+			return FMath::FRandRange(Lo, Hi);
+		};
+		L.SkinTone = FMath::FRandRange(FMath::Clamp(FMath::Min(SkinMin, SkinMax), 0.f, 1.f), FMath::Clamp(FMath::Max(SkinMin, SkinMax), 0.f, 1.f));
+		L.HeadSize = FMath::FRandRange(0.28f, 0.72f);
+		L.NoseSize = Feature(0.12f, 0.88f);
+		L.LipSize = Feature(0.15f, 0.85f);
+		L.EarSize = Feature(0.12f, 0.88f);
+		for (const FBRFaceSlider& S : FaceSliders())
+		{
+			L.*S.Field = Feature(0.1f, 0.9f);
+		}
+		// Builds go together a bit: wide faces tend to have strong jaws (and the other way round).
+		L.JawSize = FMath::Clamp(FMath::Lerp(L.JawSize, L.FaceWidth, 0.35f), 0.f, 1.f);
+		// Two "signature" features per person, pushed hard (big nose, tiny eyes, monobrow-thick brows...).
+		const TArrayView<const FBRFaceSlider> All = FaceSliders();
+		for (int32 i = 0; i < 2 && All.Num() > 0; ++i)
+		{
+			const FBRFaceSlider& S = All[FMath::RandRange(0, All.Num() - 1)];
+			L.*S.Field = FMath::RandBool() ? FMath::FRandRange(0.f, 0.12f) : FMath::FRandRange(0.88f, 1.f);
+		}
+		// Hair: some bald guys, the rest any style. Natural colours: mostly black/brown, a few light, red or grey.
+		L.HairStyle = HairCount > 0 ? (FMath::FRand() < 0.12f ? 0 : FMath::RandRange(1, HairCount)) : 1;
+		const float HairRoll = FMath::FRand();
+		L.HairColor = HairRoll < 0.35f ? 0.f
+			: HairRoll < 0.72f ? FMath::FRandRange(0.06f, 0.32f)		// black -> dark brown
+			: HairRoll < 0.84f ? FMath::FRandRange(0.32f, 0.6f)		// light brown -> blonde
+			: HairRoll < 0.9f ? FMath::FRandRange(0.62f, 0.76f)		// auburn / red
+			: FMath::FRandRange(0.8f, 1.f);								// grey / white
+		L.FacialHair = (FacialHairCount > 0 && FMath::FRand() < 0.45f) ? FMath::RandRange(1, FacialHairCount) : 0;
+		L.Glasses = (GlassesCount > 0 && FMath::FRand() < 0.2f) ? FMath::RandRange(1, GlassesCount) : 0;
+		L.ShirtStyle = ShirtCount > 0 ? FMath::RandRange(0, ShirtCount) : 0;
+		L.PantsStyle = PantsCount > 0 ? FMath::RandRange(0, PantsCount) : 0;
+		L.ShirtColor = FMath::FRand() < 0.25f ? 0.f : FMath::FRandRange(0.06f, 1.f);
+		L.PantsColor = FMath::FRand() < 0.3f ? 0.f : FMath::FRandRange(0.06f, 1.f);
+		L.bSet = true;
+	}
+
 	FLinearColor ClothColor(float Slider)
 	{
 		// Everyday fabric colours (workwear, denim, khaki...), picked in steps - no neon.

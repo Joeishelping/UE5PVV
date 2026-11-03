@@ -252,6 +252,13 @@ namespace BR
 		};
 		return TArrayView<const FBRFaceSlider>(Sliders, UE_ARRAY_COUNT(Sliders));
 	}
+	/**
+	 * A whole random person (NPCs + bots): every face slider over its full range (a few features pushed to the
+	 * extremes so faces really differ), hair/beard/glasses/clothes from the lists, natural hair colours.
+	 * Counts = how many styles the character Blueprint has (0 = leave that part alone).
+	 */
+	PIRATESVSVIKINGS_API void RandomizeLook(FBRLook& L, float SkinMin, float SkinMax, int32 HairCount, int32 FacialHairCount,
+		int32 ShirtCount, int32 PantsCount, int32 GlassesCount);
 	/** Random face for an NPC / bot: Spread 0..0.5 around normal. */
 	inline void RandomizeFace(FBRLook& L, float Spread)
 	{

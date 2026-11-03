@@ -419,24 +419,10 @@ void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 	KnockdownDuration = NPCKnockdownSeconds; // stay down long enough to be zip-tied
 	DefaultFaction = BR::Runners;
 	// Every NPC gets a random look so the crowd isn't all clones (and players can blend in).
-	// Ordinary-looking people: small face differences, natural dark/brown hair, plain clothes.
+	// Every slider gets used: all sorts of faces, natural hair colours, any of the clothes / beards / glasses.
 	FBRLook Random;
-	Random.SkinTone = FMath::FRandRange(FMath::Clamp(FMath::Min(SkinToneMin, SkinToneMax), 0.f, 1.f), FMath::Clamp(FMath::Max(SkinToneMin, SkinToneMax), 0.f, 1.f));
-	Random.ShirtColor = FMath::RandRange(0, 2) == 0 ? 0.f : FMath::FRandRange(0.06f, 1.f);
-	Random.PantsColor = FMath::RandRange(0, 1) == 0 ? 0.f : FMath::FRandRange(0.06f, 1.f);
+	BR::RandomizeLook(Random, SkinToneMin, SkinToneMax, HairStyles.Num(), FacialHairStyles.Num(), ShirtStyles.Num(), PantsStyles.Num(), GlassesStyles.Num());
 	Random.bHat = FMath::RandRange(0, 2) != 0;
-	Random.HeadSize = FMath::FRandRange(.42f, .58f);
-	Random.NoseSize = FMath::FRandRange(.35f, .65f);
-	Random.LipSize = FMath::FRandRange(.4f, .6f);
-	Random.EarSize = FMath::FRandRange(.4f, .6f);
-	BR::RandomizeFace(Random, 0.38f); // lots of different faces in the crowd
-	Random.ShirtStyle = ShirtStyles.Num() > 0 ? FMath::RandRange(0, ShirtStyles.Num()) : 0;
-	Random.PantsStyle = PantsStyles.Num() > 0 ? FMath::RandRange(0, PantsStyles.Num()) : 0;
-	Random.Glasses = (GlassesStyles.Num() > 0 && FMath::FRand() < 0.18f) ? FMath::RandRange(1, GlassesStyles.Num()) : 0;
-	Random.HairStyle = HairStyles.Num() > 0 ? FMath::RandRange(1, HairStyles.Num()) : 1;
-	Random.FacialHair = (FacialHairStyles.Num() > 0 && FMath::RandRange(0, 2) == 0) ? FMath::RandRange(1, FacialHairStyles.Num()) : 0;
-	const float HairRoll = FMath::FRand();
-	Random.HairColor = HairRoll < 0.5f ? 0.f : (HairRoll < 0.9f ? FMath::FRandRange(.06f, .3f) : FMath::FRandRange(.8f, .95f)); // own colour, dark/brown, or grey
 	Random.bSet = true;
 	Look = Random;
 	if (HatMeshes.Num() > 0)
