@@ -310,7 +310,14 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 					NPC->StartWandering(NPC->GetActorLocation(), 1500.f);
 					if (NPC->bIllegal)
 					{
-						NPC->StartFleeing(30.f); // no papers: RUN! (tase them, zip-tie them, haul them off)
+						if (FMath::FRand() < 0.3f)
+						{
+							NPC->StartBrawling(Cast<ABRCharacter>(Interactor), 15.f); // won't go quietly
+						}
+						else
+						{
+							NPC->StartFleeing(30.f); // no papers: RUN! (tase them, zip-tie them, haul them off)
+						}
 					}
 				}
 			}
@@ -581,6 +588,55 @@ void ABRTruck::StartNPCRoute(const TArray<FVector>& InRoute, int32 InCheckpointI
 	RouteIndex = 0;
 	CheckpointIndex = InCheckpointIndex;
 	Gate = InGate;
+	Lane = -1.f;
+	// Start in whichever lane is emptier near the start.
+	if (Route.Num() > 1 && IsLaneBlocked(-1.f, 1500.f, 600.f) && !IsLaneBlocked(1.f, 1500.f, 600.f))
+	{
+		Lane = 1.f;
+	}
+}
+
+FVector ABRTruck::LaneTarget(int32 Index, float InLane) const
+{
+	if (!Route.IsValidIndex(Index))
+	{
+		return GetActorLocation();
+	}
+	// Direction of the road at this point (from the previous point, or toward the next).
+	FVector Dir = Index > 0 ? Route[Index] - Route[Index - 1] : (Route.IsValidIndex(Index + 1) ? Route[Index + 1] - Route[Index] : GetActorForwardVector());
+	Dir = (Dir * FVector(1.f, 1.f, 0.f)).GetSafeNormal();
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, Dir);
+	return Route[Index] + Right * InLane * LaneOffset;
+}
+
+bool ABRTruck::IsLaneBlocked(float InLane, float Range, float BehindToo) const
+{
+	const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+	// Where my lane runs, relative to me right now.
+	const FVector Me = GetActorLocation();
+	for (TActorIterator<APVVBoat> It(GetWorld()); It; ++It)
+	{
+		if (*It == this)
+		{
+			continue;
+		}
+		const FVector To = (It->GetActorLocation() - Me) * FVector(1.f, 1.f, 0.f);
+		const float Ahead = FVector::DotProduct(To, Fwd);
+		if (Ahead < -BehindToo || Ahead > Range)
+		{
+			continue;
+		}
+		// Sideways distance from the middle of the lane we're asking about.
+		const float MyLateral = 0.f;
+		const float LaneShift = (InLane - Lane) * LaneOffset;
+		const float Side = FVector::DotProduct(To, Right) - (MyLateral + LaneShift);
+		if (FMath::Abs(Side) < 210.f && (Ahead > 0.f || BehindToo > 0.f))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool ABRTruck::AddNPC(APVVCharacter* NPC)
@@ -621,9 +677,9 @@ void ABRTruck::Tick(float DeltaSeconds)
 		{
 			NoDriverSince = Now;
 		}
-		else if (Now - NoDriverSince > 40.f)
+		else if (Now - NoDriverSince > TowAfterSeconds)
 		{
-			Destroy();
+			Destroy(); // towed (and out of everyone's way)
 		}
 	}
 }
@@ -638,11 +694,28 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 		return;
 	}
 
-	const FVector ToTarget = FVector(Route[RouteIndex] - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	const FVector ToTarget = FVector(LaneTarget(RouteIndex, Lane) - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	const float Distance = ToTarget.Size();
 	const float Now = GetWorld()->GetTimeSeconds();
 
-	if (RouteIndex == CheckpointIndex && Distance < 500.f)
+	// Running the checkpoint: pedal to the metal, nothing stops us.
+	if (bRunningGate)
+	{
+		if (Distance < 400.f)
+		{
+			++RouteIndex;
+			if (!Route.IsValidIndex(RouteIndex))
+			{
+				Destroy();
+			}
+			return;
+		}
+		SteerInput = FMath::Clamp(FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, ToTarget.Rotation().Yaw) / 30.f, -1.f, 1.f);
+		ThrottleInput = 1.f;
+		return;
+	}
+
+	if (RouteIndex == CheckpointIndex && Distance < 450.f)
 	{
 		ThrottleInput = 0.f;
 		SteerInput = 0.f;
@@ -672,6 +745,20 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 		}
 		const bool bCleared = bAllScanned && !bAnySuspect;
 		const bool bFedUp = Now - CheckpointArrivalTime > MaxCheckpointWait;
+		// Scanned and somebody's dirty: give Border Patrol a few seconds to order them out, then they react.
+		if (bAllScanned && bAnySuspect && !bReacted)
+		{
+			if (ReactAt < 0.f)
+			{
+				ReactAt = Now + FMath::FRandRange(5.f, 9.f);
+			}
+			else if (Now >= ReactAt)
+			{
+				bReacted = true;
+				SuspectsReact();
+				return;
+			}
+		}
 		if (!bCheckpointDone && (bCleared || bFedUp || !CheckGate))
 		{
 			bCheckpointDone = true;
@@ -712,6 +799,89 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 	SteerInput = FMath::Clamp(Delta / 35.f, -1.f, 1.f);
 	const bool bNearCheckpoint = RouteIndex == CheckpointIndex && Distance < 2000.f;
 	ThrottleInput = FMath::Clamp(0.75f * (1.f - FMath::Abs(Delta) / 120.f), 0.25f, bNearCheckpoint ? 0.35f : 0.75f);
+
+	// Keep a gap to whatever's in front in my lane (no more pile-ups).
+	if (IsLaneBlocked(Lane, 950.f, 0.f))
+	{
+		ThrottleInput = 0.f;
+		if (BlockedSince < 0.f)
+		{
+			BlockedSince = Now;
+		}
+		// Stuck behind someone for a bit and the other lane's clear: swerve over.
+		if (Now - BlockedSince > 2.5f && !IsLaneBlocked(-Lane, 1300.f, 450.f))
+		{
+			Lane = -Lane;
+			BlockedSince = -1.f;
+		}
+	}
+	else
+	{
+		BlockedSince = -1.f;
+	}
+}
+
+void ABRTruck::SuspectsReact()
+{
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	// Who's dirty aboard, and is the nearest Border Patrol agent close?
+	TArray<ABRCharacter*> Suspects;
+	for (APVVCharacter* Occupant : Occupants)
+	{
+		if (ABRCharacter* BRC = Cast<ABRCharacter>(Occupant); BRC && BRC->IsNPC() && BRC->IsSuspect())
+		{
+			Suspects.Add(BRC);
+		}
+	}
+	ABRCharacter* Cop = nullptr;
+	float Closest = 1500.f;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		const float D = FVector::Dist(It->GetActorLocation(), GetActorLocation());
+		if (It->IsWarden() && !It->IsNPC() && It->GetCondition() == EPVVCondition::Normal && D < Closest)
+		{
+			Closest = D;
+			Cop = *It;
+		}
+	}
+	const float Roll = FMath::FRand();
+	const bool bDriverIsSuspect = Suspects.Contains(Cast<ABRCharacter>(GetDriver()));
+	if (Roll < 0.4f && GetDriver())
+	{
+		// FLOOR IT: smash the barrier and race off.
+		bRunningGate = true;
+		bCheckpointDone = true;
+		++RouteIndex;
+		if (ABRCheckpointGate* CheckGate = Cast<ABRCheckpointGate>(Gate.Get()))
+		{
+			CheckGate->OpenFor(6.f);
+		}
+		if (GM)
+		{
+			GM->Feed(TEXT("A truck SMASHED THROUGH the checkpoint! Chase it!"));
+			GM->OnTruckForcedThrough();
+		}
+		return;
+	}
+	const bool bFight = Roll > 0.72f && Cop;
+	for (ABRCharacter* Suspect : Suspects)
+	{
+		Unseat(Suspect);
+		Suspect->LaunchCharacter(GetActorRightVector() * FMath::FRandRange(-300.f, 300.f) + FVector(0.f, 0.f, 350.f), true, true);
+		if (bFight)
+		{
+			Suspect->StartBrawling(Cop, 18.f); // come out swinging
+		}
+		else
+		{
+			Suspect->StartFleeing(30.f); // RUN!
+		}
+	}
+	if (GM && Suspects.Num() > 0)
+	{
+		GM->Feed(bFight ? TEXT("The passengers jumped out SWINGING at Border Patrol!") : TEXT("The passengers bailed out and RAN!"));
+	}
+	(void)bDriverIsSuspect;
 }
 
 void ABRTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)

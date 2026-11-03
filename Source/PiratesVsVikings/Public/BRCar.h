@@ -120,6 +120,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float MaxCheckpointWait = 120.f;
 	/** How far the wheel turns at full steer (degrees). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float SteeringWheelTurn = 120.f;
+	/** NPC trucks drive in two lanes this far either side of the road's middle (cm). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float LaneOffset = 170.f;
+	/** Seconds an NPC truck with nobody driving it sits there before it's towed away. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float TowAfterSeconds = 10.f;
 
 private:
 	bool bNPCDriven = false;
@@ -131,6 +135,17 @@ private:
 	float NoDriverSince = -1.f;
 	TWeakObjectPtr<AActor> Gate;
 	TArray<TWeakObjectPtr<APVVCharacter>> SpawnedNPCs;
+	/** -1 = right lane, +1 = left lane. */
+	float Lane = -1.f;
+	float BlockedSince = -1.f;
+	float ReactAt = -1.f;
+	bool bReacted = false;
+	bool bRunningGate = false;
 
 	void DriveNPC(float DeltaSeconds);
+	FVector LaneTarget(int32 Index, float InLane) const;
+	/** Another vehicle in my lane ahead within Range? */
+	bool IsLaneBlocked(float InLane, float Range, float BehindToo) const;
+	/** Suspects aboard got caught out: floor it, bail and run, or come out swinging. */
+	void SuspectsReact();
 };

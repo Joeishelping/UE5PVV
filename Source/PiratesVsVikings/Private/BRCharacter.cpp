@@ -187,6 +187,21 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, ClimbNormal);
 }
 
+void ABRCharacter::StartBrawling(ABRCharacter* Target, float Seconds)
+{
+	if (!Target)
+	{
+		StartFleeing(Seconds);
+		return;
+	}
+	AngryAt = Target;
+	AngryUntil = GetWorld()->GetTimeSeconds() + Seconds;
+	if (!bWandering)
+	{
+		StartWandering(GetActorLocation(), 1500.f);
+	}
+}
+
 void ABRCharacter::StartFleeing(float Seconds)
 {
 	FleeUntil = GetWorld()->GetTimeSeconds() + Seconds;
@@ -649,6 +664,23 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
+	// Fighting mad: go after them, then run for it.
+	if (ABRCharacter* Foe = AngryAt.Get())
+	{
+		if (Now < AngryUntil && Foe->GetCondition() == EPVVCondition::Normal)
+		{
+			const FVector ToFoe = (Foe->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
+			if (ToFoe.Size() > 130.f)
+			{
+				AddMovementInput(ToFoe.GetSafeNormal(), 1.f);
+			}
+			BrawlerAct(Foe, 0.5f, DeltaSeconds);
+			return;
+		}
+		AngryAt = nullptr;
+		FleeUntil = Now + 20.f; // done fighting: leg it
+	}
 	if (Now < FleeUntil)
 	{
 		// Running from Border Patrol: away from the nearest agent, zig-zagging a little.

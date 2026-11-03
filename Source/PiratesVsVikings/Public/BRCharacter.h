@@ -48,6 +48,8 @@ public:
 	void StartWandering(const FVector& Home, float Radius);
 	/** Server (NPCs): make a run for it, away from Border Patrol, for this many seconds. */
 	void StartFleeing(float Seconds);
+	/** Server (NPCs): attack this person Gang Beasts style for a while, then run. */
+	void StartBrawling(ABRCharacter* Target, float Seconds);
 
 	// --- NPC secrets (server) -------------------------------------------------------------
 	/** No papers. Border Patrol score for catching them; Runners score for smuggling them through. */
@@ -505,6 +507,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> SkinFallbackMID;
 	bool bWandering = false;
 	float FleeUntil = -1.f;
+	TWeakObjectPtr<ABRCharacter> AngryAt;
+	float AngryUntil = -1.f;
 	FVector WanderHome = FVector::ZeroVector;
 	FVector WanderTarget = FVector::ZeroVector;
 	float WanderRadius = 1500.f;
