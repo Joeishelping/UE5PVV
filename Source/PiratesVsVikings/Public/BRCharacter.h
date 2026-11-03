@@ -244,6 +244,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Suspects") float SuspectSurrenderChance = 0.1f;
 	/** NPC finishing move on someone they knocked down: grab, drag, lift overhead, throw. */
 	void BrawlerFinish(ABRCharacter* Foe);
+	/** Getting up takes this long (can't walk while you push yourself up). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GetUpSeconds = 1.f;
+	/** Thrown people go flying FLOPPY (ragdoll) and are down this long (unless they were already KO'd). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float ThrowKnockdownSeconds = 2.2f;
+	/** A hit at least this hard makes the whole body go limp for a split second (Gang Beasts stagger). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HitFlopThreshold = 700.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HitFlopSeconds = 0.3f;
+	/** Both people grabbing each other: tug of war (more hands, more balance, pulling away and mashing Space win). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bTugOfWar = true;
+	float HitFlopUntil = -1.f;
+	float GetUpUntil = -1.f;
+	float TugPull() const;
 	bool bDazedSpeedApplied = false;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */
@@ -501,7 +513,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> KnockoutSound;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") TObjectPtr<USoundBase> GrabSound;
 	/** Throw speed for people and objects (cm/s). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ThrowSpeed = 1300.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ThrowSpeed = 1500.f;
 	/** Seconds you can hold someone who isn't zip-tied before they wriggle free. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float GrabHoldSeconds = 3.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveSpeed = 1300.f;
@@ -554,6 +566,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> KickAnim;
 	/** Guard up (looping): fists in front of the face while you hold Left Alt. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> BlockAnim;
+	/** Getting up off the floor after being knocked down (plays once). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> GetUpAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> HeadbuttAnim;
 
 	// --- Cash ---------------------------------------------------------------------------

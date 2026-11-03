@@ -639,6 +639,41 @@ Nothing to set up. Just update the code. Everything is tunable in your character
 
 ---
 
+## Part 15m: Gang Beasts round two (waddle, get-ups, floppy throws, tug of war)
+
+**Keep your animations ON.** They're the "brain": the physics muscles pull the floppy body toward the animation pose. Without them the body has nothing to aim for.
+
+**1. New animations (import these!)**
+- Drag **Art/Characters/SK_PVV_Animations_RoundTwo.glb** into the Content Browser (Skeleton = your body skeleton). It has 5 animations:
+  - **Walk / Run:** a waddle. Short stompy steps, wide stance, hips swinging over the planted foot, leaning forward, arms out front flopping.
+  - **CrouchWalk:** the same waddle, crouched.
+  - **Idle:** wide stance, swaying like a drunk teddy bear.
+  - **GetUp:** new. Pushing up off the floor.
+- If your Blueprint's **Walk Anim / Run Anim / Idle Anim** slots point at the OLD ones, set them to the new ones. If the slots are empty they fill themselves by name.
+- (The full pack **SK_PVV_Animations.glb** has all 33, including these.)
+
+**2. Getting up:** when you come round after being knocked down, you push yourself up off the floor. You can't walk for about a second (**Get Up Seconds**), so that's a window to grab them again.
+
+**3. Floppy throws:**
+- Throwing someone (Z while holding them) sends them flying as a ragdoll.
+- They get back up after about 2 seconds (**Throw Knockdown Seconds**), unless they were already knocked out.
+- Throws are a bit stronger (**Throw Speed** 1500), and your running speed adds to them.
+
+**4. Hits make you go limp:** a hard hit makes the whole body go floppy for a split second, then the muscles catch you (**Hit Flop Threshold**, **Hit Flop Seconds**).
+
+**5. Tug of war:** when two people grab each other, whoever pulls harder drags the other. What helps:
+- Using two hands.
+- Having more balance (less beaten up).
+- Walking backwards, away from them.
+- Mashing **Space**.
+- Wearing the Lucha mask.
+
+If it's even, you're locked together, shoving back and forth. Turn it off with **Tug Of War**.
+
+Everything is in Class Defaults -> search **GangBeasts**.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

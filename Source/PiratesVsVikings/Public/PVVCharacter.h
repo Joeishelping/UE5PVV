@@ -101,6 +101,8 @@ public:
 	void DrainBalance(APVVCharacter* By, float Amount);
 	/** Server: stay down longer (body splash). */
 	void ExtendKnockdown(float Seconds);
+	/** Knocked down: get up in exactly this many seconds (e.g. a quick throw knockdown). */
+	void SetKnockdownTimeLeft(float Seconds);
 	/** Blocking etc: change an incoming melee hit (return the new damage, edit the push). */
 	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) { return Damage; }
 	void ApplyKnockdown(AActor* Cause, const FVector& Impulse);

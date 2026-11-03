@@ -73,32 +73,69 @@ def base(p):
 
 
 def walk(t, p, speed=1.0, crouch=0.):
+    """Gang Beasts waddle: short stompy steps, wide stance, hips swing over the planted foot,
+    body leans forward, arms hang out front and flop instead of swinging like a person."""
     ph = t * TAU
-    amp = 26 * speed
+    amp = 19 * speed
     base(p)
-    drop = crouch + .015 * (1 - C(2 * ph))
-    p["pelvis_T"] = (0, -drop, 0)
-    p["pelvis"] = rot(0, 6 * S(ph) * speed, 0)
-    p["spine_01"] = rot(4 * speed + crouch * 120, -5 * S(ph) * speed)
+    drop = crouch + .02 * (1 - C(2 * ph))
+    sway = .035 * S(ph) / max(.8, speed * .9)                      # hips over the planted foot
+    p["pelvis_T"] = (sway, -drop, 0)
+    p["pelvis"] = rot(0, 5 * S(ph) * speed, 8 * S(ph))                # waddle roll
+    p["spine_01"] = rot(8 + 6 * speed + crouch * 120, -4 * S(ph) * speed, -6 * S(ph))
+    p["spine_02"] = rot(3 * speed, 0, -3 * S(ph))
+    p["neck_01"] = rot(-6 - 4 * speed + 4 * S(2 * ph), 0, 4 * S(ph))   # head bobs and counter-tilts
     for s, off in (("l", 0), ("r", math.pi)):
+        k = 1 if s == "l" else -1
         sw = amp * S(ph + off)
         hip, knee = legs_ik(crouch, 0)
-        lift = max(0., S(ph + off + 1.2)) * (35 + 25 * speed)
-        p[f"thigh_{s}"] = rot(hip - sw)
+        lift = max(0., S(ph + off + 1.2)) * (45 + 25 * speed)        # big stompy knee lift
+        p[f"thigh_{s}"] = rot(hip - sw, 0, 7 * k)                      # wide stance
         p[f"calf_{s}"] = rot(knee + lift)
-        p[f"foot_{s}"] = rot(-knee * .3 + sw * .3)
-        asw = (18 + 25 * speed) * S(ph + off + math.pi)
-        p[f"upperarm_{s}"] = arm(s, asw, 0, 10)
-        p[f"lowerarm_{s}"] = rot(-15 - 35 * (speed - 1) * (speed > 1) - 10 * max(0, S(ph + off)))
+        p[f"foot_{s}"] = rot(-knee * .3 + sw * .3, 0, -7 * k)
+        asw = (8 + 12 * speed) * S(ph + off + math.pi)
+        p[f"upperarm_{s}"] = arm(s, -18 - 6 * speed + asw, 0, 20 + 4 * S(2 * ph))   # arms out front, flopping
+        p[f"lowerarm_{s}"] = rot(-30 - 8 * max(0, S(ph + off)))
 
 
 def idle(t, p):
+    """Standing: wide stance, swaying side to side like a drunk teddy bear."""
     base(p)
     b = S(t * TAU)
-    p["spine_02"] = rot(2 * b)
-    p["neck_01"] = rot(-2 * b, 6 * S(t * TAU * .5))
+    p["pelvis_T"] = (.015 * b, -.01, 0)
+    p["pelvis"] = rot(0, 0, 3 * b)
+    p["spine_01"] = rot(6, 0, -4 * b)
+    p["spine_02"] = rot(2 * S(t * TAU * 2))
+    p["neck_01"] = rot(-4 - 2 * b, 6 * S(t * TAU * .5), 3 * b)
     for s in "lr":
-        p[f"upperarm_{s}"] = arm(s, 3 * b, 0, 9 + 2 * b)
+        k = 1 if s == "l" else -1
+        hip, knee = legs_ik(.01)
+        p[f"thigh_{s}"] = rot(hip, 0, 6 * k)
+        p[f"calf_{s}"] = rot(knee)
+        p[f"foot_{s}"] = rot(-knee * .3, 0, -6 * k)
+        p[f"upperarm_{s}"] = arm(s, -10 + 3 * b, 0, 16 + 2 * b)
+        p[f"lowerarm_{s}"] = rot(-25)
+
+
+def get_up(t, p):
+    """Getting up off the floor: on hands and knees, push up, wobble upright."""
+    base(p)
+    k = max(0., min(1., (t - .2) / .7))
+    k = k * k * (3 - 2 * k)
+    drop = .24 * (1 - k)
+    hip, knee = legs_ik(drop)
+    p["pelvis_T"] = (0, -drop, -.05 * (1 - k))
+    p["spine_01"] = rot(60 * (1 - k) + 6 * k)
+    p["spine_02"] = rot(15 * (1 - k))
+    p["neck_01"] = rot(-30 * (1 - k) + 4 * S(t * 18) * k * (1 - k) * 4)
+    wob = 6 * S(t * 14) * k * (1 - min(1., (t - .7) / .4)) if t > .7 else 0.
+    p["pelvis"] = rot(0, 0, wob)
+    for s in "lr":
+        kk = 1 if s == "l" else -1
+        p[f"thigh_{s}"] = rot(hip - 25 * (1 - k), 0, 7 * kk)
+        p[f"calf_{s}"] = rot(knee + 30 * (1 - k))
+        p[f"upperarm_{s}"] = arm(s, -75 * (1 - k) - 10 * k, 0, 12 + 8 * k)
+        p[f"lowerarm_{s}"] = rot(-8 * (1 - k) - 25 * k)
 
 
 def crouch_idle(t, p):
@@ -409,7 +446,7 @@ ANIMS = [
     ("Emote_Wave", wave, 1.0, True), ("Emote_Flex", flex, 1.5, True), ("Emote_Taunt", taunt, 1.0, True),
     ("Emote_Beg", beg, 1.0, True), ("Emote_Cheer", cheer, 1.0, True),
     ("Emote_Smoke", smoke, 4.0, True), ("Kick", kick, .5, False), ("Headbutt", headbutt, .45, False),
-    ("Block", block, 1.0, True), ("Lift_Overhead", lift_overhead, 1.4, True),
+    ("Block", block, 1.0, True), ("Lift_Overhead", lift_overhead, 1.4, True), ("GetUp", get_up, 1.1, False),
 ]
 
 

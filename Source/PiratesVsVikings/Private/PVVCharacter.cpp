@@ -561,6 +561,16 @@ void APVVCharacter::ExtendKnockdown(float Seconds)
 	GetWorldTimerManager().SetTimer(KnockdownTimer, RecoverDelegate, FMath::Max(0.f, Left) + Seconds, false);
 }
 
+void APVVCharacter::SetKnockdownTimeLeft(float Seconds)
+{
+	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)
+	{
+		return;
+	}
+	FTimerDelegate RecoverDelegate = FTimerDelegate::CreateUObject(this, &APVVCharacter::Recover, 0.5f);
+	GetWorldTimerManager().SetTimer(KnockdownTimer, RecoverDelegate, FMath::Max(0.1f, Seconds), false);
+}
+
 void APVVCharacter::Recover(float BalanceFraction)
 {
 	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)

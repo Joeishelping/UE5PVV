@@ -411,7 +411,7 @@ void ABRCharacter::AutoFillSlots()
 	FillAnim(EatAnim, TEXT("Eat")); FillAnim(TrumpetAnim, TEXT("Trumpet")); FillAnim(DanceAnim, TEXT("Dance"));
 	FillAnim(EmoteWaveAnim, TEXT("Emote_Wave")); FillAnim(EmoteFlexAnim, TEXT("Emote_Flex")); FillAnim(EmoteTauntAnim, TEXT("Emote_Taunt"));
 	FillAnim(EmoteBegAnim, TEXT("Emote_Beg")); FillAnim(EmoteCheerAnim, TEXT("Emote_Cheer")); FillAnim(EmoteSmokeAnim, TEXT("Emote_Smoke"));
-	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt")); FillAnim(BlockAnim, TEXT("Block")); FillAnim(LiftAnim, TEXT("Lift_Overhead"));
+	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt")); FillAnim(BlockAnim, TEXT("Block")); FillAnim(LiftAnim, TEXT("Lift_Overhead")); FillAnim(GetUpAnim, TEXT("GetUp"));
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -2598,7 +2598,11 @@ void ABRCharacter::TickWobble()
 		AppliedReachMuscles = 0xFF; // re-loosen any reaching arm
 	}
 	// Getting beaten up makes you woozy: weaker muscles, floppier body (Gang Beasts).
-	const float WantDizzy = GetCondition() == EPVVCondition::Normal ? FMath::Lerp(0.3f, 1.f, GetBalanceFraction()) * (IsTipsy() ? 0.55f : 1.f) : 1.f;
+	float WantDizzy = GetCondition() == EPVVCondition::Normal ? FMath::Lerp(0.3f, 1.f, GetBalanceFraction()) * (IsTipsy() ? 0.55f : 1.f) : 1.f;
+	if (Now < HitFlopUntil)
+	{
+		WantDizzy *= 0.2f; // just got clobbered: everything goes limp for a split second
+	}
 	if (FMath::Abs(WantDizzy - DizzyScale) > 0.08f && PunchArmRestoreAt < 0.f)
 	{
 		DizzyScale = WantDizzy;
@@ -2723,6 +2727,19 @@ void ABRCharacter::OnStateEffectsRefreshed()
 	{
 		const EPVVCondition Was = LastSoundCondition;
 		LastSoundCondition = GetCondition();
+		if (Was == EPVVCondition::KnockedDown && GetCondition() == EPVVCondition::Normal && !GetCurrentBoat() && !GetCarrier())
+		{
+			// Gang Beasts get-up: push up off the floor (can't walk for a moment - grab them while they're getting up!).
+			GetUpUntil = GetWorld()->GetTimeSeconds() + GetUpSeconds;
+			if (GetUpAnim)
+			{
+				PlayOneShot(GetUpAnim);
+			}
+			if (HasAuthority())
+			{
+				ApplySlow(GetUpSeconds, 0.05f);
+			}
+		}
 		if (GetNetMode() != NM_DedicatedServer && GetWorld()->GetTimeSeconds() > 2.f)
 		{
 			const EBRSfx Which = GetCondition() == EPVVCondition::Restrained && Was != EPVVCondition::Restrained ? EBRSfx::ZipTie
@@ -3354,7 +3371,21 @@ void ABRCharacter::Server_Grab_Implementation()
 			return;
 		}
 		const float Power = Dir > 0.4f ? 1.35f : 1.f;
-		Held->LaunchCharacter(Forward * ThrowSpeed * Power + FVector(0.f, 0.f, ThrowSpeed * 0.45f), true, true);
+		const FVector ThrowVel = Forward * ThrowSpeed * Power + FVector(0.f, 0.f, ThrowSpeed * 0.45f) + GetVelocity() * 0.4f;
+		// Gang Beasts: they fly FLOPPY - a ragdoll throw, then up again quickly (unless they were out cold).
+		Held->ApplyKnockdown(this, ThrowVel / FMath::Max(0.1f, Held->KnockbackScale));
+		if (Held->GetCondition() == EPVVCondition::KnockedDown)
+		{
+			Held->Multicast_FlingBody(ThrowVel);
+			if (!Held->bKnockedOut)
+			{
+				Held->SetKnockdownTimeLeft(ThrowKnockdownSeconds);
+			}
+		}
+		else
+		{
+			Held->LaunchCharacter(ThrowVel, true, true);
+		}
 		ABRGameState::Highlight(this, Held, 60.f, FString::Printf(TEXT("%s THREW %s"), *GetPlayerDisplayName(), *Held->GetPlayerDisplayName()));
 		if (ABRPlayerState* PS = GetBRPlayerState())
 		{
@@ -4099,6 +4130,27 @@ void ABRCharacter::ReleaseHandGrab()
 	ForceNetUpdate();
 }
 
+float ABRCharacter::TugPull() const
+{
+	// Two hands beat one, a steady body beats a wobbly one, pulling away (walking backwards) and mashing Space help.
+	const int32 Hands = (HandGrabMask & 1) + ((HandGrabMask >> 1) & 1);
+	float Pull = Hands + GetBalanceFraction() + GrabStruggle * 2.f;
+	if (const ABRCharacter* Other = HandGrabTarget.Get())
+	{
+		const FVector Away = (GetActorLocation() - Other->GetActorLocation()).GetSafeNormal2D();
+		Pull += FMath::Clamp(FVector::DotProduct(GetCharacterMovement()->GetCurrentAcceleration().GetSafeNormal2D(), Away), 0.f, 1.f) * 0.8f;
+	}
+	if (IsDazed())
+	{
+		Pull *= 0.5f;
+	}
+	if (WornHat == EBRHat::LuchaMask)
+	{
+		Pull += 0.3f; // wrestler
+	}
+	return Pull;
+}
+
 void ABRCharacter::Server_GrabStruggle_Implementation()
 {
 	ABRCharacter* Holder = GrabbedBy.Get();
@@ -4221,6 +4273,24 @@ void ABRCharacter::TickHandGrab(float DeltaSeconds)
 		ReleaseHandGrab();
 		Held->LaunchCharacter(GetActorForwardVector().GetSafeNormal2D() * 250.f + FVector(0.f, 0.f, 150.f), true, true);
 		return;
+	}
+	// Tug of war: we're holding each other. Whoever pulls harder drags the other; even = stalemate.
+	if (bTugOfWar && Held->GetCondition() == EPVVCondition::Normal && Held->HandGrabTarget.Get() == this && Held->HandGrabMask != 0)
+	{
+		const float Mine = TugPull();
+		const float Theirs = Held->TugPull();
+		if (Mine < Theirs + 0.15f)
+		{
+			if (Mine > Theirs - 0.15f)
+			{
+				// Stalemate: both locked together, shoving back and forth.
+				const FVector Mid = (GetActorLocation() + Held->GetActorLocation()) * 0.5f;
+				const FVector Axis = (Held->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+				const float Rock = 25.f * FMath::Sin(Now * 5.f);
+				SetActorLocation(FMath::VInterpTo(GetActorLocation(), Mid - Axis * 50.f + Axis * Rock + FVector(0.f, 0.f, GetActorLocation().Z - Mid.Z), DeltaSeconds, 6.f), true);
+			}
+			return; // they're winning (their hands drag us), or nobody is
+		}
 	}
 	// Really hold them: they stay at arm's length in front of you and get dragged wherever you go.
 	if (Held->GetCondition() == EPVVCondition::Normal)
@@ -5356,6 +5426,10 @@ void ABRCharacter::Multicast_BodyHit_Implementation(FName Bone, FVector_NetQuant
 	if (!bWobbleOn || !Body || Body->GetBoneIndex(Bone) == INDEX_NONE)
 	{
 		return;
+	}
+	if (FVector(Impulse).Size() >= HitFlopThreshold)
+	{
+		HitFlopUntil = GetWorld()->GetTimeSeconds() + HitFlopSeconds;
 	}
 	// The part that got hit snaps back; the rest of the upper body follows a bit.
 	ABRGameState::SpawnLocalFX(this, EBRFX::PunchHit, Body->GetBoneLocation(Bone));
