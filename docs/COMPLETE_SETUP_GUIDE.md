@@ -603,6 +603,42 @@ Nothing to set up. Just update the code.
 
 ---
 
+## Part 15l: Gang Beasts movement + knockouts
+
+Nothing to set up. Just update the code. Everything is tunable in your character Blueprint -> **Class Defaults** -> search **GangBeasts**.
+
+**Moving**
+- **Heavy and clumsy:** slower to get going, you slide a bit when you stop, and turns are wide and lazy.
+  - Tune: **Heavy Acceleration**, **Heavy Braking**, **Heavy Ground Friction**, **Heavy Turn Rate**.
+  - Untick **Heavy Movement** to go back to normal.
+- **The body leans into where you walk** (more when you run). Getting knocked off that lean is what makes you fall.
+  - Tune: **Lean Into Move**.
+- **Floppy head and upper body:** they jiggle with every step and every hit.
+  - Tune: **Step Bob**, plus **Head Strength** / **Spine Strength** under Physics (lower = floppier).
+- **Zombie arms:** hold a mouse button and that arm goes straight out at shoulder height. Look up and the arms go up (grab ledges, people above you). Look down and they go down (grab people on the floor).
+
+**Fighting**
+- **Physics punches:** no canned punch animation any more.
+  - The arm pulls back for a split second, then gets flung at the other person's head.
+  - Running into a punch makes it harder. A punch can miss or glance off.
+  - Tune: **Punch Windup**. Tick **Punch Anim With Physics** to also play the old animation.
+- **The head is what matters:**
+  - Clean punches to the **head** fill a hidden **KO meter**.
+  - About 3–4 head shots knock you out. A headbutt counts extra.
+  - Halfway there, you see birds and wobble.
+  - Body shots mostly shove you around and do less damage.
+  - The meter drains if you avoid getting hit for a few seconds.
+  - Blocking stops it filling.
+  - Tune: **Head Hit KO**, **Body Hit KO**, **Body Hit Damage Scale**, **KO Recover Rate / Delay**.
+- **Real knockouts:**
+  - A KO'd person goes completely limp with **z Z Z** over their head.
+  - They stay down a few seconds longer (**KO Extra Seconds**), then get up **groggy**: slow, wobbly, can't punch for a moment (**Groggy Seconds**).
+  - That's your chance to grab, drag, lift or throw them.
+
+**Note:** if your Blueprint already changed **Head Strength** or **Spine Strength**, it keeps your old value. Click the yellow reset arrow to use the new floppier ones (110 / 340).
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

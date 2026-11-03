@@ -71,14 +71,17 @@ void ABRCharacter::TickActiveRagdoll(float DeltaSeconds)
 	Steady *= IsTipsy() ? 0.7f : 1.f;
 	Steady *= bBlocking ? 1.4f : 1.f; // feet planted behind your guard
 	const float K = BalanceStiffness * Steady;
-	BodyLeanVel += (-BodyLean * K - BodyLeanVel * BalanceDamping) * DeltaSeconds;
+	// Lean INTO the way you're walking (Gang Beasts: the body leads, the legs catch up).
+	const FVector LeanTarget = FVector(Vel.X, Vel.Y, 0.f) * (LeanIntoMove / 100.f);
+	BodyLeanVel += (-(BodyLean - LeanTarget) * K - BodyLeanVel * BalanceDamping) * DeltaSeconds;
 	BodyLean += BodyLeanVel * DeltaSeconds;
 	BodyLean.Z = 0.f;
 	const float Angle = BodyLean.Size();
+	const float OffBalance = (BodyLean - LeanTarget).Size(); // only being knocked off your lean counts
 	// Too far over: you GO DOWN (the server decides).
-	if (HasAuthority() && Angle > FallOverAngle)
+	if (HasAuthority() && OffBalance > FallOverAngle)
 	{
-		const FVector Dir = BodyLean.GetSafeNormal();
+		const FVector Dir = (BodyLean - LeanTarget).GetSafeNormal();
 		BodyLean = FVector::ZeroVector;
 		BodyLeanVel = FVector::ZeroVector;
 		ApplyKnockdown(LastLeanPusher.Get(), Dir * 350.f + FVector(0.f, 0.f, 80.f));
@@ -381,4 +384,88 @@ void ABRCharacter::Multicast_IgnoreVehicles_Implementation(uint8 Channel, float 
 			Self->IgnoredVehicleChannel = 255;
 		}
 	}), FMath::Max(0.1f, Seconds), false);
+}
+
+// -------------------------------------------------------------------------------------------
+// Knockouts (Gang Beasts): head hits fill a KO meter; full = out cold
+
+void ABRCharacter::AddKO(float Amount, ABRCharacter* By)
+{
+	if (!HasAuthority() || Amount <= 0.f || GetCondition() != EPVVCondition::Normal || bPeaceful)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	KOMeter = FMath::Clamp(KOMeter + Amount / FMath::Max(0.25f, FightToughness / 1.9f), 0.f, 1.f);
+	LastKOHitTime = Now;
+	if (KOMeter >= 1.f)
+	{
+		KnockOut(By);
+		return;
+	}
+	// Rocked: birds and wobbly legs for a moment (one more good one and you're out).
+	if (KOMeter >= 0.6f && !IsDazed())
+	{
+		if (const ABRGameState* GS = GetBRGameState())
+		{
+			DazedUntil = GS->GetServerWorldTimeSeconds() + DazeSeconds * 0.6f;
+			UpdateMovementSpeed();
+			ForceNetUpdate();
+		}
+	}
+}
+
+void ABRCharacter::KnockOut(ABRCharacter* By)
+{
+	KOMeter = 0.f;
+	ReleaseHandGrab();
+	bBlocking = false;
+	const FVector Push = By ? (GetActorLocation() - By->GetActorLocation()).GetSafeNormal2D() * 250.f + FVector(0.f, 0.f, 60.f) : FVector(0.f, 0.f, 60.f);
+	ApplyKnockdown(By, Push);
+	if (GetCondition() != EPVVCondition::KnockedDown)
+	{
+		return;
+	}
+	bKnockedOut = true;
+	bWasKnockedOut = true;
+	ExtendKnockdown(KOExtraSeconds);
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("KNOCKED OUT!"));
+	if (By)
+	{
+		ABRGameState::Highlight(this, By, 70.f, FString::Printf(TEXT("%s KNOCKED OUT %s"), *By->GetPlayerDisplayName(), *GetPlayerDisplayName()));
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>(); GM && (!bIsNPC || !By->bIsNPC))
+		{
+			GM->Feed(FString::Printf(TEXT("%s knocked out %s!"), *By->GetPlayerDisplayName(), *GetPlayerDisplayName()));
+		}
+	}
+	ForceNetUpdate();
+}
+
+void ABRCharacter::TickKOMeter(float DeltaSeconds)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (KOMeter > 0.f && Now - LastKOHitTime > KORecoverDelay)
+	{
+		KOMeter = FMath::Max(0.f, KOMeter - KORecoverRate * DeltaSeconds);
+	}
+	// Came round after a real knockout: up you get, groggy and wobbly for a moment.
+	if (bKnockedOut && GetCondition() != EPVVCondition::KnockedDown)
+	{
+		bKnockedOut = false;
+		if (GetCondition() == EPVVCondition::Normal && bWasKnockedOut)
+		{
+			if (const ABRGameState* GS = GetBRGameState())
+			{
+				DazedUntil = GS->GetServerWorldTimeSeconds() + GroggySeconds;
+			}
+			ApplySlow(GroggySeconds, 0.45f);
+			UpdateMovementSpeed();
+		}
+		bWasKnockedOut = false;
+		ForceNetUpdate();
+	}
 }

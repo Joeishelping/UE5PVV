@@ -197,6 +197,45 @@ public:
 	UPROPERTY(Replicated) float DazedUntil = -1.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DazeSeconds = 2.2f;
 	float LastDazeTime = -100.f;
+
+	// --- Gang Beasts feel --------------------------------------------------------------------
+	/** Heavy, clumsy movement: slow to get going, slow to stop, wide turns (like steering a sack of potatoes). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bHeavyMovement = true;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeavyAcceleration = 900.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeavyBraking = 650.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeavyGroundFriction = 3.5f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeavyTurnRate = 280.f;
+	/** How far the body leans into the way you're walking (degrees per m/s). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float LeanIntoMove = 1.3f;
+	/** Head and shoulders bob/jiggle on every step. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float StepBob = 40.f;
+	/** Punches: the arm pulls back this long before it's flung out (seconds). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float PunchWindup = 0.1f;
+	/** Also play the Punch animation on top of the physics fling (off = pure physics punches, like Gang Beasts). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bPunchAnimWithPhysics = false;
+	/** KO meter: how much one clean hit to the HEAD fills it (1 = knocked out). Body hits mostly just shove. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeadHitKO = 0.3f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float BodyHitKO = 0.05f;
+	/** Body hits do this much of their normal damage (head hits do full). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float BodyHitDamageScale = 0.6f;
+	/** KO meter drains at this rate once you haven't been hit for KORecoverDelay seconds. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KORecoverRate = 0.15f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KORecoverDelay = 2.5f;
+	/** A real knockout keeps you down this much longer than a normal knockdown. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KOExtraSeconds = 3.f;
+	/** After a knockout you get up groggy (slow, wobbly, can't punch) for this long. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GroggySeconds = 1.6f;
+	/** Server: fill the KO meter (head hits, headbutts). At 0.6 you see birds, at 1 you're OUT. */
+	void AddKO(float Amount, ABRCharacter* By);
+	void KnockOut(ABRCharacter* By);
+	void TickKOMeter(float DeltaSeconds);
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsKnockedOut() const { return bKnockedOut; }
+	/** 0..1 how close to being knocked out (server). */
+	float KOMeter = 0.f;
+	float LastKOHitTime = -100.f;
+	UPROPERTY(Replicated) bool bKnockedOut = false;
+	bool bWasKnockedOut = false;
+	FTimerHandle PunchWindupTimer;
 	bool bDazedSpeedApplied = false;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */
@@ -551,8 +590,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") bool bWobblyLegs = true;
 	/** Gang Beasts feel: firm legs, loose spine, floppy arms. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float LegStrength = 1600.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SpineStrength = 480.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HeadStrength = 240.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SpineStrength = 340.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HeadStrength = 110.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float ArmStrength = 130.f;
 	// --- Active ragdoll (Gang Beasts balance) ------------------------------------------------------------
 	/** The physics puppet: your body balances itself on its feet, every hit and every start/stop tips you,
