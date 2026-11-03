@@ -62,6 +62,10 @@ public:
 	void OnTruckCleared(APVVCharacter* Warden);
 	/** Server: a truck waited too long at the checkpoint and pushed through. */
 	void OnTruckForcedThrough();
+	/** Server: illegal NPCs / contraband got across the border without being caught - points for the Runners team. */
+	void OnSmuggledThrough(int32 IllegalPeople, int32 Contraband, const FVector& Where);
+	/** Points to a whole team (not a specific player). */
+	void AwardTeamPoints(EPVVFaction Team, int32 Amount);
 
 	// --- Lobby / host settings / best of 3 ------------------------------------------------
 	/** Multiplayer: wait for everyone to press Y (ready) before Prep starts. */
@@ -164,6 +168,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerContraband = 2;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerCatch = 2;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerIllegalNPC = 1;
+	/** Runners team gets this for every illegal NPC who makes it across uncaught (on foot or in a truck). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerIllegalNPCThrough = 1;
+	/** ...and this per NPC carrying contraband who gets it across. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerNPCContrabandThrough = 1;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerSeizure = 1;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerClearedTruck = 1;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerWrongfulArrest = -1;

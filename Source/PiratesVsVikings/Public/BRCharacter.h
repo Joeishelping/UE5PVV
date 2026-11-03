@@ -58,6 +58,8 @@ public:
 	bool bIllegal = false;
 	/** Carrying contraband (found by scanning). */
 	bool bCarriesContraband = false;
+	/** Already counted as making it across the border (points for the Runners). */
+	bool bScoredCrossing = false;
 	/** What the contraband is (shows on the scanner). */
 	EBRItem ContrabandItem = EBRItem::Drugs;
 	/** Smuggling client: follows this Runner. */

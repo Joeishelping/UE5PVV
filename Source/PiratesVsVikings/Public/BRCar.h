@@ -166,6 +166,8 @@ private:
 	int32 CheckpointIndex = INDEX_NONE;
 	float CheckpointArrivalTime = -1.f;
 	bool bCheckpointDone = false;
+	/** Made it all the way to the US side (anyone illegal aboard scores for the Runners). */
+	bool bReachedFarSide = false;
 	float NoDriverSince = -1.f;
 	/** Driver got pulled out: somebody else aboard takes the wheel (or bails). */
 	void TickDriverTakeover(float Now);

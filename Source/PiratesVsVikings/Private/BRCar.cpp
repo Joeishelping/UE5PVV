@@ -1000,6 +1000,7 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 			++RouteIndex;
 			if (!Route.IsValidIndex(RouteIndex))
 			{
+				bReachedFarSide = true;
 				Destroy();
 			}
 			return;
@@ -1084,6 +1085,7 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 		++RouteIndex;
 		if (!Route.IsValidIndex(RouteIndex))
 		{
+			bReachedFarSide = true;
 			Destroy(); // reached the far side
 		}
 		return;
@@ -1257,6 +1259,24 @@ void ABRTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			{
 				Riders.Add(NPC.Get());
 			}
+		}
+	}
+	// Made it all the way across with people / contraband nobody caught: points for the Runners.
+	if (bReachedFarSide && Riders.Num() > 0)
+	{
+		int32 Illegal = 0;
+		int32 Contraband = 0;
+		for (APVVCharacter* Rider : Riders)
+		{
+			if (const ABRCharacter* BRC = Cast<ABRCharacter>(Rider))
+			{
+				Illegal += BRC->bIllegal ? 1 : 0;
+				Contraband += BRC->bCarriesContraband ? 1 : 0;
+			}
+		}
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->OnSmuggledThrough(Illegal, Contraband, GetActorLocation());
 		}
 	}
 	Super::EndPlay(EndPlayReason); // ejects everyone first

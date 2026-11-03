@@ -1134,14 +1134,30 @@ void ABRGameMode::TickClients()
 {
 	// Smuggling clients who reach the Safe Zone pay their Runner.
 	TArray<ABRCharacter*> Delivered;
+	TArray<ABRCharacter*> SlippedThrough;
 	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 	{
 		ABRCharacter* Client = *It;
+		// An illegal local (no coyote) made it to the Safe Zone on their own: the Runners team scores.
+		if (Client->IsNPC() && !Client->Leader.IsValid() && (Client->bIllegal || Client->bCarriesContraband) && !Client->bScoredCrossing
+			&& Client->GetCondition() == EPVVCondition::Normal && !Client->GetCarrier() && !Client->GetCurrentBoat()
+			&& BRMap::IsInSafeZone(GetWorld(), Client->GetActorLocation()))
+		{
+			SlippedThrough.Add(Client);
+		}
 		if (Client->IsNPC() && Client->Leader.IsValid() && Client->GetCondition() == EPVVCondition::Normal && !Client->GetCarrier()
 			&& BRMap::IsInSafeZone(GetWorld(), Client->GetActorLocation()))
 		{
 			Delivered.Add(Client);
 		}
+	}
+	for (ABRCharacter* Free : SlippedThrough)
+	{
+		Free->bScoredCrossing = true;
+		OnSmuggledThrough(Free->bIllegal ? 1 : 0, Free->bCarriesContraband ? 1 : 0, Free->GetActorLocation());
+		Free->CalmDown();
+		FTimerHandle Gone;
+		GetWorldTimerManager().SetTimer(Gone, FTimerDelegate::CreateWeakLambda(Free, [Free]() { Free->Destroy(); }), 20.f, false); // off to start a new life
 	}
 	for (ABRCharacter* Client : Delivered)
 	{
@@ -1486,6 +1502,43 @@ void ABRGameMode::TickBounty(ABRGameState* GS)
 		ABRGameState::Sfx(this, EBRSfx::Bounty, FVector::ZeroVector, true);
 		Announce(FText::Format(LOCTEXT("Bounty", "WANTED: {0}! Border Patrol gets +{1} for catching them."), FText::FromString(Top->GetPlayerName()), BountyPoints));
 		Feed(FString::Printf(TEXT("BOUNTY on %s ($ above their head)"), *Top->GetPlayerName()));
+	}
+}
+
+void ABRGameMode::AwardTeamPoints(EPVVFaction Team, int32 Amount)
+{
+	ABRGameState* GS = GetBRGameState();
+	if (!GS || Amount == 0 || GS->Phase != EBRPhase::Invasion)
+	{
+		return;
+	}
+	if (Team == BR::Runners)
+	{
+		GS->RunnerScore = FMath::Max(0, GS->RunnerScore + Amount);
+	}
+	else if (Team == BR::Wardens)
+	{
+		GS->WardenScore = FMath::Max(0, GS->WardenScore + Amount);
+	}
+	GS->ForceNetUpdate();
+}
+
+void ABRGameMode::OnSmuggledThrough(int32 IllegalPeople, int32 Contraband, const FVector& Where)
+{
+	const int32 Points = IllegalPeople * PointsPerIllegalNPCThrough + Contraband * PointsPerNPCContrabandThrough;
+	if (Points <= 0)
+	{
+		return;
+	}
+	AwardTeamPoints(BR::Runners, Points);
+	ABRGameState::FX(this, EBRFX::PointsText, Where + FVector(0.f, 0.f, 150.f), FString::Printf(TEXT("+%d %s"), Points, *BR::RunnerName()));
+	if (IllegalPeople > 0)
+	{
+		Feed(FString::Printf(TEXT("%d with no papers slipped across the border! +%d for the %s"), IllegalPeople, Points, *BR::RunnerName()));
+	}
+	else
+	{
+		Feed(FString::Printf(TEXT("Contraband got across the border! +%d for the %s"), Points, *BR::RunnerName()));
 	}
 }
 
