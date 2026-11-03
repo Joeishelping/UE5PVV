@@ -256,6 +256,27 @@ public:
 	float HitFlopUntil = -1.f;
 	float GetUpUntil = -1.f;
 	float TugPull() const;
+	// --- Throwing people into people ---
+	/** Someone thrown at another person knocks them over too (bowling!). */
+	void MarkThrown(ABRCharacter* By);
+	void TickThrown();
+	TWeakObjectPtr<ABRCharacter> ThrownBy;
+	float ThrownUntil = -1.f;
+	TArray<TWeakObjectPtr<ABRCharacter>> BowledOver;
+	/** Grabbed a prop with your hands (hold the mouse button): it drops when you let go. */
+	bool bPropInHands = false;
+	// --- Climbing (Gang Beasts): hold on with your hands, hold SPACE to climb (look up = up, look down = down), A/D = shimmy ---
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Climb") float ClimbSpeed = 115.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Climb") float ShimmySpeed = 95.f;
+	/** Holding on with only one hand: you slowly slide down. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Climb") float ClimbSlideSpeed = 35.f;
+	/** How long your arms last on a wall (seconds of hanging with both hands; climbing tires you faster). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Climb") float ClimbStaminaSeconds = 22.f;
+	UFUNCTION(Server, Reliable) void Server_ClimbHold(bool bHeld);
+	bool bClimbUpHeld = false;
+	float ClimbStamina = 1.f;
+	float ClimbHandSwapAt = 0.f;
+	bool bWarnedClimbTired = false;
 	bool bDazedSpeedApplied = false;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */

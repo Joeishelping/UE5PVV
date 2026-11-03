@@ -674,6 +674,33 @@ Everything is in Class Defaults -> search **GangBeasts**.
 
 ---
 
+## Part 15n: Grab anything, bowling throws, lift camera, Gang Beasts climbing
+
+**Grab whatever you touch:**
+- Hold a mouse button (it starts grabbing after about 0.15 s) and your hand grabs whatever it touches:
+  - **People**, even ones that aren't straight in front of you.
+  - **Crates, chairs, bottles, planks.**
+  - **Walls and ledges.**
+- You keep holding it until you let go of the button. A prop you grabbed this way drops when you let go of both buttons.
+
+**Throw people into people:** a thrown person knocks down anyone they slam into ("STRIKE!"), and *those* people can knock over the next ones too.
+
+**Lifting camera:** while you hold someone over your head, the camera pulls back and up, and they're held a little further in front, so they're not in your face.
+
+**Climbing (Gang Beasts style):**
+- Grab a wall with your hands, then hold **both mouse buttons** to hang on.
+- Hold **SPACE** to climb up, hand over hand. Look **down** while holding SPACE to climb down.
+- **A / D** to shimmy sideways along the wall.
+- Only **one** button held: you slowly slide down.
+- Let go of both buttons (or press **Z**) to drop.
+- At the top, **SPACE** pulls you up.
+- Your arms get tired: about 20 s of hanging, less if you keep climbing. You get a warning when they start shaking.
+- Your legs dangle and kick while you hang.
+- You don't have to click left, right, left any more (it still gives a small boost if you do).
+- Tune it in Class Defaults -> search **Climb**: **Climb Speed**, **Shimmy Speed**, **Climb Slide Speed**, **Climb Stamina Seconds**.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

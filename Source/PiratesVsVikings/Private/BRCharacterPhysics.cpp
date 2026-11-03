@@ -227,7 +227,7 @@ FVector ABRCharacter::GetHoldPoint() const
 	}
 	// Lifting: heave them up from your hands to above your head.
 	const float Alpha = FMath::Clamp((GetWorld()->GetTimeSeconds() - LiftStartTime) / FMath::Max(0.05f, LiftSeconds), 0.f, 1.f);
-	const FVector High = GetActorLocation() + Fwd * 10.f + FVector(0.f, 0.f, Half + 45.f);
+	const FVector High = GetActorLocation() + Fwd * 35.f + FVector(0.f, 0.f, Half + 40.f); // a bit in front (out of the camera's way)
 	return FMath::Lerp(Low, High, FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f));
 }
 

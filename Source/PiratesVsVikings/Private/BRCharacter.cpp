@@ -1862,8 +1862,10 @@ void ABRCharacter::UpdateAimCamera(float DeltaSeconds)
 {
 	const bool bZoom = bAiming && CanAttack();
 	const float Speed = 12.f;
-	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, bZoom ? AimArmLength : DefaultArmLength, DeltaSeconds, Speed);
-	CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, bZoom ? FVector(0.f, 55.f, 65.f) : DefaultSocketOffset, DeltaSeconds, Speed);
+	// Holding someone over your head: pull the camera back and up so they're not in your face.
+	const bool bLiftCam = bLiftOverhead && !bZoom;
+	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, (bZoom ? AimArmLength : DefaultArmLength) + (bLiftCam ? 170.f : 0.f), DeltaSeconds, Speed * 0.5f);
+	CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, (bZoom ? FVector(0.f, 55.f, 65.f) : DefaultSocketOffset) + (bLiftCam ? FVector(0.f, 0.f, 120.f) : FVector::ZeroVector), DeltaSeconds, Speed * 0.5f);
 	KOPunch = FMath::Max(0.f, KOPunch - DeltaSeconds * 2.5f);
 	FollowCamera->SetFieldOfView(FMath::FInterpTo(FollowCamera->FieldOfView, (bZoom ? AimFOV : DefaultFOV) - 14.f * KOPunch, DeltaSeconds, Speed));
 }
@@ -2554,9 +2556,10 @@ void ABRCharacter::ApplyMuscles(float ArmMuscle)
 	if (bWobblyLegs)
 	{
 		// Legs also get a position pull so the feet track the walk cycle.
-		FPhysicalAnimationData Legs = Muscle(LegStrength);
-		Legs.PositionStrength = LegStrength * WobbleStrength * 0.5f;
-		Legs.VelocityStrength = LegStrength * WobbleStrength * 0.05f;
+		const float LegMuscle = bClimbing ? LegStrength * 0.08f : LegStrength; // on a wall: legs dangle and kick
+		FPhysicalAnimationData Legs = Muscle(LegMuscle);
+		Legs.PositionStrength = bClimbing ? 0.f : LegStrength * WobbleStrength * 0.5f;
+		Legs.VelocityStrength = LegMuscle * WobbleStrength * 0.05f;
 		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_l"), Legs, true);
 		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_r"), Legs, true);
 	}
@@ -2853,6 +2856,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickWander(DeltaSeconds);
 		TickFollow(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
+		TickThrown();
 		TickOutfitState();
 	}
 	if (HasAuthority() && ActiveEmote >= 0 && (GetVelocity().Size2D() > 60.f || GetCondition() != EPVVCondition::Normal || GetCarrier()
@@ -3224,6 +3228,10 @@ void ABRCharacter::Input_Dive() { Server_Dive(); }
 
 void ABRCharacter::StopJumping()
 {
+	if (bSpaceHeld && bClimbing)
+	{
+		Server_ClimbHold(false);
+	}
 	bSpaceHeld = false;
 	Super::StopJumping();
 }
@@ -3267,7 +3275,11 @@ bool ABRCharacter::HandleJumpPressed()
 		{
 			Server_ClimbJump(); // at the top: pull yourself up
 		}
-		return true; // otherwise Space is the "climb" modifier: hold it and alternate clicks
+		else
+		{
+			Server_ClimbHold(true); // hold SPACE to climb (look up = up, look down = down)
+		}
+		return true;
 	}
 	return false;
 }
@@ -3320,6 +3332,11 @@ void ABRCharacter::SetHeldProp(ABRPhysicsProp* Prop)
 
 void ABRCharacter::Server_Grab_Implementation()
 {
+	if (bClimbing)
+	{
+		Server_ClimbLetGo_Implementation(); // Z on a wall: let go
+		return;
+	}
 	if (GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || bInCannon || bOnShoulders)
 	{
 		return;
@@ -3342,6 +3359,7 @@ void ABRCharacter::Server_Grab_Implementation()
 			Held->LastTossTime = GetWorld()->GetTimeSeconds();
 			Held->FallFromZ = FMath::Max(Held->FallFromZ, Held->GetActorLocation().Z + (bFromOverhead ? 150.f : 0.f));
 			Held->Multicast_FlingBody(Vel);
+			Held->MarkThrown(this);
 			ABRGameState::Highlight(this, Held, bFromOverhead ? 75.f : 55.f, FString::Printf(TEXT("%s %s %s"), *GetPlayerDisplayName(), bFromOverhead ? TEXT("HURLED") : TEXT("FLUNG"), *Held->GetPlayerDisplayName()));
 			if (ABRPlayerState* PS = GetBRPlayerState())
 			{
@@ -3373,6 +3391,7 @@ void ABRCharacter::Server_Grab_Implementation()
 		const float Power = Dir > 0.4f ? 1.35f : 1.f;
 		const FVector ThrowVel = Forward * ThrowSpeed * Power + FVector(0.f, 0.f, ThrowSpeed * 0.45f) + GetVelocity() * 0.4f;
 		// Gang Beasts: they fly FLOPPY - a ragdoll throw, then up again quickly (unless they were out cold).
+		Held->MarkThrown(this);
 		Held->ApplyKnockdown(this, ThrowVel / FMath::Max(0.1f, Held->KnockbackScale));
 		if (Held->GetCondition() == EPVVCondition::KnockedDown)
 		{
@@ -4038,6 +4057,15 @@ void ABRCharacter::Server_HandHold_Implementation(uint8 Hand, bool bDown)
 	ArmsReaching = static_cast<uint8>(ArmsReaching & ~Hand);
 	HandGrabMask = static_cast<uint8>(HandGrabMask & ~Hand);
 	WallHandMask = static_cast<uint8>(WallHandMask & ~Hand);
+	if (bPropInHands && ArmsReaching == 0)
+	{
+		bPropInHands = false;
+		if (HeldProp)
+		{
+			HeldProp->Drop(); // let go of the button = let go of the thing
+			SetHeldProp(nullptr);
+		}
+	}
 	if (HandGrabMask == 0 && HandGrabTarget)
 	{
 		ReleaseHandGrab();
@@ -4077,8 +4105,47 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 			}
 		}
 	}
+	// Nobody right in front: anyone your HAND is actually touching (Gang Beasts - grab whatever you touch).
+	if (!Best && GetMesh())
+	{
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It && !Best; ++It)
+		{
+			ABRCharacter* Other = *It;
+			if (Other == this || Other->GetCarrier() || Other->GetCurrentBoat() || Other->IsInCannon() || Other->GrabbedBy
+				|| Other->GetCondition() == EPVVCondition::Detained || Other->GetCondition() == EPVVCondition::Restrained)
+			{
+				continue;
+			}
+			for (const TCHAR* HandBone : { TEXT("hand_l"), TEXT("hand_r") })
+			{
+				if (GetMesh()->GetBoneIndex(HandBone) != INDEX_NONE && FVector::Dist(GetMesh()->GetBoneLocation(HandBone), Other->GetBodyLocation()) < 75.f)
+				{
+					Best = Other;
+					break;
+				}
+			}
+		}
+	}
 	if (!Best)
 	{
+		// No person: a crate / chair / bottle your hands touch? Grab it (it stays in your hands while you hold the button).
+		TArray<FOverlapResult> Near;
+		FCollisionQueryParams PropParams(SCENE_QUERY_STAT(BRHandProp), false, this);
+		FCollisionObjectQueryParams PropTypes;
+		PropTypes.AddObjectTypesToQuery(ECC_PhysicsBody);
+		PropTypes.AddObjectTypesToQuery(ECC_WorldDynamic);
+		GetWorld()->OverlapMultiByObjectType(Near, GetActorLocation() + Forward * 75.f + FVector(0.f, 0.f, 10.f), FQuat::Identity, PropTypes, FCollisionShape::MakeSphere(70.f), PropParams);
+		for (const FOverlapResult& O : Near)
+		{
+			if (ABRPhysicsProp* Prop = Cast<ABRPhysicsProp>(O.GetActor()); Prop && !Prop->IsHeld())
+			{
+				Prop->PickUp(this);
+				SetHeldProp(Prop);
+				bPropInHands = true;
+				Multicast_Sfx(5);
+				return true;
+			}
+		}
 		return false;
 	}
 	if (Best->IsClimbing())
@@ -4128,6 +4195,59 @@ void ABRCharacter::ReleaseHandGrab()
 	DragBone = 255;
 	ArmsReaching = 0; // let go completely (press again to grab again)
 	ForceNetUpdate();
+}
+
+void ABRCharacter::MarkThrown(ABRCharacter* By)
+{
+	ThrownBy = By;
+	ThrownUntil = GetWorld()->GetTimeSeconds() + 1.6f;
+	BowledOver.Reset();
+}
+
+void ABRCharacter::TickThrown()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now > ThrownUntil)
+	{
+		return;
+	}
+	// Flying body (ragdoll or not): anyone it slams into goes down too.
+	USkeletalMeshComponent* Body = GetMesh();
+	const bool bRag = IsRagdollActive() && Body && Body->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE;
+	const FVector Pos = bRag ? Body->GetBoneLocation(TEXT("pelvis")) : GetActorLocation();
+	const FVector Vel = bRag ? Body->GetPhysicsLinearVelocity(TEXT("pelvis")) : GetVelocity();
+	if (Vel.Size() < 450.f)
+	{
+		return;
+	}
+	TArray<FOverlapResult> Hits;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRThrownHit), false, this);
+	GetWorld()->OverlapMultiByObjectType(Hits, Pos, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(80.f), Params);
+	ABRCharacter* Thrower = ThrownBy.Get();
+	for (const FOverlapResult& H : Hits)
+	{
+		ABRCharacter* Other = Cast<ABRCharacter>(H.GetActor());
+		if (!Other || Other == this || Other == Thrower || Other->GetCondition() != EPVVCondition::Normal || Other->GetCarrier() || Other->GetCurrentBoat()
+			|| BowledOver.Contains(Other))
+		{
+			continue;
+		}
+		BowledOver.Add(Other);
+		Other->MarkThrown(Thrower); // they can knock over the next one too (chain reaction!)
+		Other->ApplyKnockdown(Thrower, Vel.GetSafeNormal2D() * FMath::Min(Vel.Size(), 1600.f) * 0.5f + FVector(0.f, 0.f, 220.f));
+		if (Other->GetCondition() == EPVVCondition::KnockedDown && !Other->bKnockedOut)
+		{
+			Other->SetKnockdownTimeLeft(ThrowKnockdownSeconds);
+		}
+		Other->LastTosser = Thrower;
+		Other->LastTossTime = Now;
+		ABRGameState::FX(this, EBRFX::PointsText, Other->GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("STRIKE!"));
+		Multicast_Sfx(1);
+		if (Thrower)
+		{
+			ABRGameState::Highlight(this, Thrower, 72.f, FString::Printf(TEXT("%s threw %s into %s"), *Thrower->GetPlayerDisplayName(), *GetPlayerDisplayName(), *Other->GetPlayerDisplayName()));
+		}
+	}
 }
 
 float ABRCharacter::TugPull() const
@@ -4246,7 +4366,7 @@ void ABRCharacter::TickHandGrab(float DeltaSeconds)
 	}
 	const float Dist = FVector::Dist2D(Held->GetActorLocation(), GetActorLocation());
 	if (GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || Held->GetCurrentBoat() || Held->GetCarrier()
-		|| Held->GetCondition() == EPVVCondition::Detained || Held->GetCondition() == EPVVCondition::Restrained || Dist > 280.f
+		|| Held->GetCondition() == EPVVCondition::Detained || Held->GetCondition() == EPVVCondition::Restrained || Dist > 320.f
 		|| (HandGrabMask == 0 && ArmsReaching == 0))
 	{
 		ReleaseHandGrab();
@@ -4380,12 +4500,12 @@ void ABRCharacter::TickReachVisuals()
 	if (IsLocallyControlled() && Cast<APlayerController>(GetController()))
 	{
 		const float Now = GetWorld()->GetTimeSeconds();
-		if (bLeftDown && !(SentReach & 1) && Now - LeftDownAt > 0.22f)
+		if (bLeftDown && !(SentReach & 1) && Now - LeftDownAt > 0.15f)
 		{
 			SentReach = static_cast<uint8>(SentReach | 1);
 			Server_HandHold(1, true);
 		}
-		if (bRightDown && !(SentReach & 2) && Now - RightDownAt > 0.22f)
+		if (bRightDown && !(SentReach & 2) && Now - RightDownAt > 0.15f)
 		{
 			SentReach = static_cast<uint8>(SentReach | 2);
 			Server_HandHold(2, true);
@@ -5129,6 +5249,15 @@ bool ABRCharacter::StartWallClimb()
 	LastClimbStepTime = GetWorld()->GetTimeSeconds();
 	NextSensorPing = 0.f;
 	ClimbGrip = 1.f;
+	ClimbStamina = 1.f;
+	bWarnedClimbTired = false;
+	// Bots just climb. Players started with Z (no mouse buttons held): both hands go on the wall automatically.
+	bClimbUpHeld = !Cast<APlayerController>(GetController());
+	if (ArmsReaching == 0)
+	{
+		ArmsReaching = 3;
+		WallHandMask = 3;
+	}
 	if (HandGrabMask == 3)
 	{
 		ReleaseHandGrab(); // both hands were on a person: let them go to grab the wall
@@ -5139,7 +5268,7 @@ bool ABRCharacter::StartWallClimb()
 	SetActorRotation(FRotator(0.f, (-Normal).Rotation().Yaw, 0.f));
 	OnRep_Climbing();
 	BlowDisguise();
-	Notify(LOCTEXT("ClimbStart", "ON THE WALL! Keep a mouse button held to hang on. HOLD SPACE + click LEFT, RIGHT, LEFT... to climb. Let go of both buttons to drop."));
+	Notify(LOCTEXT("ClimbStart", "ON THE WALL! Hold BOTH mouse buttons to hang on, hold SPACE to climb (look up/down), A/D to shimmy. Let go to drop."));
 	ForceNetUpdate();
 	return true;
 }
@@ -5174,46 +5303,22 @@ void ABRCharacter::StopClimbing(bool bFall)
 
 void ABRCharacter::Server_ClimbStep_Implementation(bool bLeft)
 {
-	if (!bClimbing || bHanging)
+	// Optional: clicking hand over hand while climbing gives a little extra boost (no penalty for getting it "wrong").
+	if (!bClimbing || bHanging || bLeft == bLastClimbLeft || ClimbStamina <= 0.1f)
 	{
 		return;
 	}
-	const float Now = GetWorld()->GetTimeSeconds();
-	const bool bRightOrder = !bClimbStarted || bLeft != bLastClimbLeft;
 	bLastClimbLeft = bLeft;
-	LastClimbStepTime = Now;
-	if (!bRightOrder)
-	{
-		// Same hand twice: you slip down a bit. Three slips and you fall off.
-		++ClimbSlips;
-		SetActorLocation(GetActorLocation() - FVector(0.f, 0.f, ClimbStep * 1.2f), true);
-		if (ClimbSlips >= 3)
-		{
-			Notify(LOCTEXT("ClimbFell", "You lost your grip!"));
-			StopClimbing(true);
-		}
-		else
-		{
-			Notify(LOCTEXT("ClimbSlip", "SLIP! Alternate your hands!"));
-		}
-		return;
-	}
-	bClimbStarted = true;
+	LastClimbStepTime = GetWorld()->GetTimeSeconds();
+	ClimbStamina -= 0.015f;
 	FHitResult Blocked;
-	SetActorLocation(GetActorLocation() + FVector(0.f, 0.f, ClimbStep), true, &Blocked);
-	if (Blocked.bBlockingHit)
-	{
-		StopClimbing(false); // roof / overhang
-		return;
-	}
-	// Made it to the top: hang from the ledge.
-	const float Hands = GetActorLocation().Z + 90.f;
-	if (bClimbHasTop && Hands >= ClimbTopZ)
-	{
-		bHanging = true;
-		Notify(LOCTEXT("ClimbTop", "At the top! SPACE to pull yourself up."));
-	}
+	SetActorLocation(GetActorLocation() + FVector(0.f, 0.f, ClimbStep * 0.4f), true, &Blocked);
 	ForceNetUpdate();
+}
+
+void ABRCharacter::Server_ClimbHold_Implementation(bool bHeld)
+{
+	bClimbUpHeld = bHeld;
 }
 
 void ABRCharacter::Server_ClimbJump_Implementation()
@@ -5262,24 +5367,86 @@ void ABRCharacter::TickClimb(float DeltaSeconds)
 		}
 		ABRGameState::Sfx(this, EBRSfx::TripwireAlarm, GetActorLocation());
 	}
-	// Not climbing for a while: your grip gives out and you slide down.
-	if (!bHanging && Now - LastClimbStepTime > (ArmsReaching != 0 ? 14.f : 2.5f)) // holding on with a hand = you can hang there a while
+	// Gang Beasts climbing: your hands hold you up. Both hands = you hang; one hand = you slowly slide.
+	const int32 Grip = (ArmsReaching & 1) + ((ArmsReaching >> 1) & 1);
+	if (Grip == 0)
+	{
+		StopClimbing(true); // let go of everything: drop
+		return;
+	}
+	const FVector Wall = -FVector(ClimbNormal);
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, Wall).GetSafeNormal();
+	float Vz = 0.f;
+	if (!bHanging)
+	{
+		if (bClimbUpHeld && ClimbStamina > 0.f)
+		{
+			// Hold SPACE: climb hand over hand. Look down to climb down instead.
+			const float Pitch = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch);
+			const float Dir = Pitch < -25.f ? -1.f : 1.f;
+			Vz = Dir * ClimbSpeed * (Grip == 2 ? 1.f : 0.45f) * FMath::Lerp(0.45f, 1.f, ClimbStamina);
+		}
+		else if (Grip == 1)
+		{
+			Vz = -ClimbSlideSpeed;
+		}
+	}
+	// A / D: shimmy sideways along the wall.
+	const FVector Wish = GetCharacterMovement()->GetCurrentAcceleration().GetSafeNormal2D();
+	const float Side = bHanging ? 0.f : FMath::Clamp(FVector::DotProduct(Wish, Right) * 1.4f, -1.f, 1.f);
+	const FVector Before = GetActorLocation();
+	const FVector Delta = (FVector::UpVector * Vz + Right * Side * ShimmySpeed * (Grip == 2 ? 1.f : 0.5f)) * DeltaSeconds;
+	if (!Delta.IsNearlyZero())
+	{
+		FHitResult Blocked;
+		SetActorLocation(Before + Delta, true, &Blocked);
+		// Shimmied off the end of the wall? Step back on.
+		FHitResult Still;
+		FCollisionQueryParams WallParams(SCENE_QUERY_STAT(BRClimbWall), false, this);
+		if (!GetWorld()->LineTraceSingleByChannel(Still, GetActorLocation() + FVector(0.f, 0.f, 40.f), GetActorLocation() + FVector(0.f, 0.f, 40.f) + Wall * (GetCapsuleComponent()->GetScaledCapsuleRadius() + 45.f), ECC_Visibility, WallParams))
+		{
+			SetActorLocation(Before, false);
+		}
+		// Hands swap as you go (the arms reach up one after the other).
+		if (Now >= ClimbHandSwapAt)
+		{
+			ClimbHandSwapAt = Now + FMath::Clamp(30.f / FMath::Max(10.f, FMath::Abs(Vz) + FMath::Abs(Side) * 60.f), 0.22f, 0.5f);
+			bLastClimbLeft = !bLastClimbLeft;
+		}
+		LastClimbStepTime = Now;
+	}
+	// Reached the top: hang from the ledge (SPACE = pull up).
+	const float HandsZ = GetActorLocation().Z + 90.f;
+	if (!bHanging && bClimbHasTop && Vz > 0.f && HandsZ >= ClimbTopZ)
+	{
+		bHanging = true;
+		Notify(LOCTEXT("ClimbTop", "At the top! SPACE to pull yourself up."));
+	}
+	// Climbed/slid back down to the ground: just stand up.
+	if (Vz < 0.f)
 	{
 		FHitResult Floor;
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRClimbSlide), false, this);
 		const float Half = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-		const bool bNearGround = GetWorld()->LineTraceSingleByChannel(Floor, GetActorLocation(), GetActorLocation() - FVector(0.f, 0.f, Half + 20.f), ECC_Visibility, Params);
-		if (bNearGround)
+		if (GetWorld()->LineTraceSingleByChannel(Floor, GetActorLocation(), GetActorLocation() - FVector(0.f, 0.f, Half + 15.f), ECC_Visibility, Params))
 		{
 			StopClimbing(false);
 			return;
 		}
-		SetActorLocation(GetActorLocation() - FVector(0.f, 0.f, 60.f * DeltaSeconds), true);
 	}
-	// Hanging too long at the top: arms give out.
-	if (bHanging && Now - LastClimbStepTime > (ArmsReaching != 0 ? 16.f : 8.f))
+	// Arms get tired (climbing tires you faster than just hanging; one hand faster still).
+	const float Drain = (Vz > 0.f ? 1.4f : 1.f) * (Grip == 2 ? 1.f : 1.6f) / FMath::Max(3.f, ClimbStaminaSeconds);
+	ClimbStamina -= Drain * DeltaSeconds;
+	if (ClimbStamina < 0.25f && !bWarnedClimbTired)
 	{
+		bWarnedClimbTired = true;
+		Notify(LOCTEXT("ClimbTired", "Your arms are shaking... get up or let go!"));
+	}
+	if (ClimbStamina <= 0.f)
+	{
+		Notify(LOCTEXT("ClimbFell", "Your arms gave out!"));
 		StopClimbing(true);
+		return;
 	}
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
 }
