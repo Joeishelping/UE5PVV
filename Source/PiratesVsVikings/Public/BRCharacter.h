@@ -901,6 +901,7 @@ private:
 	/** The tune fades out this long after your last note / blast (keeps going while you keep playing). */
 	float TrumpetPlayUntil = -1.f;
 	void TickTrumpetAudio();
+	int8 AppliedHairUnderHat = -1;
 	float PelvisFallSpeed = 0.f;
 	float LastThumpTime = -100.f;
 	float LastGruntTime = -100.f;

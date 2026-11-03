@@ -199,12 +199,13 @@ def item_deltas(V, hw, mat):
 
 
 def hair_under_hat(V, hw, mat):
-    """Hair_UnderHat: squash the hair down onto the scalp where a hat sits (afros, pompadours...)."""
+    """Hair_UnderHat: squash the hair down INTO the scalp where a hat sits, so nothing pokes through
+    (hats hug the head at ~HEAD_R, so the hair has to go just under it). Below the hat line it's left alone."""
     rel = V - HEAD_C
     r = np.linalg.norm(rel, axis=1)
-    cap = HEAD_R + .022                                       # just above the scalp
-    w = smooth((V[:, 1] - 1.50) / .10)                        # from the ears up
-    target = np.minimum(r, cap + (r - cap) * .15)             # pull the poofy bits in to the scalp
+    cap = HEAD_R - .006                                       # just under the scalp: the hat (and head) hide it
+    w = smooth((V[:, 1] - 1.47) / .09)                        # fully squashed from ~1.56 up (hat bands start ~1.60)
+    target = np.minimum(r, cap)
     scale = np.where(r > 1e-6, target / np.maximum(r, 1e-6), 1.)
     d = rel * (scale - 1.)[:, None] * w[:, None]
     return {"Hair_UnderHat": d}

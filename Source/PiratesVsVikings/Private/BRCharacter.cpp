@@ -2854,6 +2854,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	TickHeadTag();
 	TickBlink();
 	TickTrumpetAudio();
+	UpdateHairUnderHat(); // hats from the Blueprint, NPC hats, hats knocked off / picked up: always squash the hair right
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
 	{
 		const bool bKO = GetCondition() == EPVVCondition::KnockedDown;
@@ -5814,7 +5815,13 @@ void ABRCharacter::UpdateHairUnderHat()
 	{
 		return;
 	}
-	const bool bHatOn = OutfitHead && OutfitHead->GetSkeletalMeshAsset() && !OutfitHead->bHiddenInGame;
+	const bool bHatOn = OutfitHead && OutfitHead->GetSkeletalMeshAsset() && !OutfitHead->bHiddenInGame && OutfitHead->IsVisible();
+	const int8 Want = bHatOn ? 1 : 0;
+	if (Want == AppliedHairUnderHat && Body->GetMorphTarget(TEXT("Hair_UnderHat")) == (bHatOn ? 1.f : 0.f))
+	{
+		return;
+	}
+	AppliedHairUnderHat = Want;
 	Body->SetMorphTarget(TEXT("Hair_UnderHat"), bHatOn ? 1.f : 0.f, false);
 }
 
