@@ -112,12 +112,33 @@ write("SK_Glasses_Round", [Part(rnd_lens, "patch", "M_Lens"), Part(merge(rim(.12
       tube([(-.08, 1.616, .292), (0, 1.621, .297), (.08, 1.616, .292)], [.004], S=6, n=2), arms(1.616, .287, None)), "hat", "M_Frame")],
       [M("M_Lens", (0.75, 0.85, 0.9), .2, .05), M("M_Frame", (0.08, 0.06, 0.05), .3, .4)])
 
-# Wraparound shades: one big black visor lens.
-shade_rows = []
-for t in np.linspace(-1, 1, 3):
-    th = np.linspace(np.pi / 2 - .75, np.pi / 2 + .75, 20)
-    shade_rows.append(np.stack([np.cos(th) * (HR + .012), np.full_like(th, 1.604 + .025 * t), np.sin(th) * (HR + .012)], 1))
-sv, sf = sheet(np.array(shade_rows)); sv2 = sv + [0, 0, .006]
-visor = (np.vstack([sv, sv2]), np.vstack([sf, sf[:, ::-1] + len(sv)]))
-write("SK_Glasses_Shades", [Part(visor, "patch", "M_Lens"), Part(arms(1.611, .26, None), "hat", "M_Frame")],
-      [M("M_Lens", (0.02, 0.02, 0.025), .8, .05), M("M_Frame", (0.02, 0.02, 0.02), .4, .3)])
+# Classic sunglasses (wayfarer style): two dark rounded-square lenses, thick black frame, bridge over the nose.
+def _shade_pt(cx, t, a=.068, b=.048, n=4.):
+    c, sn = np.cos(t), np.sin(t)
+    y = b * np.sign(sn) * np.abs(sn) ** (2 / n)
+    x = a * np.sign(c) * np.abs(c) ** (2 / n) * (1 + .1 * y / b)       # a little wider at the top
+    X = cx + x
+    z = .296 - .45 * max(0., abs(X) - .1) ** 1.3                        # wraps back around the face a bit
+    return np.array([X, 1.603 + y, z])
+
+
+def shade_lens(cx):
+    ts = np.linspace(0, 2 * np.pi, 33)[:-1]
+    rim = np.array([_shade_pt(cx, t, .064, .044) for t in ts])
+    c = rim.mean(0) + [0, 0, .004]
+    V = np.vstack([[c], rim]); F = np.array([(0, 1 + i, 1 + (i + 1) % len(rim)) for i in range(len(rim))])
+    V2 = V - [0, 0, .004]                                               # back face too
+    return np.vstack([V, V2]), np.vstack([F, F[:, ::-1] + len(V)])
+
+
+def shade_frame(cx):
+    ts = np.linspace(0, 2 * np.pi, 41)
+    rim = tube([_shade_pt(cx, t) for t in ts], [.0075], S=6, n=1, caps=False)
+    brow = tube([_shade_pt(cx, t) + [0, .006, .002] for t in np.linspace(.15, np.pi - .15, 12)], [.0095], S=6, n=2)  # thick top bar
+    return merge(rim, brow)
+
+
+bridge = tube([(-.058, 1.622, .294), (0, 1.627, .302), (.058, 1.622, .294)], [.0065], S=6, n=3)
+write("SK_Glasses_Shades", [Part(merge(shade_lens(.125), shade_lens(-.125)), "patch", "M_Lens"),
+                            Part(merge(shade_frame(.125), shade_frame(-.125), bridge, arms(1.62, .276, None)), "hat", "M_Frame")],
+      [M("M_Lens", (0.03, 0.03, 0.035), .6, .08), M("M_Frame", (0.02, 0.02, 0.02), .2, .35)])
