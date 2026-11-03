@@ -1,4 +1,5 @@
 #include "PVVDetentionZone.h"
+#include "BRPlayerState.h"
 #include "PVVCharacter.h"
 #include "PVVGameMode.h"
 #include "Components/BoxComponent.h"
@@ -72,7 +73,13 @@ bool APVVDetentionZone::CanInteract_Implementation(APVVCharacter* Interactor) co
 
 float APVVDetentionZone::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
-	return (Interactor && Interactor->GetCarriedCharacter()) ? 0.f : JailbreakDuration;
+	if (Interactor && Interactor->GetCarriedCharacter())
+	{
+		return 0.f;
+	}
+	// A lockpick makes the jailbreak much quicker.
+	const ABRPlayerState* PS = Interactor ? Cast<ABRPlayerState>(Interactor->GetPVVPlayerState()) : nullptr;
+	return JailbreakDuration * ((PS && PS->HasItem(EBRItem::Lockpick)) ? 0.35f : 1.f);
 }
 
 FText APVVDetentionZone::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const

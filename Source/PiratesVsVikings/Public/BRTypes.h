@@ -41,7 +41,11 @@ enum class EBRItem : uint8
 	Knife			UMETA(DisplayName = "Knife"),
 	Package			UMETA(DisplayName = "Smuggling Package"),
 	FakePassport	UMETA(DisplayName = "Fake Passport"),
-	SecurityCamera	UMETA(DisplayName = "Security Camera")
+	SecurityCamera	UMETA(DisplayName = "Security Camera"),
+	SmokeBomb		UMETA(DisplayName = "Smoke Bomb"),
+	GrappleHook		UMETA(DisplayName = "Grappling Hook"),
+	Lockpick		UMETA(DisplayName = "Lockpick"),
+	FakeUniform		UMETA(DisplayName = "Fake BP Uniform")
 };
 
 /** Hats: each one gives a skill. Get knocked out and it may fly off - anyone can pick it up. */

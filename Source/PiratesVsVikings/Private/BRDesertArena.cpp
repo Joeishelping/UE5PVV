@@ -970,6 +970,12 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 		Station(-12600.f, -3000.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 1800, TEXT("ARMAS DON CHUY\nPISTOL $1800 (contraband!)"), Armas);
 		// Forger: a fake passport passes the papers scan (but not if you're carrying contraband).
 		Station(-12600.f, -2600.f, EBRStationKind::BuyItem, EBRItem::FakePassport, 1000, TEXT("PAPELES CHUCHO\nFAKE PASSPORT $1000"), FLinearColor(0.35f, 0.2f, 0.45f));
+		// Gadgets.
+		const FLinearColor Gadget(0.3f, 0.35f, 0.3f);
+		Station(-13200.f, -3400.f, EBRStationKind::BuyItem, EBRItem::SmokeBomb, 150, TEXT("SMOKE BOMB $150"), Gadget);
+		Station(-13200.f, -3000.f, EBRStationKind::BuyItem, EBRItem::GrappleHook, 350, TEXT("GRAPPLING HOOK $350"), Gadget);
+		Station(-13200.f, -2600.f, EBRStationKind::BuyItem, EBRItem::Lockpick, 250, TEXT("LOCKPICK $250"), Gadget);
+		Station(-13800.f, -3000.f, EBRStationKind::BuyItem, EBRItem::FakeUniform, 1500, TEXT("FAKE BORDER PATROL UNIFORM $1500"), FLinearColor(0.15f, 0.25f, 0.55f));
 	}
 	Station(-11500.f, -2700.f, EBRStationKind::BuyItem, EBRItem::Trumpet, 120, TEXT("MARIACHI TRUMPET $120"), FLinearColor(0.9f, 0.6f, 0.1f));
 	Station(-12000.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Poncho, 200, TEXT("PONCHO DISGUISE $200"), FLinearColor(0.75f, 0.25f, 0.15f));
@@ -1085,6 +1091,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Supply(7800.f, 1450.f, EBRWardenGear::None, EBRItem::Taco, 20, 0.f);
 	Supply(7800.f, 1800.f, EBRWardenGear::None, EBRItem::Lasso, 250, 0.f);
 	Supply(7800.f, 2150.f, EBRWardenGear::None, EBRItem::SecurityCamera, 350, 0.f);
+	Supply(7800.f, 2850.f, EBRWardenGear::None, EBRItem::SmokeBomb, 150, 0.f);
 	Supply(7800.f, 2500.f, EBRWardenGear::Reinforcements, EBRItem::None, 1200, 60.f);
 
 	// --- Hiding spots (dumpsters, porta-potties, hay bales) on both sides

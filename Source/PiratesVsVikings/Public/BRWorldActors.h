@@ -172,7 +172,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
-	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.3f; }
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override;
 	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 	UPROPERTY(EditAnywhere, Category = "BR|Door") float OpenSeconds = 4.f;

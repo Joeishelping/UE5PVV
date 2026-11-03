@@ -706,13 +706,46 @@ bool ABRWallDoor::IsDoorOpen() const
 	return GS && OpenUntil > GS->GetServerWorldTimeSeconds();
 }
 
+namespace
+{
+	/** A Runner who can get through the BP door: fake uniform (comes with the keys) or a lockpick. */
+	bool DoorSneaker(const APVVCharacter* C, bool& bPicking)
+	{
+		const ABRCharacter* BRC = Cast<ABRCharacter>(C);
+		const ABRPlayerState* PS = BRState(C);
+		bPicking = false;
+		if (!BRC || !IsFreeRunner(C))
+		{
+			return false;
+		}
+		if (BRC->IsFakeAgent())
+		{
+			return true;
+		}
+		bPicking = PS && PS->HasItem(EBRItem::Lockpick);
+		return bPicking;
+	}
+}
+
 bool ABRWallDoor::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
-	return IsFreeWarden(Interactor) && FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) < 400.f;
+	bool bPicking = false;
+	return (IsFreeWarden(Interactor) || DoorSneaker(Interactor, bPicking)) && FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) < 400.f;
+}
+
+float ABRWallDoor::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
+{
+	bool bPicking = false;
+	return (!IsFreeWarden(Interactor) && DoorSneaker(Interactor, bPicking) && bPicking && !IsDoorOpen()) ? 6.f : 0.3f;
 }
 
 FText ABRWallDoor::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
+	bool bPicking = false;
+	if (!IsFreeWarden(Interactor) && DoorSneaker(Interactor, bPicking) && bPicking && !IsDoorOpen())
+	{
+		return LOCTEXT("DoorPick", "PICK THE LOCK (hold)");
+	}
 	return IsDoorOpen() ? LOCTEXT("DoorClose", "Lock the door") : LOCTEXT("DoorOpen", "Unlock the door (your key)");
 }
 
@@ -722,6 +755,14 @@ void ABRWallDoor::OnInteract_Implementation(APVVCharacter* Interactor)
 	if (!HasAuthority() || !GS)
 	{
 		return;
+	}
+	bool bPicking = false;
+	if (!IsFreeWarden(Interactor) && DoorSneaker(Interactor, bPicking) && bPicking && !IsDoorOpen() && FMath::FRand() < 0.4f)
+	{
+		if (ABRGameMode* AlarmGM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			AlarmGM->TriggerBorderAlarm(GetActorLocation(), TEXT("Someone picked the lock on the Border Patrol door"));
+		}
 	}
 	OpenUntil = IsDoorOpen() ? -1.f : GS->GetServerWorldTimeSeconds() + OpenSeconds;
 	ForceNetUpdate();

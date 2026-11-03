@@ -807,6 +807,29 @@ Previews: **Art/Characters/Previews/Hairstyles.png** and **FacialHair.png**.
 
 ---
 
+## Part 15s: Gadgets
+
+All of these are sold in the Runner town by the other shops; the smoke bomb is also at the Border Patrol supply counter. Select the item and use it (**F**).
+
+- **Smoke bomb ($150, both teams):**
+  - Throws a thick smoke cloud about 5 m ahead that lasts about 14 s.
+  - Anyone **inside** it can't be scanned, spotted or seen by cameras or drones.
+- **Grappling hook ($350, reusable):**
+  1. Look at a wall or fence (up to 25 m away) and use it.
+  2. You zip up the rope and hang off the top. **SPACE** pulls you over.
+  - It's noisy: you get spotted, and on the Wall it sets off a border alarm.
+- **Lockpick ($250):**
+  - **Hold E** on the Border Patrol door in the Wall to pick it (6 s). It opens for a few seconds, with a 40% chance of a border alarm.
+  - At the holding pen door, the jailbreak is about **3x faster**.
+- **Fake BP uniform ($1500):** use it to put it on (use again to take it off). While wearing it:
+  - You look like an agent (uniform and patrol cap).
+  - Scanners say "fellow agent", Border Patrol can't frisk you, cameras and NPC officers ignore you, and the BP door opens with no lockpick.
+  - **Fighting** (punch, kick, dive, headbutt...) or **sprinting near Border Patrol** blows your cover: the uniform is gone and you're spotted.
+
+(The wheelbarrow comes with the vehicles in the next batch.)
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

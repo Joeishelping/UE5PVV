@@ -1,5 +1,6 @@
 #include "BRCharacter.h"
 #include "BRAudio.h"
+#include "BRGadgets.h"
 #include "Components/AudioComponent.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "PVVDetentionZone.h"
@@ -184,6 +185,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, ChugGag);
 	DOREPLIFETIME(ABRCharacter, bKnockedOut);
 	DOREPLIFETIME(ABRCharacter, bDropKicking);
+	DOREPLIFETIME(ABRCharacter, bFakeUniform);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SprintStamina, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
 	DOREPLIFETIME(ABRCharacter, DragBone);
@@ -1554,6 +1556,10 @@ void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
 	case EBRItem::TacoPlatter: PlaceTacoPlatter(); break;
 	case EBRItem::CardboardBox: ToggleBox(); break;
 	case EBRItem::SecurityCamera: PlaceSecurityCamera(); break;
+	case EBRItem::SmokeBomb: ThrowSmokeBomb(); break;
+	case EBRItem::GrappleHook: UseGrapple(); break;
+	case EBRItem::FakeUniform: ToggleFakeUniform(); break;
+	case EBRItem::Lockpick: Notify(LOCTEXT("UseLockpick", "Lockpick: hold E on the Border Patrol door in the Wall, or on the holding pen door (much faster jailbreak).")); break;
 	case EBRItem::FakePassport: Notify(LOCTEXT("UsePassport", "Fake passport: the papers scan says you're legal - unless you're carrying contraband. A search finds it.")); break;
 	case EBRItem::Lasso: Notify(LOCTEXT("UseLasso", "Aim at someone with your view and press F to throw the lasso.")); break;
 	case EBRItem::Ladder: Notify(LOCTEXT("UseLadder", "Walk up to the Wall and press E to lean your ladder on it.")); break;
@@ -2456,7 +2462,7 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	}
 	Target->LastScannedTime = Now;
 	Target->ScannedBy = this;
-	if (Target->IsWarden())
+	if (Target->IsWarden() || Target->IsFakeAgent())
 	{
 		Notify(LOCTEXT("ScanWarden", "SCAN: that's a fellow agent."));
 	}
@@ -4861,7 +4867,7 @@ ABRDog* ABRCharacter::GetLeashedDog() const
 
 bool ABRCharacter::IsHiddenFromPatrol() const
 {
-	return bHiddenInSpot || (bInBox && GetVelocity().Size2D() < 30.f);
+	return bHiddenInSpot || (bInBox && GetVelocity().Size2D() < 30.f) || ABRSmokeCloud::IsInSmoke(GetWorld(), GetActorLocation());
 }
 
 void ABRCharacter::SetHiddenInSpot(bool bHide, const FVector& ExitAt)
@@ -6079,6 +6085,10 @@ void ABRCharacter::Server_SelectSlot_Implementation(int32 Slot)
 
 void ABRCharacter::BlowDisguise()
 {
+	if (HasAuthority() && bFakeUniform)
+	{
+		TakeOffFakeUniform(true); // fighting / caught out: the fake uniform fools nobody now
+	}
 	if (HasAuthority() && bInBox)
 	{
 		bInBox = false; // the box falls off
@@ -6118,6 +6128,17 @@ void ABRCharacter::TickOutfitState()
 		return;
 	}
 	// Poncho: you look like a villager (scanners say "papers in order") until you sprint, fight or get hit.
+	if (bFakeUniform && IsSprinting())
+	{
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			if (It->IsWarden() && !It->IsNPC() && FVector::Dist(It->GetActorLocation(), GetActorLocation()) < 1500.f)
+			{
+				TakeOffFakeUniform(true); // agents don't sprint around like that
+				break;
+			}
+		}
+	}
 	const bool bShouldDisguise = IsRunner() && PS->HasItem(EBRItem::Poncho);
 	if (bShouldDisguise && IsSprinting())
 	{

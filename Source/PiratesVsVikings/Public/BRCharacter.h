@@ -276,6 +276,17 @@ public:
 	void TickNPCStruggle();
 	float NPCBreakFreeAt = -1.f;
 	float NPCStruggleUntil = -1.f;
+	// --- Gadgets (BRGadgets.cpp) ---
+	void ThrowSmokeBomb();
+	void UseGrapple();
+	void ToggleFakeUniform();
+	void TakeOffFakeUniform(bool bBlown);
+	/** A Runner wearing the fake Border Patrol uniform (scans as an agent, opens the BP door). */
+	bool IsFakeAgent() const { return bFakeUniform; }
+	UPROPERTY(Replicated) bool bFakeUniform = false;
+	FBRLook SavedLook;
+	EBRHat SavedHat = EBRHat::None;
+	float LastGrappleTime = -100.f;
 	/** Getting up takes this long (can't walk while you push yourself up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GetUpSeconds = 1.f;
 	/** Thrown people go flying FLOPPY (ragdoll) and are down this long (unless they were already KO'd). */

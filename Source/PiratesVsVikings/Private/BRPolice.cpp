@@ -61,7 +61,7 @@ void ABRSurveillanceCamera::Tick(float DeltaSeconds)
 		ABRCharacter* C = *It;
 		const ABRPlayerState* PS = C->GetBRPlayerState();
 		const bool bTrespasser = (PS && C->IsRunner() && PS->bHasCrossedLine) || (C->IsNPC() && C->bIllegal && C->IsSuspect() && C->GetCondition() == EPVVCondition::Normal && !C->GetCurrentBoat() && C->IsBrawling());
-		if (!bTrespasser || C->GetCondition() != EPVVCondition::Normal || C->IsHiddenFromPatrol())
+		if (!bTrespasser || C->GetCondition() != EPVVCondition::Normal || C->IsHiddenFromPatrol() || C->IsFakeAgent())
 		{
 			continue;
 		}
@@ -127,7 +127,7 @@ void ABRCharacter::CameraSpot(float Seconds)
 bool ABRCharacter::WantsFrisk(const APVVCharacter* Interactor) const
 {
 	const ABRCharacter* Cop = Cast<ABRCharacter>(Interactor);
-	if (!Cop || !Cop->IsWarden() || Cop == this || IsWarden() || bOfficer || GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier()
+	if (!Cop || !Cop->IsWarden() || Cop == this || IsWarden() || bOfficer || bFakeUniform || GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier()
 		|| Cop->GetCarriedCharacter() || Cop->GetCurrentBoat() || IsHiddenFromPatrol() || IsHeldByHands(Interactor))
 	{
 		return false;
@@ -285,7 +285,7 @@ void ABRCharacter::TickOfficer(float DeltaSeconds)
 		ABRCharacter* C = *It;
 		const ABRPlayerState* PS = C->GetBRPlayerState();
 		const bool bWanted = (PS && C->IsRunner() && PS->bHasCrossedLine) || (ProvokedBy.Get() == C && Now - ProvokeTime < 8.f);
-		if (!bWanted || C == this || C->GetCurrentBoat() || C->IsHiddenFromPatrol() || C->GetCondition() == EPVVCondition::Detained || C->GetCondition() == EPVVCondition::Restrained)
+		if (!bWanted || C == this || C->GetCurrentBoat() || C->IsHiddenFromPatrol() || (C->IsFakeAgent() && ProvokedBy.Get() != C) || C->GetCondition() == EPVVCondition::Detained || C->GetCondition() == EPVVCondition::Restrained)
 		{
 			continue;
 		}

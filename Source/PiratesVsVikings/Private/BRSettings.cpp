@@ -171,6 +171,10 @@ namespace BR
 		case EBRItem::Package: return TEXT("Smuggling Package");
 		case EBRItem::FakePassport: return TEXT("Fake Passport");
 		case EBRItem::SecurityCamera: return TEXT("Security Camera");
+		case EBRItem::SmokeBomb: return TEXT("Smoke Bomb");
+		case EBRItem::GrappleHook: return TEXT("Grappling Hook");
+		case EBRItem::Lockpick: return TEXT("Lockpick");
+		case EBRItem::FakeUniform: return TEXT("Fake BP Uniform");
 		default:                   return TEXT("");
 		}
 	}
