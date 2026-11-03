@@ -651,10 +651,86 @@ ABRWall::ABRWall()
 	const float SouthEnd = GateY - GateHalfWidth;
 	const float NorthStart = GateY + GateHalfWidth;
 	const float SouthLen = SouthEnd + HalfLength;
-	const float NorthLen = HalfLength - NorthStart;
+	// Gaps: the road gate, and Border Patrol's side door just north of it.
+	const float MidEnd = DoorY - DoorHalfWidth;
+	const float MidLen = MidEnd - NorthStart;
+	const float NorthFrom = DoorY + DoorHalfWidth;
+	const float NorthLen = HalfLength - NorthFrom;
 	AddMesh(TEXT("WallSouth"), CubeMesh, FVector(0.f, -HalfLength + SouthLen * 0.5f, Height * 0.5f), FVector(100.f, SouthLen, Height), Concrete);
-	AddMesh(TEXT("WallNorth"), CubeMesh, FVector(0.f, NorthStart + NorthLen * 0.5f, Height * 0.5f), FVector(100.f, NorthLen, Height), Concrete);
+	AddMesh(TEXT("WallMid"), CubeMesh, FVector(0.f, NorthStart + MidLen * 0.5f, Height * 0.5f), FVector(100.f, MidLen, Height), Concrete);
+	AddMesh(TEXT("WallNorth"), CubeMesh, FVector(0.f, NorthFrom + NorthLen * 0.5f, Height * 0.5f), FVector(100.f, NorthLen, Height), Concrete);
 	AddLabel(TEXT("SignWest"), FVector(-60.f, 2500.f, Height + 60.f), 160.f, FColor(255, 200, 80))->SetText(FText::FromString(TEXT("THE WALL")));
+}
+
+// ===========================================================================================
+// Border Patrol's locked door in the Wall
+
+ABRWallDoor::ABRWallDoor()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = true;
+	const float W = ABRWall::DoorHalfWidth * 2.f, H = ABRWall::Height;
+	const FLinearColor Steel(0.25f, 0.27f, 0.3f), Stripe(0.9f, 0.75f, 0.1f);
+	AddMesh(TEXT("Lintel"), CubeMesh, FVector(0.f, 0.f, 290.f + (H - 290.f) * 0.5f), FVector(100.f, W, H - 290.f), FLinearColor(0.42f, 0.38f, 0.33f));
+	Hinge = CreateDefaultSubobject<USceneComponent>(TEXT("Hinge"));
+	Hinge->SetupAttachment(Root);
+	Hinge->SetRelativeLocation(FVector(0.f, -ABRWall::DoorHalfWidth, 0.f));
+	Slab = AddMesh(TEXT("DoorSlab"), CubeMesh, FVector(0.f, ABRWall::DoorHalfWidth, 145.f), FVector(16.f, W - 6.f, 286.f), Steel);
+	Slab->SetupAttachment(Hinge);
+	UStaticMeshComponent* Band = AddMesh(TEXT("DoorStripe"), CubeMesh, FVector(10.f, ABRWall::DoorHalfWidth, 150.f), FVector(4.f, W - 20.f, 20.f), Stripe, FRotator::ZeroRotator, false);
+	Band->SetupAttachment(Hinge);
+	AddLabel(TEXT("SignE"), FVector(70.f, 0.f, 330.f), 28.f, FColor(255, 210, 60))->SetText(FText::FromString(TEXT("BORDER PATROL ONLY")));
+	UTextRenderComponent* Back = AddLabel(TEXT("SignW"), FVector(-70.f, 0.f, 330.f), 28.f, FColor(255, 210, 60));
+	Back->SetText(FText::FromString(TEXT("BORDER PATROL ONLY")));
+	Back->SetRelativeRotation(FRotator(0.f, 180.f, 0.f));
+	AddPickupZone(260.f);
+}
+
+void ABRWallDoor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRWallDoor, OpenUntil);
+}
+
+bool ABRWallDoor::IsDoorOpen() const
+{
+	const ABRGameState* GS = BRGame(this);
+	return GS && OpenUntil > GS->GetServerWorldTimeSeconds();
+}
+
+bool ABRWallDoor::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	return IsFreeWarden(Interactor) && FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) < 400.f;
+}
+
+FText ABRWallDoor::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return IsDoorOpen() ? LOCTEXT("DoorClose", "Lock the door") : LOCTEXT("DoorOpen", "Unlock the door (your key)");
+}
+
+void ABRWallDoor::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	const ABRGameState* GS = BRGame(this);
+	if (!HasAuthority() || !GS)
+	{
+		return;
+	}
+	OpenUntil = IsDoorOpen() ? -1.f : GS->GetServerWorldTimeSeconds() + OpenSeconds;
+	ForceNetUpdate();
+}
+
+void ABRWallDoor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const bool bOpenNow = IsDoorOpen();
+	SwingAngle = FMath::FInterpTo(SwingAngle, bOpenNow ? 95.f : 0.f, DeltaSeconds, 6.f);
+	Hinge->SetRelativeRotation(FRotator(0.f, SwingAngle, 0.f));
+	const int32 Want = bOpenNow ? 1 : 0;
+	if (Want != AppliedOpen)
+	{
+		AppliedOpen = Want;
+		Slab->SetCollisionEnabled(bOpenNow ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
+	}
 }
 
 bool ABRWall::CanInteract_Implementation(APVVCharacter* Interactor) const
@@ -982,7 +1058,7 @@ void ABRCheckpointGate::Tick(float DeltaSeconds)
 	if (State != AppliedState)
 	{
 		AppliedState = State;
-		Barrier->SetCollisionProfileName(bOpen ? TEXT("NoCollision") : TEXT("BlockAll"));
+		Barrier->SetCollisionProfileName(State ? TEXT("NoCollision") : TEXT("BlockAll")); // open OR smashed = drive through
 	}
 }
 
@@ -4139,6 +4215,11 @@ void ABRMariachiBand::BeginPlay()
 				FBRLook Charro = Player->GetLook();
 				Charro.ShirtColor = 0.7625f; // the black swatch on the clothes slider
 				Charro.PantsColor = 0.7625f;
+				// Long-sleeve collared shirt + fitted pants = the closest thing to a charro suit.
+				Charro.ShirtStyle = Player->FindClothesStyle(false, TEXT("Flannel"));
+				if (Charro.ShirtStyle == 0) Charro.ShirtStyle = Player->FindClothesStyle(false, TEXT("WorkShirt"));
+				Charro.PantsStyle = Player->FindClothesStyle(true, TEXT("Jeans"));
+				Charro.Glasses = 0;
 				Player->SetNPCPoncho(false);
 				Player->SetLook(Charro);
 				Player->bNoFightBack = true;

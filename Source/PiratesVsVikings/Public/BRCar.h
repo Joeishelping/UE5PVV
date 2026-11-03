@@ -138,6 +138,8 @@ public:
 	bool IsNPCTruck() const { return bNPCDriven; }
 	/** Server: the driver floors it - smashes the checkpoint barrier and races off. */
 	void FloorIt();
+	/** Server: Border Patrol just scanned someone aboard as illegal / carrying contraband: they react in a moment. */
+	void OnSuspectScanned();
 
 protected:
 	/** Steering wheel in front of the driver. Move it in your truck Blueprint so it lines up with your driving animation's hands. */

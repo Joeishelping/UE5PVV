@@ -203,6 +203,8 @@ public:
 	// --- Gang Beasts hands -------------------------------------------------------------------
 	/** Local: Space is being held (climb = hold Space + alternate mouse clicks). */
 	bool bSpaceHeld = false;
+	/** Squash the hair under the hat (Hair_UnderHat shape key) whenever a hat is on. */
+	void UpdateHairUnderHat();
 	virtual void StopJumping() override;
 	/** Server: let go of the wall (both mouse buttons released). */
 	UFUNCTION(Server, Reliable) void Server_ClimbLetGo();
@@ -225,6 +227,8 @@ public:
 	void TickPrisonBreak(float DeltaSeconds);
 	void BreakOut();
 	float LastAggressionTime = -100.f;
+	float NextNPCShot = 0.f;
+	FVector LastWobbleVelocity = FVector::ZeroVector;
 	TWeakObjectPtr<ABRCharacter> LastAggressionTarget;
 	float GuardBrokenUntil = -1.f;
 	float BlockReleaseAt = -1.f;
@@ -255,6 +259,8 @@ public:
 	int32 GetShirtStyleCount() const { return ShirtStyles.Num(); }
 	int32 GetPantsStyleCount() const { return PantsStyles.Num(); }
 	int32 GetGlassesCount() const { return GlassesStyles.Num(); }
+	/** Style number (1..) of the first shirt (bPants = false) or pants whose asset name contains NamePart; 0 if none. */
+	int32 FindClothesStyle(bool bPants, const TCHAR* NamePart) const;
 	int32 GetFacialHairCount() const { return FacialHairStyles.Num(); }
 
 	// --- Read these from an Animation Blueprint (Try Get Pawn Owner -> Cast to BRCharacter) ---
@@ -423,7 +429,7 @@ protected:
 	/** Hits to the head do this much more. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HeadHitMultiplier = 1.6f;
 	/** How hard a hit snaps the body part it lands on (bigger = more dramatic reactions). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HitReaction = 700.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HitReaction = 1100.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapDamage = 12.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapPush = 350.f;
 	/** How hard a punch throws your arm forward (physics fists). */
@@ -530,12 +536,14 @@ protected:
 	/** Overall muscle strength (multiplies the ones below). Lower = drunker. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float WobbleStrength = 1.f;
 	/** Off = legs follow the walk animation exactly (feet stay planted), only the upper body wobbles. On = legs wobble too. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") bool bWobblyLegs = false;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") bool bWobblyLegs = true;
 	/** Gang Beasts feel: firm legs, loose spine, floppy arms. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float LegStrength = 1600.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SpineStrength = 700.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HeadStrength = 350.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float ArmStrength = 180.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float SpineStrength = 480.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float HeadStrength = 240.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float ArmStrength = 130.f;
+	/** Gang Beasts gait: the upper body lags behind when you start, stop and turn (0 = off). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float MomentumSway = 0.35f;
 	/** Arms stiffen up while aiming so shooting looks and feels precise. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Physics") float AimArmStrength = 5000.f;
 	/** How hard a punch/shot shoves the upper body. */

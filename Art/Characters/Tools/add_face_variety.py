@@ -198,6 +198,22 @@ def item_deltas(V, hw, mat):
     return face_shape(V, hw)
 
 
+def hair_under_hat(V, hw, mat):
+    """Hair_UnderHat: squash the hair down onto the scalp where a hat sits (afros, pompadours...)."""
+    rel = V - HEAD_C
+    r = np.linalg.norm(rel, axis=1)
+    cap = HEAD_R + .022                                       # just above the scalp
+    w = smooth((V[:, 1] - 1.50) / .10)                        # from the ears up
+    target = np.minimum(r, cap + (r - cap) * .15)             # pull the poofy bits in to the scalp
+    scale = np.where(r > 1e-6, target / np.maximum(r, 1e-6), 1.)
+    d = rel * (scale - 1.)[:, None] * w[:, None]
+    return {"Hair_UnderHat": d}
+
+
+def zero_under_hat(V, hw, mat):
+    return {"Hair_UnderHat": np.zeros_like(V)}
+
+
 def process(path, fn, extra=None):
     g, buf = load(path)
     if extra:

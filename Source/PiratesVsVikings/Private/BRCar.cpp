@@ -226,7 +226,9 @@ bool ABRCar::WantsRefuel(const APVVCharacter* Interactor) const
 
 bool ABRCar::WantsSearch(const APVVCharacter* Interactor) const
 {
-	if (!Interactor || Interactor->GetFaction() != BR::Wardens || bInfiniteFuel || Interactor->GetCurrentBoat()
+	const ABRTruck* SelfTruck = Cast<ABRTruck>(this);
+	const bool bPatrolVehicle = bInfiniteFuel && !(SelfTruck && SelfTruck->IsNPCTruck()); // Border Patrol's own trucks
+	if (!Interactor || Interactor->GetFaction() != BR::Wardens || bPatrolVehicle || Interactor->GetCurrentBoat()
 		|| Interactor->GetCondition() != EPVVCondition::Normal || Interactor->GetCarriedCharacter())
 	{
 		return false;
@@ -365,7 +367,7 @@ bool ABRCar::OrderOut(APVVCharacter* Interactor)
 		}
 		// A dirty driver might just FLOOR IT instead of getting out.
 		ABRTruck* NPCTruck = bNPCTruck ? const_cast<ABRTruck*>(AsTruck) : nullptr;
-		if (NPCTruck && bDriverDirty && FMath::FRand() < 0.25f)
+		if (NPCTruck && bDriverDirty && FMath::FRand() < 0.1f)
 		{
 			NPCTruck->FloorIt();
 			Out.Reset();
@@ -889,6 +891,11 @@ void ABRTruck::Tick(float DeltaSeconds)
 	}
 	if (HasAuthority() && bNPCDriven)
 	{
+		if (ReactAt > 0.f && !bReacted && GetWorld()->GetTimeSeconds() >= ReactAt)
+		{
+			bReacted = true;
+			SuspectsReact(); // somebody aboard got scanned as illegal: they panic
+		}
 		DriveNPC(DeltaSeconds);
 		TickDriverTakeover(GetWorld()->GetTimeSeconds());
 	}
@@ -1060,7 +1067,7 @@ void ABRTruck::SuspectsReact()
 	ABRCharacter* Cop = BRNearestCop(GetWorld(), GetActorLocation(), 1500.f);
 	const bool bDriverIsSuspect = Suspects.Contains(Cast<ABRCharacter>(GetDriver()));
 	// FLOOR IT (more likely when the driver is the dirty one): smash the barrier and race off.
-	if (GetDriver() && FMath::FRand() < (bDriverIsSuspect ? 0.5f : 0.25f))
+	if (GetDriver() && bDriverIsSuspect && FMath::FRand() < 0.2f) // emergency only: the driver is the one who's busted
 	{
 		FloorIt();
 		return;
@@ -1075,6 +1082,14 @@ void ABRTruck::SuspectsReact()
 	if (GM && Suspects.Num() > 0)
 	{
 		GM->Feed(TEXT("The suspects bailed out of the truck!"));
+	}
+}
+
+void ABRTruck::OnSuspectScanned()
+{
+	if (HasAuthority() && bNPCDriven && !bReacted && ReactAt < 0.f)
+	{
+		ReactAt = GetWorld()->GetTimeSeconds() + FMath::FRandRange(1.5f, 3.5f);
 	}
 }
 
@@ -1149,9 +1164,9 @@ void ABRTruck::TickDriverTakeover(float Now)
 		ClearSeat(i);
 		SeatCharacter(NPC, 0);
 		NoDriverSince = -1.f;
-		if (bDirty && (bReacted || FMath::FRand() < 0.6f))
+		if (bDirty && bReacted && FMath::FRand() < 0.25f)
 		{
-			FloorIt(); // the dirty ones just GO
+			FloorIt(); // busted and behind the wheel: panic and GO
 		}
 		return;
 	}

@@ -981,6 +981,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	}
 	World->SpawnActor<ABRWall>(ABRWall::StaticClass(), At(WallX, 0.f, Ground), Params);
 	Gate = World->SpawnActor<ABRCheckpointGate>(ABRCheckpointGate::StaticClass(), At(WallX, RoadY, Ground), Params);
+	World->SpawnActor<ABRWallDoor>(ABRWallDoor::StaticClass(), At(WallX, ABRWall::DoorY, Ground), Params); // Border Patrol's key door
 
 	// --- Cockfight pit + betting counters
 	if (bBuildVillage)

@@ -155,6 +155,35 @@ public:
 	/** The road passes through a gate in the wall here (relative Y). */
 	static constexpr float GateY = -1200.f;
 	static constexpr float GateHalfWidth = 700.f;
+	/** Border Patrol's locked side door (a gap in the wall the BR Wall Door fills). */
+	static constexpr float DoorY = 500.f;
+	static constexpr float DoorHalfWidth = 90.f;
+};
+
+// ===========================================================================================
+/** A locked steel door in the Wall. Border Patrol have the key (E = open for a few seconds). Runners can slip through while it's open... */
+UCLASS(meta = (DisplayName = "BR Wall Door"))
+class PIRATESVSVIKINGS_API ABRWallDoor : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRWallDoor();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void Tick(float DeltaSeconds) override;
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.3f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+	UPROPERTY(EditAnywhere, Category = "BR|Door") float OpenSeconds = 4.f;
+
+protected:
+	UPROPERTY(Replicated) float OpenUntil = -1.f;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> Slab;
+	UPROPERTY() TObjectPtr<USceneComponent> Hinge;
+	float SwingAngle = 0.f;
+	int32 AppliedOpen = -1;
+	bool IsDoorOpen() const;
 };
 
 // ===========================================================================================
@@ -255,7 +284,7 @@ public:
 	/** Server: a vehicle floored it through the barrier - the arm snaps off and flies. Repaired after a while. */
 	void Smash(AActor* Smasher);
 	/** Seconds before Border Patrol fixes a smashed barrier. */
-	UPROPERTY(EditAnywhere, Category = "BR|Gate") float RepairSeconds = 30.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Gate") float RepairSeconds = 12.f;
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UBoxComponent> Barrier;

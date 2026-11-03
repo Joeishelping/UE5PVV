@@ -486,6 +486,20 @@ So all you have to do is **import the files** (keep their names). Anything you s
 
 ---
 
+## Part 15h: Checkpoint fixes, Border Patrol door, hats, physics feel
+
+- **Scan someone illegal** and within 2-3 s they react: get out and fight, pull a knife, run, give up, or (rarely) **pull a GUN** and shoot at you (shooting back = self-defense). Guns are rare and show up on the scan as CONTRABAND: ILLEGAL GUN.
+- **Order out (O / hold E)** now works on NPC trucks.
+- Trucks only smash the gate in an emergency (the driver himself is busted), and the barrier is fixed after 12 s. A smashed barrier is really open now (no invisible wall).
+- **Border Patrol door:** a locked steel door in the Wall just north of the gate. Border Patrol hold the key: E opens it for 4 s (careful: Runners can slip through while it's open).
+- **Border Patrol** always wear the default uniform (no custom shirts/pants/colours). Glasses are still allowed.
+- **Hats squash the hair** (afros etc. no longer poke through). Re-import the body and every SK_Hair_* file (they got a new Hair_UnderHat shape).
+- **Mariachi** wear black long-sleeve shirts + black jeans.
+- **Physics feel:** legs are floppy too now, muscles are looser, your upper body lags behind when you start/stop/turn, and solid hits rock you (short stagger). Tune in BR | Physics (Spine/Head/Arm Strength, Momentum Sway, Wobbly Legs).
+- Fixed: NPCs appearing in cardboard boxes during sandstorms (and around detained people).
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

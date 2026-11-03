@@ -242,6 +242,17 @@ void ABRCharacter::ReactToBust(ABRCharacter* Cop, bool bMinorOffense)
 		}
 		return;
 	}
+	if (bCarriesContraband && ContrabandItem == EBRItem::IllegalGun)
+	{
+		// Rare: they had a GUN. They pull it and start shooting at you (self-defense = shoot back, no scandal).
+		SetNPCHeldItem(EBRItem::IllegalGun);
+		StartBrawling(Cop, 60.f, 1.f);
+		if (GM)
+		{
+			GM->Feed(FString::Printf(TEXT("A suspect pulled a GUN on %s!"), *Cop->GetPlayerDisplayName()));
+		}
+		return;
+	}
 	if (Menace > 0.82f)
 	{
 		SetNPCHeldItem(EBRItem::Knife);
@@ -705,13 +716,14 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 			Part->SetLeaderPoseComponent(GetMesh(), true);
 		}
 	};
-	PickOrDefault(OutfitTop, ShirtStyles, L.ShirtStyle, DefaultTopMesh.Get());
-	PickOrDefault(OutfitBottom, PantsStyles, L.PantsStyle, DefaultBottomMesh.Get());
+	// Border Patrol always wear their uniform (no custom shirts/pants).
+	PickOrDefault(OutfitTop, ShirtStyles, IsWarden() ? 0 : L.ShirtStyle, DefaultTopMesh.Get());
+	PickOrDefault(OutfitBottom, PantsStyles, IsWarden() ? 0 : L.PantsStyle, DefaultBottomMesh.Get());
 	PickOrDefault(OutfitFace, GlassesStyles, L.Glasses, nullptr);
 	PickStyle(FacialHair, FacialHairStyles, L.FacialHair);
 	ApplySkin(BR::SkinColor(L.SkinTone));
-	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor), BR::ClothColor(L.ShirtColor), ClothMaterialSlot);
-	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor), BR::ClothColor(L.PantsColor), ClothMaterialSlot);
+	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor) || IsWarden(), BR::ClothColor(L.ShirtColor), ClothMaterialSlot);
+	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor) || IsWarden(), BR::ClothColor(L.PantsColor), ClothMaterialSlot);
 	TintOutfit(Hair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	TintOutfit(FacialHair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	// Eyebrows (the "M_Brow" slot on the body) match the hair colour.
@@ -1017,6 +1029,29 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		{
 			const FVector ToFoe = (Foe->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 			GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
+			// Armed: shoot from range instead of walking up.
+			if (HeldItem == EBRItem::IllegalGun && ToFoe.Size() > 260.f && ToFoe.Size() < 1200.f)
+			{
+				SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw, 0.f));
+				if (Now >= NextNPCShot)
+				{
+					NextNPCShot = Now + FMath::FRandRange(2.f, 3.5f);
+					const FVector Muzzle = GetActorLocation() + FVector(0.f, 0.f, 50.f);
+					FHitResult Hit;
+					FCollisionQueryParams Params(SCENE_QUERY_STAT(BRNPCShot), false, this);
+					const FVector Aim = Foe->GetActorLocation() + FVector(FMath::FRandRange(-60.f, 60.f), FMath::FRandRange(-60.f, 60.f), 20.f);
+					const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, Muzzle, Aim, ECC_Visibility, Params) && Hit.GetActor() != Foe;
+					const bool bHitFoe = !bBlocked && FMath::FRand() < 0.45f; // they're terrible shots
+					Multicast_Shot(Muzzle, bBlocked ? FVector(Hit.ImpactPoint) : Aim, true, bHitFoe);
+					if (bHitFoe)
+					{
+						Foe->ApplyKnockdown(this, ToFoe.GetSafeNormal() * 300.f + FVector(0.f, 0.f, 150.f));
+						Foe->LastTosser = this;
+						Foe->LastTossTime = Now;
+					}
+				}
+				return;
+			}
 			if (MugTarget.Get() == Foe && ToFoe.Size() < 170.f)
 			{
 				MugTarget = nullptr;
@@ -2321,6 +2356,18 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 		}
 		Line += TEXT("  (tagged - order them out / zip-tie them)");
 		Target->Spot(8.f);
+		// Busted NPCs react: in a truck the truck panics in a moment; on foot they react right away.
+		if (Target->IsNPC())
+		{
+			if (ABRTruck* Ride = Cast<ABRTruck>(Target->GetCurrentBoat()))
+			{
+				Ride->OnSuspectScanned();
+			}
+			else if (!Target->IsBrawling())
+			{
+				Target->ReactToBust(this, !Target->bIllegal);
+			}
+		}
 		ABRGameState::Sfx(this, EBRSfx::ScanAlarm, Target->GetActorLocation());
 		ABRGameState::FX(this, EBRFX::PointsText, Target->GetActorLocation() + FVector(0.f, 0.f, 130.f), bNoPapers ? TEXT("ILLEGAL") : TEXT("CONTRABAND"));
 		Notify(FText::FromString(Line));
@@ -2454,6 +2501,16 @@ void ABRCharacter::TickWobble()
 	if (!bWobbleOn || !GetMesh())
 	{
 		return;
+	}
+	// Momentum: start running, stop or turn and the upper body flops the other way first (Gang Beasts drunk gait).
+	{
+		const FVector Vel = GetVelocity();
+		const FVector Change = (Vel - LastWobbleVelocity) * FVector(1.f, 1.f, 0.f);
+		LastWobbleVelocity = Vel;
+		if (MomentumSway > 0.f && Change.Size() > 8.f && Change.Size() < 1500.f && GetMesh()->IsSimulatingPhysics(TEXT("spine_02")))
+		{
+			GetMesh()->AddImpulseToAllBodiesBelow(-Change * MomentumSway, TEXT("spine_02"), true, true);
+		}
 	}
 	// Arms snap to the aim pose while aiming; floppy otherwise.
 	if (WantsStiffArms() != bArmsStiff)
@@ -2782,6 +2839,10 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	{
 		SetNPCHeldItem(EBRItem::None);
 	}
+	if (HasAuthority() && bIsNPC && HeldItem == EBRItem::IllegalGun && GetCondition() != EPVVCondition::Normal)
+	{
+		SetNPCHeldItem(EBRItem::None); // drops the gun when they go down
+	}
 	// Safety: if the body ever loses its posed bones (mesh swapped, re-registered), switch the muscles off
 	// before the physics reads bones that aren't there, and switch them back on once it's posed again.
 	if (PhysicalAnimation && PhysicalAnimation->GetSkeletalMesh() && GetMesh()
@@ -3032,6 +3093,22 @@ void ABRCharacter::UpdateLocalVisibility()
 	{
 		bStealthHidden = bHide;
 		GetRootComponent()->SetVisibility(!bHide, true);
+		if (!bHide)
+		{
+			// Showing everything again also switched on parts that should stay hidden (the cardboard box, the
+			// cigarette, the rope, holstered guns...). Put them back how they should be.
+			OnRep_Box();
+			OnRep_HeldItem();
+			if (CigaretteMesh)
+			{
+				CigaretteMesh->SetVisibility(ActiveEmote == 6);
+			}
+			if (RopeMesh)
+			{
+				RopeMesh->SetVisibility(false);
+			}
+			GunStyle = -1; // re-applies the gun visibility next frame
+		}
 		if (StatusLabel && !bHide)
 		{
 			StatusLabel->SetVisibility(!bIsNPC && Viewer == GetFaction() && Viewer != EPVVFaction::None && !IsLocallyControlled());
@@ -3726,6 +3803,11 @@ float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVe
 	}
 	const float Now = GS->GetServerWorldTimeSeconds();
 	const float After = Balance - Damage * GetDamageTakenMultiplier();
+	// A solid hit rocks you: you stagger for half a second (slow, wobbly) instead of just losing a number.
+	if (Damage > 4.f && !IsSlowed())
+	{
+		ApplySlow(0.5f, 0.35f);
+	}
 	if (IsDazed())
 	{
 		return Damage * 1.5f; // already seeing birds: this one puts you down
@@ -5036,6 +5118,7 @@ void ABRCharacter::OnRep_Hat()
 	OutfitHead->SetSkeletalMeshAsset(HatMesh);
 	OutfitHead->SetLeaderPoseComponent(GetMesh(), true);
 	OutfitHead->SetHiddenInGame(HatMesh == nullptr);
+	UpdateHairUnderHat();
 }
 
 void ABRCharacter::KnockOffHat()
@@ -5488,6 +5571,30 @@ void ABRCharacter::Client_Banner_Implementation(const FString& Text, bool bGood)
 	BannerText = Text;
 	bBannerGood = bGood;
 	BannerUntil = GetWorld()->GetTimeSeconds() + 5.f;
+}
+
+int32 ABRCharacter::FindClothesStyle(bool bPants, const TCHAR* NamePart) const
+{
+	const TArray<TObjectPtr<USkeletalMesh>>& List = bPants ? PantsStyles : ShirtStyles;
+	for (int32 i = 0; i < List.Num(); ++i)
+	{
+		if (List[i] && List[i]->GetName().Contains(NamePart))
+		{
+			return i + 1;
+		}
+	}
+	return 0;
+}
+
+void ABRCharacter::UpdateHairUnderHat()
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body || !Body->GetSkeletalMeshAsset() || !Body->GetSkeletalMeshAsset()->FindMorphTarget(TEXT("Hair_UnderHat")))
+	{
+		return;
+	}
+	const bool bHatOn = OutfitHead && OutfitHead->GetSkeletalMeshAsset() && !OutfitHead->bHiddenInGame;
+	Body->SetMorphTarget(TEXT("Hair_UnderHat"), bHatOn ? 1.f : 0.f, false);
 }
 
 void ABRCharacter::TickBlink()
