@@ -343,6 +343,7 @@ protected:
 	/** Left Alt: dive / tackle. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> DiveAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> BlockAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> OrderOutAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> EmoteAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> CashAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> HeadbuttAction;
@@ -671,6 +672,8 @@ private:
 	void Input_Grab();
 	void Input_Dive();
 	void Input_BlockStart();
+	void Input_OrderOut();
+	UFUNCTION(Server, Reliable) void Server_OrderOut();
 	void Input_BlockStop();
 	void Input_EmoteStart();
 	void Input_EmoteStop();

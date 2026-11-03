@@ -47,6 +47,10 @@ public:
 	/** Whoever bought it (they and their teammates can drive it). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") TObjectPtr<APlayerState> OwnerPlayer;
 	virtual FString GetModelName() const { return TEXT("Car"); }
+	/** Server: Border Patrol orders the suspects out of this vehicle (O key, or hold E). True if it worked. */
+	bool OrderOut(APVVCharacter* Officer);
+	/** Can this officer order people out of it right now? */
+	bool CanOrderOut(const APVVCharacter* Officer) const { return WantsSearch(Officer); }
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float FuelPerSecond = 1.f / 60.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float RideHeight = 45.f;

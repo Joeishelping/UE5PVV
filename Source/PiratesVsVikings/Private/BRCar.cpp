@@ -300,7 +300,7 @@ FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 	}
 	if (WantsSearch(Interactor))
 	{
-		return LOCTEXT("Search", "Order everyone OUT of the truck (hold)");
+		return LOCTEXT("Search", "Order the suspects OUT (press O, or hold E)");
 	}
 	if (WantsRefuel(Interactor))
 	{
@@ -320,48 +320,12 @@ FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 	return Super::GetInteractPrompt_Implementation(Interactor);
 }
 
-void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
+bool ABRCar::OrderOut(APVVCharacter* Interactor)
 {
-	if (!HasAuthority() || !Interactor)
+	if (!HasAuthority() || !WantsSearch(Interactor))
 	{
-		return;
+		return false;
 	}
-	if (WantsBuy(Interactor))
-	{
-		ABRPlayerState* PS = Cast<ABRPlayerState>(Interactor->GetPVVPlayerState());
-		ABRCharacter* Buyer = Cast<ABRCharacter>(Interactor);
-		if (!PS || PS->Money < SalePrice)
-		{
-			if (Buyer)
-			{
-				Buyer->Notify(FText::Format(LOCTEXT("CarBroke", "You need ${0} for this one."), SalePrice));
-			}
-			return;
-		}
-		PS->AddMoney(-SalePrice);
-		bForSale = false;
-		OwnerPlayer = PS;
-		Fuel = 1.f;
-		OnRep_ForSale();
-		ForceNetUpdate();
-		ABRGameState::Sfx(this, EBRSfx::Buy, GetActorLocation());
-		if (Buyer)
-		{
-			Buyer->Notify(FText::Format(LOCTEXT("CarBought", "SOLD! The {0} is yours (your team can drive it too). Full tank."), FText::FromString(GetModelName())));
-		}
-		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
-		{
-			GM->Feed(FString::Printf(TEXT("%s bought a %s"), *Interactor->GetPlayerDisplayName(), *GetModelName()));
-		}
-		return;
-	}
-	if (APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))
-	{
-		Interactor->StartCarrying(Prisoner); // pulls them out of the seat onto your shoulder
-		return;
-	}
-	if (WantsSearch(Interactor))
-	{
 		// Pull out the suspects: Runners, people with no papers, people with contraband.
 		const ABRTruck* AsTruck = Cast<ABRTruck>(this);
 		const bool bNPCTruck = AsTruck && AsTruck->IsNPCTruck();
@@ -431,6 +395,52 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 			}
 			GM->OnVehicleSearched(Interactor, Found + Seized);
 		}
+		return true;
+}
+
+void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!HasAuthority() || !Interactor)
+	{
+		return;
+	}
+	if (WantsBuy(Interactor))
+	{
+		ABRPlayerState* PS = Cast<ABRPlayerState>(Interactor->GetPVVPlayerState());
+		ABRCharacter* Buyer = Cast<ABRCharacter>(Interactor);
+		if (!PS || PS->Money < SalePrice)
+		{
+			if (Buyer)
+			{
+				Buyer->Notify(FText::Format(LOCTEXT("CarBroke", "You need ${0} for this one."), SalePrice));
+			}
+			return;
+		}
+		PS->AddMoney(-SalePrice);
+		bForSale = false;
+		OwnerPlayer = PS;
+		Fuel = 1.f;
+		OnRep_ForSale();
+		ForceNetUpdate();
+		ABRGameState::Sfx(this, EBRSfx::Buy, GetActorLocation());
+		if (Buyer)
+		{
+			Buyer->Notify(FText::Format(LOCTEXT("CarBought", "SOLD! The {0} is yours (your team can drive it too). Full tank."), FText::FromString(GetModelName())));
+		}
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->Feed(FString::Printf(TEXT("%s bought a %s"), *Interactor->GetPlayerDisplayName(), *GetModelName()));
+		}
+		return;
+	}
+	if (APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))
+	{
+		Interactor->StartCarrying(Prisoner); // pulls them out of the seat onto your shoulder
+		return;
+	}
+	if (WantsSearch(Interactor))
+	{
+		OrderOut(Interactor);
 		return;
 	}
 	if (WantsRefuel(Interactor))

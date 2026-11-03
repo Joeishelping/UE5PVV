@@ -620,11 +620,11 @@ void ABRCharacter::ApplyFaceShape(const FBRLook& InLook)
 		}
 		if (Asset->FindMorphTarget(Small))
 		{
-			Body->SetMorphTarget(Small, SmallWeight, true);
+			Body->SetMorphTarget(Small, SmallWeight, false); // keep the entry (removing/adding entries every frame is crash-prone with followers)
 		}
 		if (Asset->FindMorphTarget(Big))
 		{
-			Body->SetMorphTarget(Big, BigWeight, true);
+			Body->SetMorphTarget(Big, BigWeight, false);
 		}
 	};
 	Pair(TEXT("Head_Small"), TEXT("Head_Big"), L.HeadSize);
@@ -1101,6 +1101,7 @@ void ABRCharacter::EnsureDefaultInput()
 	GrabAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	DiveAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	BlockAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	OrderOutAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	HeadbuttAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	EmoteAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	CashAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
@@ -1129,6 +1130,7 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, GrabAction, EKeys::Z);
 	PVVInput::Map(IMC, GrabAction, EKeys::Gamepad_FaceButton_Right);
 	PVVInput::Map(IMC, BlockAction, EKeys::LeftAlt);
+	PVVInput::Map(IMC, OrderOutAction, EKeys::O);
 	PVVInput::Map(IMC, BlockAction, EKeys::Gamepad_LeftTrigger);
 	PVVInput::Map(IMC, DiveAction, EKeys::LeftControl);
 	PVVInput::Map(IMC, DiveAction, EKeys::ThumbMouseButton);
@@ -1167,6 +1169,7 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (DropAction) Input->BindAction(DropAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drop);
 	if (GrabAction) Input->BindAction(GrabAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Grab);
 	if (DiveAction) Input->BindAction(DiveAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Dive);
+	if (OrderOutAction) Input->BindAction(OrderOutAction, ETriggerEvent::Started, this, &ABRCharacter::Input_OrderOut);
 	if (BlockAction)
 	{
 		Input->BindAction(BlockAction, ETriggerEvent::Started, this, &ABRCharacter::Input_BlockStart);
@@ -2392,8 +2395,8 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		{
 			UGameplayStatics::PlaySoundAtLocation(this, KnockoutSound, GetActorLocation());
 		}
-		// Go fully limp: no muscles while knocked down.
-		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("pelvis"), FPhysicalAnimationData(), false);
+		// Go fully limp: unhook the muscles completely while knocked down (they're hooked back up when you get up).
+		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
 		bWobbleOn = false;
 	}
 	else if (!bWobbleOn || !GetMesh()->IsSimulatingPhysics(TEXT("spine_02")))
@@ -2498,10 +2501,16 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	}
 	// Safety: if the body ever loses its posed bones (mesh swapped, re-registered), switch the muscles off
 	// before the physics reads bones that aren't there, and switch them back on once it's posed again.
-	if (bWobbleOn && GetMesh() && (!GetMesh()->IsRegistered() || GetMesh()->GetComponentSpaceTransforms().Num() < GetMesh()->GetNumBones()))
+	if (PhysicalAnimation && PhysicalAnimation->GetSkeletalMesh() && GetMesh()
+		&& (!GetMesh()->IsRegistered() || GetMesh()->GetComponentSpaceTransforms().Num() < GetMesh()->GetNumBones()))
 	{
-		DisableWobble();
-		bWobblePending = true;
+		if (bWobbleOn)
+		{
+			DisableWobble();
+		}
+		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
+		bWobbleOn = false;
+		bWobblePending = GetCondition() != EPVVCondition::KnockedDown;
 	}
 	if (bWobblePending && GetCondition() != EPVVCondition::KnockedDown && !GetCurrentBoat() && !GetCarrier())
 	{
@@ -3154,6 +3163,35 @@ void ABRCharacter::Input_RightHandStop()
 }
 
 void ABRCharacter::Input_BlockStart() { Server_SetBlock(true); }
+void ABRCharacter::Input_OrderOut() { Server_OrderOut(); }
+
+void ABRCharacter::Server_OrderOut_Implementation()
+{
+	if (!IsWarden())
+	{
+		return;
+	}
+	// The closest vehicle with people in it.
+	ABRCar* Best = nullptr;
+	float BestDist = 700.f;
+	for (TActorIterator<ABRCar> It(GetWorld()); It; ++It)
+	{
+		const float D = FVector::Dist(It->GetActorLocation(), GetActorLocation());
+		if (D < BestDist && It->CanOrderOut(this))
+		{
+			BestDist = D;
+			Best = *It;
+		}
+	}
+	if (!Best)
+	{
+		Notify(LOCTEXT("NoCarToOrder", "Walk up to a vehicle with people in it, then press O to order them out."));
+		return;
+	}
+	ABRGameState::Sfx(this, EBRSfx::Whistle, GetActorLocation()); // *TWEEEET*
+	Best->OrderOut(this);
+	Notify(LOCTEXT("OrderedOut", "\"EVERYBODY OUT!\""));
+}
 void ABRCharacter::Input_BlockStop() { Server_SetBlock(false); }
 
 void ABRCharacter::Server_SetBlock_Implementation(bool bOn)
@@ -4805,7 +4843,7 @@ void ABRCharacter::TickBlink()
 	if (FMath::Abs(Weight - AppliedBlink) > 0.01f)
 	{
 		AppliedBlink = Weight;
-		Body->SetMorphTarget(TEXT("Blink"), Weight, true);
+		Body->SetMorphTarget(TEXT("Blink"), Weight, false);
 	}
 }
 

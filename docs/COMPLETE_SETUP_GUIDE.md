@@ -198,6 +198,7 @@ Empty slots use simple built-in puffs.
 | **Left click / Right click** | your **left / right hand**. **Tap = punch** with that hand. **Hold = reach out and grab** whoever it touches; let go to drop them. Hold one hand on someone and tap the other to punch them. |
 | **Space while grabbed** | mash it to wriggle free |
 | **Left Ctrl or mouse thumb button** | **dive / tackle** |
+| **O** (Border Patrol) | **order the suspects OUT of the vehicle you're next to** (whistle!) |
 | **hold Left Alt** | **BLOCK** (hits from the front do ~15% damage; too many hits = guard break; grabs and hits from behind still get you) |
 | Z | grab with both hands (people) or pick up things; Z again to throw; on a teammate: climb on their shoulders |
 | E | interact (hold for jobs, zip-ties, ladders) |
