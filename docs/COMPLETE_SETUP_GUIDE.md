@@ -26,6 +26,7 @@ This one guide replaces all the older ones. It covers everything you have to set
 1. In the Content Browser, find your character body mesh (the one BP_Runner uses).
 2. Right-click it → **Reimport With New File** → pick `Art/Characters/SK_PVV_Body_Custom.glb`.
 3. In the import window, tick **Import Morph Targets**. Click **Import**.
+   - The body now also has a **Blink** shape (everyone blinks at random and their eyes shut when knocked out). Re-import it if you imported the body before.
 4. Keep the same skeleton.
 
 ### 2b. Hair, beards, hats, poncho
@@ -377,7 +378,7 @@ Everything here is built on the test map automatically.
 - **Lucha ring:** the ropes are solid during a fight, so you bounce off them and stay in the ring. Hits throw you far less in there. The luchador now actually moves: he charges, circles, blocks and goes for grabs and kicks when you block.
 - **Block:** hold **Left Alt**. You move slowly and can't punch while blocking. Every NPC fighter blocks too.
 - **Mariachi** wear all black with sombreros. The black only shows if your shirt and pants materials have the `ShirtColor` / `PantsColor` parameters (Part 3e).
-- **Day and night really happen now.** The game uses your level's own sun, sky light and fog if it has them (before, it switched day/night off when your level had a sun). Night gets dark and blue, and street lamps along the big road switch on.
+- **Day and night really happen now.** The game uses your level's own sun, sky light and fog if it has them (before, it switched day/night off when your level had a sun). Night gets dark and blue, and street lamps along the big road switch on. A few old lamps flicker and cut out now and then.
 - **Rain:** grey and darker, rain streaks around you, lightning flashes and thunder.
 - **Sandstorm:** thick orange fog and blowing sand.
 - Optional, to make weather look and sound better (Project Settings → Border Run):

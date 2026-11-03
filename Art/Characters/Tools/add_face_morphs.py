@@ -1,6 +1,6 @@
 """Adds face shape keys (morph targets) to the existing skinned .glb files.
 
-Body:            Head_Big, Head_Small, Nose_Big, Nose_Small, Lips_Big, Lips_Small, Ears_Big, Ears_Small
+Body:            Head_Big, Head_Small, Nose_Big, Nose_Small, Lips_Big, Lips_Small, Ears_Big, Ears_Small, Blink
 Head-worn items: Head_Big, Head_Small (hair, hats, glasses grow/shrink with the head)
 
 The game sets these from the menu sliders (0 = small, 0.5 = normal, 1 = big).
@@ -14,6 +14,7 @@ HEAD_PIVOT = np.array([0., 1.30, 0.])  # chin/neck: the head grows from here so 
 NOSE_BASE = np.array([0., 1.50, .275])
 NOSE_TIP = np.array([0., 1.505, .31])
 LIP_C = np.array([0., 1.405, .245])
+EYE_CY = 1.5995                        # height of the middle of the eyes
 EAR_ROOT = {1: np.array([.30, 1.535, .035]), -1: np.array([-.30, 1.535, .035])}
 
 CT = {5126: np.float32, 5123: np.uint16, 5125: np.uint32, 5121: np.uint8}
@@ -106,6 +107,16 @@ def body_deltas(V, hw, mat):
         out["Ears_Small"] = (V - root) * (-.3 * w)[:, None]
     else:
         out["Ears_Big"] = out["Ears_Small"] = np.zeros_like(V)
+
+    # Blink: squash each eyeball (and pupil) flat onto the middle line of the eye, so it reads as a closed slit.
+    if mat in ("M_Eye", "M_Pupil"):
+        d = np.zeros_like(V)
+        d[:, 1] = (EYE_CY - V[:, 1]) * .93
+        if mat == "M_Pupil":
+            d[:, 2] = -.006  # tuck the pupil behind the closed lid
+        out["Blink"] = d
+    else:
+        out["Blink"] = np.zeros_like(V)
     return out
 
 
@@ -137,6 +148,8 @@ def process(src, dst, fn):
 
 if __name__ == "__main__":
     process("../SK_PVV_Body_Custom.glb", "../SK_PVV_Body_Custom.glb", body_deltas)
+    if "--body-only" in __import__("sys").argv:
+        raise SystemExit
     import glob
     for f in ["../SK_PVV_Hair_01.glb", "../Outfits/SK_Outfit_CowboyHat.glb", "../Outfits/SK_Outfit_PatrolCap.glb",
               "../Outfits/SK_Outfit_Sunglasses.glb"] + sorted(glob.glob("../SK_Hair_*.glb")) + sorted(glob.glob("../SK_Face_*.glb")) + sorted(glob.glob("../SK_Hat_*.glb")):

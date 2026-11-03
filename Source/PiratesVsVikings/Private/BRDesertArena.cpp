@@ -528,6 +528,21 @@ void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* G
 			Bulb->SetIntensity(bLightsOn ? 6000.f : 0.f);
 		}
 	}
+	// A few old street lamps flicker and cut out now and then.
+	if (bLightsOn)
+	{
+		const float T = GetWorld()->GetTimeSeconds();
+		for (int32 i = 0; i < StreetLights.Num(); ++i)
+		{
+			if (i % 3 != 1)
+			{
+				continue; // most lamps are fine
+			}
+			const float Noise = FMath::PerlinNoise1D(T * 6.f + i * 17.3f);
+			const bool bOut = Noise < -0.25f || FMath::PerlinNoise1D(T * 0.3f + i * 5.1f) < -0.4f; // stutters + longer outages
+			StreetLights[i]->SetIntensity(bOut ? 300.f : 6000.f * (0.85f + 0.15f * FMath::Sin(T * 40.f + i)));
+		}
+	}
 	// Lightning in the rain: a white flash, thunder a moment later.
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (RainAmount > 0.7f && Now >= NextLightning)

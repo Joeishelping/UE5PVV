@@ -2448,6 +2448,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	TickRope();
 	TickEmoteWheel();
 	TickHeadTag();
+	TickBlink();
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
 	{
 		const bool bKO = GetCondition() == EPVVCondition::KnockedDown;
@@ -4728,6 +4729,47 @@ void ABRCharacter::Server_DropCash_Implementation()
 		Cash->FinishSpawning(T);
 	}
 	Notify(FText::Format(LOCTEXT("CashDropped", "Dropped ${0}. Anyone can pick it up..."), Amount));
+}
+
+void ABRCharacter::TickBlink()
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (GetNetMode() == NM_DedicatedServer || !Body || !Body->GetSkeletalMeshAsset() || !Body->GetSkeletalMeshAsset()->FindMorphTarget(TEXT("Blink")))
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (NextBlinkTime <= 0.f)
+	{
+		NextBlinkTime = Now + FMath::FRandRange(0.5f, 4.f); // everyone starts out of sync
+	}
+	float Weight = 0.f;
+	if (GetCondition() == EPVVCondition::KnockedDown)
+	{
+		Weight = 1.f; // out cold: eyes shut
+	}
+	else
+	{
+		if (Now >= NextBlinkTime)
+		{
+			BlinkStartTime = Now;
+			bDoubleBlink = FMath::FRand() < 0.15f;
+			NextBlinkTime = Now + FMath::FRandRange(2.f, 6.f) * (IsTipsy() ? 0.5f : 1.f); // drunk = blinky
+		}
+		// Quick close, slightly slower open (~0.18 s). Sometimes twice in a row.
+		const float T = Now - BlinkStartTime;
+		auto Shape = [](float X) { return X < 0.f ? 0.f : (X < 0.07f ? X / 0.07f : FMath::Max(0.f, 1.f - (X - 0.07f) / 0.11f)); };
+		Weight = FMath::Max(Shape(T), bDoubleBlink ? Shape(T - 0.25f) : 0.f);
+		if (IsTipsy())
+		{
+			Weight = FMath::Max(Weight, 0.35f); // heavy-lidded
+		}
+	}
+	if (FMath::Abs(Weight - AppliedBlink) > 0.01f)
+	{
+		AppliedBlink = Weight;
+		Body->SetMorphTarget(TEXT("Blink"), Weight, true);
+	}
 }
 
 void ABRCharacter::TickHeadTag()

@@ -572,6 +572,12 @@ private:
 	TWeakObjectPtr<ABRCharacter> AngryAt;
 	float AngryUntil = -1.f;
 	UPROPERTY(Replicated) float TipsyUntil = -1.f;
+	/** Eyes: random blinks (needs the "Blink" shape key on the body). Shut while knocked out. */
+	void TickBlink();
+	float NextBlinkTime = 0.f;
+	float BlinkStartTime = -10.f;
+	float AppliedBlink = -1.f;
+	bool bDoubleBlink = false;
 	float LastChugTime = -1.f;
 	float BrawlAggression = 0.5f;
 	FVector WanderHome = FVector::ZeroVector;
