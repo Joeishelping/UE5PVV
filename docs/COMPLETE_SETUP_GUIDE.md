@@ -741,7 +741,8 @@ Nothing to set up. Just update the code. What's new:
 **23 hairstyles:**
 - **Fixed** (hair no longer comes down to the eyebrows like a helmet; real hairline, slightly higher at the temples): Afro, Buzz (now a soft short buzz), Caesar, Cornrows, LongWavy, Mullet, Pompadour, SidePart, SlickBack, Twists, Waves.
 - **Real skin fades** (the hair gets sparser down the sides until it's skin): Fade, HighAndTight, CrewCut, FlatTop (now a proper flat block), CurlyTop (now real curls on top).
-- **New:** Undercut, Mohawk, ManBun, Ponytail, Spiky, Curtains (middle part), Dreads.
+- **New:** Undercut, SoccerMohawk (the Mexican "fohawk": short faded sides, a soft ridge down the middle), ManBun, Ponytail, Spiky, Curtains (middle part), Dreads.
+- (The old spiky Mohawk was removed. Delete **SK_Hair_Mohawk** in Unreal if you imported it.)
 
 **15 beards and mustaches (all rebuilt to hug the face and fit around the new lips):**
 - Stubble (speckled, not a solid block), BoxedBeard, FullBeard, LongBeard, Goatee, VanDyke, SoulPatch, ChinStrap, MuttonChops.
@@ -756,6 +757,43 @@ Nothing to set up. Just update the code. What's new:
 3. NPCs and bots pick from all of them.
 
 Previews: **Art/Characters/Previews/Hairstyles.png** and **FacialHair.png**.
+
+---
+
+## Part 15q: Checkpoint & police tools
+
+**The scan checks PAPERS only now.**
+- No papers = ILLEGAL (same as before).
+- Papers OK but carrying contraband or a weapon = "papers in order... but they look **NERVOUS**". You have to **search** them to find it.
+- **Fake passport ($1000, "PAPELES CHUCHO" in town):** the papers scan says you're legal. It **fails** if you're carrying contraband (drugs / gun / package). A search takes it off you.
+
+**Search (frisk) people:**
+1. As Border Patrol, walk up to anyone standing.
+2. **Hold E: "SEARCH them"** (2 s). It takes contraband, guns, knives and fake passports.
+   - Found something: they're spotted, you get the seizure points, and NPCs fight / run / give up.
+   - Found nothing on a clean citizen: small approval hit (harassment).
+   - The same person can be searched again after 20 s.
+
+**Search the vehicle:**
+- Some NPC trucks have a **hidden stash**.
+- Once everyone's out (order them out first), **hold E on the empty vehicle: "SEARCH the vehicle"** (3 s).
+- Found = seized + points. Nothing = small approval hit.
+
+**Security camera ($350 at the Border Patrol supply counter):**
+1. Select it and use it (F) to put it up where you stand. It watches the way you were facing and slowly pans.
+2. Any Runner who has crossed the Line walking through its view gets **spotted**, and it sets off a **BORDER ALARM**.
+3. Runners can sneak up and **smash it** (hold E).
+
+**Border alarms:** a siren **everyone** hears, a banner, and the spot pings on Border Patrol's map. They go off when:
+- A camera sees someone.
+- Someone climbs the **Wall**.
+- Someone **cuts a fence**.
+(At most one every 30 s.)
+
+**Reinforcements ($1200, supply counter, 60 s cooldown):**
+- Two NPC officers in uniform and patrol caps arrive.
+- For about 2.5 minutes they chase the nearest Runner who crossed the Line, fight them Gang Beasts style, and **zip-tie** them once they're down.
+- Then they leave.
 
 ---
 

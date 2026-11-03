@@ -321,6 +321,15 @@ bool ABRCar::WantsDrive(const APVVCharacter* Interactor) const
 		&& Interactor->GetCondition() == EPVVCondition::Normal && Occupants.Num() > 0 && !Occupants[0] && CanDrive(Interactor);
 }
 
+bool ABRCar::WantsCargoSearch(const APVVCharacter* Interactor) const
+{
+	const ABRTruck* SelfTruck = Cast<ABRTruck>(this);
+	const bool bPatrolVehicle = bInfiniteFuel && !(SelfTruck && SelfTruck->IsNPCTruck());
+	return Interactor && Interactor->GetFaction() == BR::Wardens && !bPatrolVehicle && !bForSale && !bCargoSearched
+		&& Interactor->GetCondition() == EPVVCondition::Normal && !Interactor->GetCurrentBoat() && !Interactor->GetCarriedCharacter()
+		&& !HasFreePeopleAboard(nullptr);
+}
+
 bool ABRCar::HasFreePeopleAboard(const APVVCharacter* Except) const
 {
 	for (const APVVCharacter* Occupant : Occupants)
@@ -382,7 +391,7 @@ bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 	{
 		return true;
 	}
-	if (WantsSearch(Interactor))
+	if (WantsSearch(Interactor) || WantsCargoSearch(Interactor))
 	{
 		return true;
 	}
@@ -400,6 +409,7 @@ float ABRCar::GetInteractDuration_Implementation(APVVCharacter* Interactor) cons
 	if (WantsDrive(Interactor)) return 0.f;
 	if (FindPrisonerToUnload(Interactor)) return 0.6f;
 	if (WantsSearch(Interactor)) return 2.5f;
+	if (WantsCargoSearch(Interactor)) return 3.f;
 	if (WantsRefuel(Interactor)) return 2.f;
 	return 0.f;
 }
@@ -426,6 +436,10 @@ FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 	if (WantsSearch(Interactor))
 	{
 		return LOCTEXT("Search", "Order the suspects OUT (press O, or hold E)");
+	}
+	if (WantsCargoSearch(Interactor))
+	{
+		return LOCTEXT("SearchCargo", "SEARCH the vehicle for hidden contraband (hold)");
 	}
 	if (WantsRefuel(Interactor))
 	{
@@ -589,6 +603,40 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 	if (WantsSearch(Interactor))
 	{
 		OrderOut(Interactor);
+		return;
+	}
+	if (WantsCargoSearch(Interactor))
+	{
+		bCargoSearched = true;
+		ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+		ABRCharacter* Cop = Cast<ABRCharacter>(Interactor);
+		if (bHiddenCargo)
+		{
+			bHiddenCargo = false;
+			const int32 Found = FMath::RandRange(1, 2);
+			ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 220.f), TEXT("STASH FOUND!"));
+			ABRGameState::Sfx(this, EBRSfx::ScanAlarm, GetActorLocation());
+			if (Cop)
+			{
+				Cop->Notify(FText::Format(LOCTEXT("StashFound", "Found {0} hidden package(s) in the vehicle! Seized."), Found));
+			}
+			if (GM)
+			{
+				GM->OnContrabandSeized(Interactor, Found);
+				GM->Feed(FString::Printf(TEXT("%s found a hidden stash in a vehicle"), *Interactor->GetPlayerDisplayName()));
+			}
+		}
+		else
+		{
+			if (Cop)
+			{
+				Cop->Notify(LOCTEXT("StashNone", "Nothing hidden in this one."));
+			}
+			if (GM)
+			{
+				GM->OnVehicleSearched(Interactor, 0);
+			}
+		}
 		return;
 	}
 	if (WantsRefuel(Interactor))

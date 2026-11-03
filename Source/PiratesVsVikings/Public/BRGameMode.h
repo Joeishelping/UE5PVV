@@ -66,6 +66,11 @@ public:
 	void OnSmuggledThrough(int32 IllegalPeople, int32 Contraband, const FVector& Where);
 	/** Points to a whole team (not a specific player). */
 	void AwardTeamPoints(EPVVFaction Team, int32 Amount);
+	/** BORDER ALARM: a siren everyone hears, a banner, and the spot pings on Border Patrol's map. Rate-limited. */
+	void TriggerBorderAlarm(const FVector& Where, const FString& Why);
+	/** Two NPC officers turn up near Where and chase Runners who crossed the Line (for ~2.5 minutes). */
+	void CallReinforcements(const FVector& Where, class ABRCharacter* CalledBy);
+	float LastBorderAlarm = -100.f;
 
 	// --- Lobby / host settings / best of 3 ------------------------------------------------
 	/** Multiplayer: wait for everyone to press Y (ready) before Prep starts. */

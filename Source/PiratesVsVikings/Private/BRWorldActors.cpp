@@ -553,6 +553,9 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 			GetWorld()->SpawnActor<ABRDog>(DogType, GetActorLocation() + GetActorForwardVector() * 250.f + FVector(0.f, 0.f, 60.f), FRotator::ZeroRotator, DogParams);
 			break;
 		}
+		case EBRWardenGear::Reinforcements:
+			GM->CallReinforcements(GetActorLocation() + GetActorForwardVector() * 300.f, Warden);
+			break;
 		default: PS->AddItem(Item); break;
 		}
 		NextUseServerTime = GS->GetServerWorldTimeSeconds() + CooldownSeconds;
@@ -633,6 +636,10 @@ void ABRSpikeFence::OnInteract_Implementation(APVVCharacter* Interactor)
 	if (ABRCharacter* Cutter = Cast<ABRCharacter>(Interactor))
 	{
 		Cutter->Spot(6.f); // the racket gives you away
+	}
+	if (ABRGameMode* AlarmGM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		AlarmGM->TriggerBorderAlarm(GetActorLocation(), TEXT("The fence was cut"));
 	}
 	PS->WireCutterCharges = FMath::Max(0, PS->WireCutterCharges - 1);
 	if (PS->WireCutterCharges == 0)

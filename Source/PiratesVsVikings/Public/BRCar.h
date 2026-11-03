@@ -57,6 +57,10 @@ public:
 	bool TakePrisonerOut(APVVCharacter* Officer);
 	/** Anyone aboard who isn't zip-tied (and isn't you)? */
 	bool HasFreePeopleAboard(const APVVCharacter* Except) const;
+	/** Contraband hidden in the vehicle (some NPC trucks): Border Patrol finds it by searching the empty vehicle (hold E). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Car") bool bHiddenCargo = false;
+	bool bCargoSearched = false;
+	bool WantsCargoSearch(const APVVCharacter* Interactor) const;
 	/** Server: beep beep. */
 	void HonkHorn() { Multicast_Horn(); }
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;

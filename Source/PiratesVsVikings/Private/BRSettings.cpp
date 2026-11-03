@@ -169,6 +169,8 @@ namespace BR
 		case EBRItem::CardboardBox: return TEXT("Cardboard Box");
 		case EBRItem::Knife: return TEXT("Knife");
 		case EBRItem::Package: return TEXT("Smuggling Package");
+		case EBRItem::FakePassport: return TEXT("Fake Passport");
+		case EBRItem::SecurityCamera: return TEXT("Security Camera");
 		default:                   return TEXT("");
 		}
 	}
@@ -209,6 +211,7 @@ namespace BR
 		case EBRWardenGear::HardHat:       return TEXT("Hard Hat");
 		case EBRWardenGear::DroneRecharge: return TEXT("Drone Recharge");
 		case EBRWardenGear::PatrolDog:     return TEXT("Patrol Dog");
+		case EBRWardenGear::Reinforcements: return TEXT("Reinforcements (2 officers)");
 		default:                           return ItemName(Item);
 		}
 	}

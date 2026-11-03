@@ -1047,6 +1047,14 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 
 void ABRCharacter::TickWander(float DeltaSeconds)
 {
+	if (bOfficer)
+	{
+		if (!Controller && GetCondition() == EPVVCondition::Normal && !GetCarrier() && !GetCurrentBoat())
+		{
+			TickOfficer(DeltaSeconds);
+		}
+		return;
+	}
 	if (!bWandering || Controller || GetCurrentBoat() || GetCarrier() || GetCondition() != EPVVCondition::Normal)
 	{
 		return;
@@ -1545,6 +1553,8 @@ void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
 	}
 	case EBRItem::TacoPlatter: PlaceTacoPlatter(); break;
 	case EBRItem::CardboardBox: ToggleBox(); break;
+	case EBRItem::SecurityCamera: PlaceSecurityCamera(); break;
+	case EBRItem::FakePassport: Notify(LOCTEXT("UsePassport", "Fake passport: the papers scan says you're legal - unless you're carrying contraband. A search finds it.")); break;
 	case EBRItem::Lasso: Notify(LOCTEXT("UseLasso", "Aim at someone with your view and press F to throw the lasso.")); break;
 	case EBRItem::Ladder: Notify(LOCTEXT("UseLadder", "Walk up to the Wall and press E to lean your ladder on it.")); break;
 	case EBRItem::WireCutters: Notify(LOCTEXT("UseCutters", "Walk up to the razor wire and hold E to cut it.")); break;
@@ -2454,11 +2464,10 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	{
 		Notify(LOCTEXT("ScanNothing3", "SCAN: nobody there."));
 	}
-	else if ((!Target->IsNPC() && Target->IsRunner()) || Target->bIllegal || Target->bCarriesContraband
-		|| (Target->GetBRPlayerState() && Target->GetBRPlayerState()->Inventory.ContainsByPredicate([](EBRItem I) { return BR::IsIllegal(I); })))
+	else if (Target->FailsPapersScan())
 	{
-		// Players and NPCs read the SAME: "no papers" - the scanner never says who's a player.
-		const bool bNoPapers = (!Target->IsNPC() && Target->IsRunner()) || Target->bIllegal;
+		// The scanner checks PAPERS (contraband and weapons need a search on foot). Players and NPCs read the same.
+		const bool bNoPapers = true;
 		TArray<FString> Found;
 		if (Target->bCarriesContraband)
 		{
@@ -2500,7 +2509,10 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	else
 	{
 		ABRGameState::Sfx(this, EBRSfx::ScanOK, Target->GetActorLocation());
-		Notify(LOCTEXT("ScanCitizen", "SCAN: papers in order. Regular citizen."));
+		const bool bNervous = Target->bCarriesContraband || (Target->GetBRPlayerState() && Target->GetBRPlayerState()->Inventory.ContainsByPredicate(
+			[](EBRItem I) { return BR::IsIllegal(I) || I == EBRItem::Knife; }));
+		Notify(bNervous ? LOCTEXT("ScanNervous", "SCAN: papers in order... but they look NERVOUS. Order them out and SEARCH them (hold E).")
+			: LOCTEXT("ScanCitizen", "SCAN: papers in order. Regular citizen."));
 	}
 }
 
@@ -5032,6 +5044,23 @@ void ABRCharacter::TickSprintStamina(float DeltaSeconds)
 	}
 }
 
+bool ABRCharacter::FailsPapersScan() const
+{
+	if (bIsNPC)
+	{
+		return bIllegal;
+	}
+	if (!IsRunner())
+	{
+		return false;
+	}
+	// A fake passport fools the scanner - unless you're carrying contraband (the scanner's sniffer catches it).
+	const ABRPlayerState* PS = GetBRPlayerState();
+	const bool bPassport = PS && PS->HasItem(EBRItem::FakePassport);
+	const bool bDirty = PS && PS->Inventory.ContainsByPredicate([](EBRItem I) { return BR::IsIllegal(I); });
+	return !bPassport || bDirty;
+}
+
 void ABRCharacter::BotDive()
 {
 	Server_Dive_Implementation();
@@ -5564,6 +5593,10 @@ void ABRCharacter::TickClimb(float DeltaSeconds)
 			GS->Multicast_NoisePing(GetActorLocation());
 		}
 		ABRGameState::Sfx(this, EBRSfx::TripwireAlarm, GetActorLocation());
+		if (ABRGameMode* AlarmGM = GetWorld()->GetAuthGameMode<ABRGameMode>(); AlarmGM && !bIsNPC)
+		{
+			AlarmGM->TriggerBorderAlarm(GetActorLocation(), TEXT("Someone is climbing the Wall"));
+		}
 	}
 	// Gang Beasts climbing: your hands hold you up. Both hands = you hang; one hand = you slowly slide.
 	const int32 Grip = (ArmsReaching & 1) + ((ArmsReaching >> 1) & 1);

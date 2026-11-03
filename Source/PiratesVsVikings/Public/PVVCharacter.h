@@ -57,6 +57,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "PVV")
 	EPVVFaction GetFaction() const { return Faction; }
+	/** NPCs only: put them on a team (e.g. reinforcement officers). */
+	void SetNPCFaction(EPVVFaction NewFaction) { Faction = NewFaction; DefaultFaction = NewFaction; ForceNetUpdate(); }
 
 	UFUNCTION(BlueprintPure, Category = "PVV")
 	EPVVCondition GetCondition() const { return Condition; }

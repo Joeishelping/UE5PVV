@@ -729,6 +729,7 @@ void ABRGameMode::SpawnNPCTruck()
 	const float ModelRoll = FMath::FRand();
 	Truck->Model = ModelRoll < 0.35f ? EBRCarModel::Pickup : ModelRoll < 0.65f ? EBRCarModel::Sedan : ModelRoll < 0.8f ? EBRCarModel::Lowrider : EBRCarModel::Van;
 	Truck->bRequiresKey = true;	// players can hide in the back but can't steal it
+	Truck->bHiddenCargo = FMath::FRand() < 0.18f; // some have a stash hidden in the vehicle (search it once it's empty)
 	Truck->bInfiniteFuel = true;
 	Truck->FinishSpawning(Spawn);
 
@@ -1521,6 +1522,33 @@ void ABRGameMode::AwardTeamPoints(EPVVFaction Team, int32 Amount)
 		GS->WardenScore = FMath::Max(0, GS->WardenScore + Amount);
 	}
 	GS->ForceNetUpdate();
+}
+
+void ABRGameMode::TriggerBorderAlarm(const FVector& Where, const FString& Why)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	ABRGameState* GS = GetBRGameState();
+	if (!GS || GS->Phase != EBRPhase::Invasion || Now - LastBorderAlarm < 30.f)
+	{
+		return;
+	}
+	LastBorderAlarm = Now;
+	ABRGameState::Sfx(this, EBRSfx::TripwireAlarm, Where, true); // everyone hears it
+	GS->Multicast_NoisePing(Where);
+	Announce(FText::Format(LOCTEXT("BorderAlarm", "BORDER ALARM! {0}!"), FText::FromString(Why)));
+}
+
+void ABRGameMode::CallReinforcements(const FVector& Where, ABRCharacter* CalledBy)
+{
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const FVector Spot = Where + FVector(FMath::FRandRange(-150.f, 150.f), (i == 0 ? -1.f : 1.f) * 150.f, 100.f);
+		if (ABRCharacter* Officer = SpawnNPC(FTransform(FRotator::ZeroRotator, Spot)))
+		{
+			Officer->MakeOfficer(150.f);
+		}
+	}
+	Feed(FString::Printf(TEXT("%s called in reinforcements!"), CalledBy ? *CalledBy->GetPlayerDisplayName() : TEXT("Border Patrol")));
 }
 
 void ABRGameMode::OnSmuggledThrough(int32 IllegalPeople, int32 Contraband, const FVector& Where)

@@ -39,7 +39,9 @@ enum class EBRItem : uint8
 	Lasso			UMETA(DisplayName = "Lasso"),
 	CardboardBox	UMETA(DisplayName = "Cardboard Box"),
 	Knife			UMETA(DisplayName = "Knife"),
-	Package			UMETA(DisplayName = "Smuggling Package")
+	Package			UMETA(DisplayName = "Smuggling Package"),
+	FakePassport	UMETA(DisplayName = "Fake Passport"),
+	SecurityCamera	UMETA(DisplayName = "Security Camera")
 };
 
 /** Hats: each one gives a skill. Get knocked out and it may fly off - anyone can pick it up. */
@@ -137,7 +139,8 @@ enum class EBRWardenGear : uint8
 	ExtraTraps,		// +2 traps for the whole team
 	HardHat,		// wear a Hard Hat
 	DroneRecharge,	// your drone is ready again right now
-	PatrolDog		// a new patrol dog appears next to the counter
+	PatrolDog,		// a new patrol dog appears next to the counter
+	Reinforcements	// two NPC officers show up and go after Runners who crossed the Line
 };
 
 UENUM(BlueprintType)

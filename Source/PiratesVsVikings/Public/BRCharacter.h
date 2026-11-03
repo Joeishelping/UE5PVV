@@ -249,6 +249,28 @@ public:
 	void BotDive();
 	void BotDropKick() { DoDropKick(); }
 	bool IsDropKicking() const { return bDropKicking; }
+	// --- Police tools (BRPolice.cpp) ---
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override;
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+	/** Border Patrol can search (frisk) a standing person: weapons + contraband get seized. */
+	bool WantsFrisk(const APVVCharacter* Interactor) const;
+	void Frisk(ABRCharacter* Cop);
+	/** Take away contraband, weapons and fake papers. Returns how many things were taken. */
+	int32 Confiscate();
+	/** Seen by a security camera. */
+	void CameraSpot(float Seconds);
+	bool PlaceSecurityCamera();
+	/** NPC Border Patrol officer (reinforcements): chases and zip-ties Runners who crossed the Line, leaves after a while. */
+	void MakeOfficer(float LifeSeconds);
+	void TickOfficer(float DeltaSeconds);
+	bool IsOfficer() const { return bOfficer; }
+	/** Would the papers scan flag this person? (no papers; fake passport fails if carrying contraband) */
+	bool FailsPapersScan() const;
+	bool bOfficer = false;
+	float OfficerUntil = 0.f;
+	float LastFriskedTime = -100.f;
 	/** Getting up takes this long (can't walk while you push yourself up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GetUpSeconds = 1.f;
 	/** Thrown people go flying FLOPPY (ragdoll) and are down this long (unless they were already KO'd). */

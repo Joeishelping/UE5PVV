@@ -236,15 +236,14 @@ write_hair("SK_Hair_CurlyTop", [shell(lambda th, ph: np.full_like(th, .01), fade
 # Undercut: long top slicked back, sides shaved clean.
 under_line = lambda th: hairline_std(th, 1.70, 1.63)
 write_hair("SK_Hair_Undercut", [shell(lambda th, ph: .03 + .035 * top(ph, .9, .4) * (.5 + .5 * front(th)), under_line), fade_band(under_line, fade_low, .35)])
-# Mohawk: a strip of spikes front to back, the rest shaved.
-moh = [fade_band(lambda th: hairline_std(th, 1.71, 1.66), fade_low, .3, seed=8)]
-for t in np.linspace(-.8, .5, 15):
-    ang = np.pi / 2 * t                                               # from the back (-) over the top to the forehead hairline (+)
-    base = HC + np.array([0., np.cos(ang) * HR, np.sin(ang) * HR])
-    up = (base - HC) / np.linalg.norm(base - HC)
-    L = .1 * (1 - .35 * abs(t))
-    moh.append(tube([base - up * .01, base + up * L * .55, base + up * L + [0, 0, -.02]], [.028, .02, .003], S=8, n=2))
-write_hair("SK_Hair_Mohawk", moh)
+# Soccer mohawk ("fohawk"): sides faded short, a soft ridge of longer hair down the middle that peaks toward the front.
+def fohawk(th, ph):
+    x = np.cos(ph) * np.cos(th) * HR                                  # left/right across the head
+    z = np.cos(ph) * np.sin(th) * HR                                  # front (+) / back (-)
+    ridge = np.exp(-(x / .055) ** 2) * (.6 + .4 * np.clip((z + .1) / .3, 0, 1))
+    return .008 + .06 * ridge * top(ph, .55, .45)
+fohawk_line = human_line(1.725, 1.56, .03)
+write_hair("SK_Hair_SoccerMohawk", [shell(fohawk, fohawk_line), fade_band(fohawk_line, fade_low, 1.1, seed=12)])
 # Man bun: slicked back with a bun at the back of the head.
 slick = lambda th, ph: .016 + .012 * top(ph, .6, .5)
 write_hair("SK_Hair_ManBun", [shell(slick, std), ellipsoid((0., 1.71, -.30), (.085, .08, .08), 16, 10)])
