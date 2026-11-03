@@ -7,6 +7,7 @@
 #include "BRPlayerController.h"
 #include "BRPlayerState.h"
 #include "BRSettings.h"
+#include "BRWorldActors.h"
 #include "PVVDetentionZone.h"
 #include "BRMapKit.h"
 #include "Engine/Canvas.h"
@@ -443,6 +444,23 @@ void ABRHUD::DrawHUD()
 				}
 			}
 		}
+	}
+
+	// --- Mariachi: beat circle
+	for (TActorIterator<ABRMariachiBand> It(GetWorld()); It; ++It)
+	{
+		if (!It->IsPerformer(Me))
+		{
+			continue;
+		}
+		const float Phase = It->GetBeatPhase();
+		const bool bOnBeat = Phase < 0.15f || Phase > 0.85f;
+		const float Size = FMath::Lerp(110.f, 40.f, Phase);
+		const float CX = SX * 0.5f, CY = SY * 0.78f;
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.4f), CX - 60.f, CY - 60.f, 120.f, 120.f);
+		DrawRect(bOnBeat ? FLinearColor(0.2f, 1.f, 0.3f, 0.9f) : FLinearColor(1.f, 0.85f, 0.2f, 0.7f), CX - Size * 0.5f, CY - Size * 0.5f, Size, Size);
+		Centered(FString::Printf(TEXT("PRESS F ON THE BEAT  -  streak %d  (every 4 = tip)"), It->GetStreak(Me)), CY + 70.f, White, Small, 1.3f);
+		break;
 	}
 
 	// --- Hiding

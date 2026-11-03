@@ -18,6 +18,7 @@ class UStaticMeshComponent;
 class UTextRenderComponent;
 class UStaticMesh;
 class USoundBase;
+class UAudioComponent;
 
 /** Shared helpers for the greybox world pieces. */
 UCLASS(Abstract)
@@ -891,4 +892,58 @@ public:
 protected:
 	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> Hider;
 	FString StyleName() const;
+};
+
+// ===========================================================================================
+/**
+ * Mariachi band on a little stage. The band plays (put your song in Music); bring a Trumpet,
+ * press E on the stage to join in, then press F ON THE BEAT. Hit notes in a row and the crowd tips you.
+ */
+UCLASS(meta = (DisplayName = "BR Mariachi Band"))
+class PIRATESVSVIKINGS_API ABRMariachiBand : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRMariachiBand();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.3f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	/** The band's song (loops). Set Beats Per Minute to match it so the beat lines up. */
+	UPROPERTY(EditAnywhere, Category = "BR|Band") TObjectPtr<USoundBase> Music;
+	UPROPERTY(EditAnywhere, Category = "BR|Band") float BeatsPerMinute = 110.f;
+	/** Short trumpet notes played when you hit the beat (random). */
+	UPROPERTY(EditAnywhere, Category = "BR|Band") TArray<TObjectPtr<USoundBase>> NoteSounds;
+	/** Boo / wrong note sound. */
+	UPROPERTY(EditAnywhere, Category = "BR|Band") TObjectPtr<USoundBase> MissSound;
+	/** Most tips one performer can earn per minute (the crowd's wallet). */
+	UPROPERTY(EditAnywhere, Category = "BR|Band") int32 MaxTipsPerMinute = 120;
+	/** How far off the beat still counts (seconds). */
+	UPROPERTY(EditAnywhere, Category = "BR|Band") float BeatWindow = 0.15f;
+
+	bool IsPerformer(const ABRCharacter* Who) const;
+	/** Server: a performer pressed F. */
+	void PlayNote(ABRCharacter* Who);
+	/** 0..1 through the current beat (for the HUD), on any machine. */
+	float GetBeatPhase() const;
+	int32 GetStreak(const ABRCharacter* Who) const;
+
+protected:
+	UPROPERTY(Replicated) float BeatStartTime = 0.f;
+	UPROPERTY(Replicated) TArray<TObjectPtr<ABRCharacter>> Performers;
+	UPROPERTY(Replicated) TArray<int32> Streaks;
+	UPROPERTY() TObjectPtr<UAudioComponent> MusicAudio;
+	UPROPERTY() TArray<TObjectPtr<ABRCharacter>> Musicians;
+	TArray<int32> TipsThisMinute;
+	TArray<float> TipWindowStart;
+	float NextMusicianNote = 0.f;
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Note(FVector_NetQuantize Where, bool bGood);
+	void RemovePerformer(int32 Index);
 };

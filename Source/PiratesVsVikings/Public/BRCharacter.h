@@ -109,6 +109,10 @@ public:
 	UFUNCTION(Server, Reliable) void Server_SelectSlot(int32 Slot);
 	/** NPCs: wear a poncho just for looks (so disguised Runners blend in). */
 	void SetNPCPoncho(bool bOn) { bDisguised = bOn; OnRep_Disguise(); }
+	/** Server (NPCs): hold this item in your hand (band musicians hold trumpets). */
+	void SetNPCHeldItem(EBRItem Item) { HeldItem = Item; OnRep_HeldItem(); }
+	/** Server: a band musician / performer plays a note (trumpet animation). */
+	void PlayBandNote() { Multicast_Trumpet(); }
 	/** Selected inventory slot (mouse wheel). */
 	int32 GetSelectedSlot() const { return SelectedSlot; }
 	/** Server: dance uncontrollably for a while (mariachi). */

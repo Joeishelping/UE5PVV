@@ -469,6 +469,9 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 
 	// --- Pinata in the plaza, tunnels under the border (exit past the Wall)
 	World->SpawnActor<ABRPinata>(ABRPinata::StaticClass(), At(-10450.f, 1250.f, Ground), Params);
+	// --- Mariachi band stage north of the plaza (facing the plaza)
+	World->SpawnActor<ABRMariachiBand>(ABRMariachiBand::StaticClass(), At(-10300.f, 3200.f, Ground, -90.f), Params);
+
 	// --- Lucha Libre ring out in the open (spawns its own challenge + betting counters)
 	World->SpawnActor<ABRLuchaRing>(ABRLuchaRing::StaticClass(), At(-11000.f, -6200.f, Ground), Params); // open desert by the scrapyard
 	if (ABRTunnel* T1 = World->SpawnActorDeferred<ABRTunnel>(ABRTunnel::StaticClass(), At(-5900.f, -5200.f, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))

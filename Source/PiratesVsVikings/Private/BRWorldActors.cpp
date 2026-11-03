@@ -6,6 +6,7 @@
 #include "BRGameState.h"
 #include "BRPlayerState.h"
 #include "PVVBoat.h"
+#include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
@@ -3722,6 +3723,247 @@ void ABRHidingSpot::OnInteract_Implementation(APVVCharacter* Interactor)
 		BRC->TeleportTo(GetActorLocation() + FVector(0.f, 0.f, 100.f), BRC->GetActorRotation(), false, true);
 		Tell(Interactor, LOCTEXT("Hidden", "Hidden! Border Patrol can't see you. Press E to climb out."));
 		ForceNetUpdate();
+	}
+}
+
+// ===========================================================================================
+// Mariachi band
+
+ABRMariachiBand::ABRMariachiBand()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	const FLinearColor Wood(0.5f, 0.32f, 0.18f), Red(0.8f, 0.1f, 0.12f), Green(0.1f, 0.55f, 0.25f), White(0.95f, 0.95f, 0.92f);
+	AddMesh(TEXT("Stage"), CubeMesh, FVector(0.f, 0.f, 20.f), FVector(600.f, 400.f, 40.f), Wood);
+	AddMesh(TEXT("StepFront"), CubeMesh, FVector(240.f, 0.f, 10.f), FVector(80.f, 200.f, 20.f), Wood);
+	for (int32 i = 0; i < 3; ++i)
+	{
+		const FLinearColor Stripe = i == 0 ? Green : (i == 1 ? White : Red);
+		AddMesh(*FString::Printf(TEXT("Banner%d"), i), CubeMesh, FVector(-195.f, -200.f + i * 200.f, 230.f), FVector(10.f, 200.f, 120.f), Stripe, FRotator::ZeroRotator, false);
+	}
+	AddMesh(TEXT("PostL"), CylinderMesh, FVector(-195.f, -305.f, 160.f), FVector(15.f, 15.f, 320.f), Wood, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("PostR"), CylinderMesh, FVector(-195.f, 305.f, 160.f), FVector(15.f, 15.f, 320.f), Wood, FRotator::ZeroRotator, false);
+	AddLabel(TEXT("Sign"), FVector(-190.f, 0.f, 330.f), 50.f, FColor(255, 210, 60))->SetText(FText::FromString(TEXT("MARIACHI\nbring a trumpet, join the band (E)")));
+	AddPickupZone(320.f);
+}
+
+void ABRMariachiBand::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRMariachiBand, BeatStartTime);
+	DOREPLIFETIME(ABRMariachiBand, Performers);
+	DOREPLIFETIME(ABRMariachiBand, Streaks);
+}
+
+void ABRMariachiBand::BeginPlay()
+{
+	Super::BeginPlay();
+	if (Music && GetNetMode() != NM_DedicatedServer)
+	{
+		MusicAudio = UGameplayStatics::SpawnSoundAttached(Music, Root, NAME_None, FVector(0.f, 0.f, 150.f), EAttachLocation::KeepRelativeOffset, true);
+	}
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const ABRGameState* GS = BRGame(this);
+	BeatStartTime = GS ? GS->GetServerWorldTimeSeconds() : 0.f;
+	// Three musicians in sombreros on the back of the stage.
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const FVector At = GetActorTransform().TransformPositionNoScale(FVector(-110.f, -150.f + i * 150.f, 140.f));
+			if (ABRCharacter* Player = GM->SpawnLuchador(FTransform(GetActorRotation(), At), nullptr))
+			{
+				Player->SetHat(EBRHat::Sombrero);
+				Player->SetNPCHeldItem(EBRItem::Trumpet);
+				Player->ForceDance(100000.f);
+				Musicians.Add(Player);
+			}
+		}
+	}
+}
+
+void ABRMariachiBand::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	for (ABRCharacter* Player : Musicians)
+	{
+		if (IsValid(Player))
+		{
+			Player->Destroy();
+		}
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+float ABRMariachiBand::GetBeatPhase() const
+{
+	const ABRGameState* GS = BRGame(this);
+	const float T = (GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds()) - BeatStartTime;
+	const float Beats = T * FMath::Max(30.f, BeatsPerMinute) / 60.f;
+	return Beats - FMath::FloorToFloat(Beats);
+}
+
+bool ABRMariachiBand::IsPerformer(const ABRCharacter* Who) const
+{
+	return Who && Performers.ContainsByPredicate([Who](const TObjectPtr<ABRCharacter>& P) { return P.Get() == Who; });
+}
+
+int32 ABRMariachiBand::GetStreak(const ABRCharacter* Who) const
+{
+	for (int32 i = 0; i < Performers.Num(); ++i)
+	{
+		if (Performers[i].Get() == Who && Streaks.IsValidIndex(i))
+		{
+			return Streaks[i];
+		}
+	}
+	return 0;
+}
+
+bool ABRMariachiBand::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	const ABRPlayerState* PS = BRState(Interactor);
+	if (!BRC || BRC->IsNPC() || !PS || Interactor->GetCondition() != EPVVCondition::Normal)
+	{
+		return false;
+	}
+	return IsPerformer(BRC) || PS->HasItem(EBRItem::Trumpet);
+}
+
+FText ABRMariachiBand::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return IsPerformer(Cast<ABRCharacter>(Interactor)) ? LOCTEXT("BandLeave", "Leave the band")
+		: LOCTEXT("BandJoin", "Join the band! (pick your trumpet with the mouse wheel, press F on the beat)");
+}
+
+void ABRMariachiBand::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	if (!HasAuthority() || !BRC)
+	{
+		return;
+	}
+	const int32 Index = Performers.IndexOfByKey(BRC);
+	if (Index != INDEX_NONE)
+	{
+		RemovePerformer(Index);
+		return;
+	}
+	Performers.Add(BRC);
+	Streaks.Add(0);
+	TipsThisMinute.Add(0);
+	TipWindowStart.Add(GetWorld()->GetTimeSeconds());
+	BRC->TeleportTo(GetActorTransform().TransformPositionNoScale(FVector(60.f, FMath::FRandRange(-120.f, 120.f), 140.f)), GetActorRotation(), false, true);
+	Tell(Interactor, LOCTEXT("BandJoined", "You're in the band! Press F ON THE BEAT (watch the circle). Hit notes in a row = tips!"));
+	ForceNetUpdate();
+}
+
+void ABRMariachiBand::RemovePerformer(int32 Index)
+{
+	if (!Performers.IsValidIndex(Index))
+	{
+		return;
+	}
+	Performers.RemoveAt(Index);
+	if (Streaks.IsValidIndex(Index)) Streaks.RemoveAt(Index);
+	if (TipsThisMinute.IsValidIndex(Index)) TipsThisMinute.RemoveAt(Index);
+	if (TipWindowStart.IsValidIndex(Index)) TipWindowStart.RemoveAt(Index);
+	ForceNetUpdate();
+}
+
+void ABRMariachiBand::PlayNote(ABRCharacter* Who)
+{
+	const int32 Index = Performers.IndexOfByKey(Who);
+	if (!HasAuthority() || Index == INDEX_NONE || !Streaks.IsValidIndex(Index))
+	{
+		return;
+	}
+	// How far from the nearest beat was it? (Allow for the player's ping.)
+	const ABRPlayerState* PS = Who->GetBRPlayerState();
+	const float BeatLen = 60.f / FMath::Max(30.f, BeatsPerMinute);
+	const ABRGameState* GS = BRGame(this);
+	const float Lag = PS ? PS->GetPingInMilliseconds() * 0.0005f : 0.f;
+	const float T = (GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds()) - BeatStartTime - Lag;
+	const float Into = FMath::Fmod(FMath::Max(0.f, T), BeatLen);
+	const float Off = FMath::Min(Into, BeatLen - Into);
+	const bool bGood = Off <= BeatWindow;
+	Who->PlayBandNote();
+	Multicast_Note(Who->GetActorLocation() + FVector(0.f, 0.f, 120.f), bGood);
+	if (!bGood)
+	{
+		Streaks[Index] = 0;
+		ForceNetUpdate();
+		return;
+	}
+	++Streaks[Index];
+	// Every 4 notes in a row the crowd throws money (more for longer streaks).
+	if (Streaks[Index] % 4 == 0 && PS)
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		if (Now - TipWindowStart[Index] > 60.f)
+		{
+			TipWindowStart[Index] = Now;
+			TipsThisMinute[Index] = 0;
+		}
+		const int32 Tip = FMath::Min(5 + 3 * (Streaks[Index] / 4), MaxTipsPerMinute - TipsThisMinute[Index]);
+		if (Tip > 0)
+		{
+			TipsThisMinute[Index] += Tip;
+			if (ABRPlayerState* Earner = Who->GetBRPlayerState())
+			{
+				Earner->AddMoney(Tip);
+			}
+			ABRGameState::FX(this, EBRFX::MoneyText, Who->GetActorLocation() + FVector(0.f, 0.f, 90.f), FString::Printf(TEXT("TIP +$%d"), Tip));
+			ABRGameState::Sfx(this, EBRSfx::CashPickup, Who->GetActorLocation());
+		}
+		else
+		{
+			Who->Notify(LOCTEXT("CrowdBroke", "The crowd's out of change. Play again in a minute!"));
+		}
+	}
+	ForceNetUpdate();
+}
+
+void ABRMariachiBand::Multicast_Note_Implementation(FVector_NetQuantize Where, bool bGood)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	USoundBase* Sound = bGood ? (NoteSounds.Num() > 0 ? NoteSounds[FMath::RandRange(0, NoteSounds.Num() - 1)].Get() : nullptr) : MissSound.Get();
+	if (Sound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, Where);
+	}
+}
+
+void ABRMariachiBand::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// Performers who walk off the stage leave the band.
+	for (int32 i = Performers.Num() - 1; i >= 0; --i)
+	{
+		const ABRCharacter* P = Performers[i].Get();
+		if (!P || P->GetCondition() != EPVVCondition::Normal || FVector::Dist2D(P->GetActorLocation(), GetActorLocation()) > 450.f)
+		{
+			RemovePerformer(i);
+		}
+	}
+	// The band toots along.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now >= NextMusicianNote && Musicians.Num() > 0)
+	{
+		NextMusicianNote = Now + 60.f / FMath::Max(30.f, BeatsPerMinute) * 2.f;
+		if (ABRCharacter* Player = Musicians[FMath::RandRange(0, Musicians.Num() - 1)].Get())
+		{
+			Player->PlayBandNote();
+		}
 	}
 }
 

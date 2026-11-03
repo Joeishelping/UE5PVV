@@ -989,7 +989,28 @@ void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
 	switch (PS->Inventory[Slot])
 	{
 	case EBRItem::Taco: Server_Eat_Implementation(); break;
-	case EBRItem::Trumpet: PlayTrumpet(); break;
+	case EBRItem::Trumpet:
+	{
+		// On a band stage: play a note in time. Anywhere else: the dance-attack trumpet blast.
+		ABRMariachiBand* Band = nullptr;
+		for (TActorIterator<ABRMariachiBand> It(GetWorld()); It; ++It)
+		{
+			if (It->IsPerformer(this))
+			{
+				Band = *It;
+				break;
+			}
+		}
+		if (Band)
+		{
+			Band->PlayNote(this);
+		}
+		else
+		{
+			PlayTrumpet();
+		}
+		break;
+	}
 	case EBRItem::TacoPlatter: PlaceTacoPlatter(); break;
 	case EBRItem::CardboardBox: ToggleBox(); break;
 	case EBRItem::Lasso: Notify(LOCTEXT("UseLasso", "Aim at someone with your view and press F to throw the lasso.")); break;
