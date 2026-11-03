@@ -187,6 +187,25 @@ struct FBRLook
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float NoseSize = 0.5f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float LipSize = 0.5f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float EarSize = 0.5f;
+	// More face shape (same 0 / 0.5 / 1 idea; each one drives a pair of shape keys on the body).
+	/** thin <-> wide face. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float FaceWidth = 0.5f;
+	/** soft <-> strong jaw. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float JawSize = 0.5f;
+	/** narrow <-> wide (flared) nose. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float NoseWidth = 0.5f;
+	/** flat, broad <-> high, hooked (aquiline / Aztec). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float NoseBridge = 0.5f;
+	/** pointy <-> round, bulbous. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float NoseTip = 0.5f;
+	/** small <-> big eyes. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float EyeSize = 0.5f;
+	/** thin <-> bushy eyebrows. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float BrowThickness = 0.5f;
+	/** low <-> high eyebrows. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float BrowHeight = 0.5f;
+	/** worried <-> angry eyebrows. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float BrowAngle = 0.5f;
 
 	/** 0 = no hair, 1.. = Hair Styles list on the character Blueprint. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 HairStyle = 1;
@@ -200,3 +219,39 @@ struct FBRLook
 	/** False until someone picked a look (then the character keeps its Blueprint colours). */
 	UPROPERTY() bool bSet = false;
 };
+
+/** The extra face sliders: menu label, the two shape keys (left / right half of the slider), the field. */
+struct FBRFaceSlider
+{
+	const TCHAR* Label;
+	const TCHAR* SmallKey;
+	const TCHAR* BigKey;
+	float FBRLook::* Field;
+};
+
+namespace BR
+{
+	inline TArrayView<const FBRFaceSlider> FaceSliders()
+	{
+		static const FBRFaceSlider Sliders[] = {
+			{ TEXT("Face width"), TEXT("Face_Thin"), TEXT("Face_Wide"), &FBRLook::FaceWidth },
+			{ TEXT("Jaw"), TEXT("Jaw_Soft"), TEXT("Jaw_Strong"), &FBRLook::JawSize },
+			{ TEXT("Nose width"), TEXT("Nose_Narrow"), TEXT("Nose_Wide"), &FBRLook::NoseWidth },
+			{ TEXT("Nose bridge"), TEXT("Nose_Flat"), TEXT("Nose_Hooked"), &FBRLook::NoseBridge },
+			{ TEXT("Nose tip"), TEXT("Nose_Pointy"), TEXT("Nose_Round"), &FBRLook::NoseTip },
+			{ TEXT("Eyes"), TEXT("Eyes_Small"), TEXT("Eyes_Big"), &FBRLook::EyeSize },
+			{ TEXT("Brows"), TEXT("Brow_Thin"), TEXT("Brow_Thick"), &FBRLook::BrowThickness },
+			{ TEXT("Brow height"), TEXT("Brow_Low"), TEXT("Brow_High"), &FBRLook::BrowHeight },
+			{ TEXT("Brow mood"), TEXT("Brow_Sad"), TEXT("Brow_Angry"), &FBRLook::BrowAngle }
+		};
+		return TArrayView<const FBRFaceSlider>(Sliders, UE_ARRAY_COUNT(Sliders));
+	}
+	/** Random face for an NPC / bot: Spread 0..0.5 around normal. */
+	inline void RandomizeFace(FBRLook& L, float Spread)
+	{
+		for (const FBRFaceSlider& S : FaceSliders())
+		{
+			L.*S.Field = FMath::Clamp(0.5f + FMath::FRandRange(-Spread, Spread), 0.f, 1.f);
+		}
+	}
+}

@@ -46,6 +46,8 @@ private:
 	UPROPERTY() TObjectPtr<USlider> NoseSlider;
 	UPROPERTY() TObjectPtr<USlider> LipSlider;
 	UPROPERTY() TObjectPtr<USlider> EarSlider;
+	/** One per BR::FaceSliders() entry (face width, jaw, nose width/bridge/tip, eyes, brows). */
+	UPROPERTY() TArray<TObjectPtr<USlider>> FaceSliders;
 	UPROPERTY() TObjectPtr<USlider> HairColorSlider;
 	UPROPERTY() TObjectPtr<UBorder> HairColorSwatch;
 	UPROPERTY() TObjectPtr<UTextBlock> HairLabel;
@@ -102,6 +104,7 @@ private:
 	UFUNCTION() void OnNoseChanged(float Value);
 	UFUNCTION() void OnLipChanged(float Value);
 	UFUNCTION() void OnEarChanged(float Value);
+	UFUNCTION() void OnFaceSliderChanged(float Value);
 	UFUNCTION() void OnHairColorChanged(float Value);
 	UFUNCTION() void OnHairPrev();
 	UFUNCTION() void OnHairNext();

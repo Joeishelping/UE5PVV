@@ -1221,6 +1221,7 @@ void ABRGameMode::AddBot(EPVVFaction Team)
 	PS->Look.NoseSize = FMath::FRandRange(.35f, .65f);
 	PS->Look.LipSize = FMath::FRandRange(.4f, .6f);
 	PS->Look.EarSize = FMath::FRandRange(.4f, .6f);
+	BR::RandomizeFace(PS->Look, 0.38f);
 	PS->Look.HairStyle = FMath::RandRange(0, 8);
 	PS->Look.HairColor = FMath::RandBool() ? 0.f : FMath::FRandRange(.05f, .35f);
 	PS->Look.FacialHair = FMath::RandRange(0, 4);

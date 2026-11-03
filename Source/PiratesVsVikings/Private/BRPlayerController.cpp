@@ -67,6 +67,10 @@ void ABRPlayerController::Server_SetLook_Implementation(const FBRLook& NewLook)
 	Look.NoseSize = FMath::Clamp(Look.NoseSize, 0.f, 1.f);
 	Look.LipSize = FMath::Clamp(Look.LipSize, 0.f, 1.f);
 	Look.EarSize = FMath::Clamp(Look.EarSize, 0.f, 1.f);
+	for (const FBRFaceSlider& S : BR::FaceSliders())
+	{
+		Look.*S.Field = FMath::Clamp(Look.*S.Field, 0.f, 1.f);
+	}
 	Look.HairColor = FMath::Clamp(Look.HairColor, 0.f, 1.f);
 	Look.HairStyle = FMath::Clamp(Look.HairStyle, 0, 64);
 	Look.FacialHair = FMath::Clamp(Look.FacialHair, 0, 64);

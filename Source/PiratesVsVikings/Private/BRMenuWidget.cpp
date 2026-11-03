@@ -459,6 +459,14 @@ void UBRMenuWidget::BuildCustomize(UVerticalBox* Box)
 	NoseSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnNoseChanged);
 	LipSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnLipChanged);
 	EarSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnEarChanged);
+	FaceSliders.Reset();
+	for (const FBRFaceSlider& S : BR::FaceSliders())
+	{
+		TObjectPtr<USlider> Slider;
+		AddRow(CustomizeBox, MakeSliderRow(S.Label, Look.*S.Field, Slider, NoSwatch), 2.f);
+		Slider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnFaceSliderChanged);
+		FaceSliders.Add(Slider);
+	}
 
 	// Hair + facial hair.
 	AddRow(CustomizeBox, MakePickerRow(TEXT("Hair"), HairLabel, 0), 2.f);
@@ -624,6 +632,23 @@ void UBRMenuWidget::OnHeadChanged(float Value) { if (UBRGameInstance* GI = GetBR
 void UBRMenuWidget::OnNoseChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.NoseSize = Value; PreviewLook(); } }
 void UBRMenuWidget::OnLipChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.LipSize = Value; PreviewLook(); } }
 void UBRMenuWidget::OnEarChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.EarSize = Value; PreviewLook(); } }
+void UBRMenuWidget::OnFaceSliderChanged(float Value)
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	if (!GI)
+	{
+		return;
+	}
+	const TArrayView<const FBRFaceSlider> Defs = BR::FaceSliders();
+	for (int32 i = 0; i < FaceSliders.Num() && i < Defs.Num(); ++i)
+	{
+		if (FaceSliders[i])
+		{
+			GI->Look.*Defs[i].Field = FaceSliders[i]->GetValue();
+		}
+	}
+	PreviewLook();
+}
 void UBRMenuWidget::OnHairColorChanged(float Value) { if (UBRGameInstance* GI = GetBRGameInstance()) { GI->Look.HairColor = Value; PreviewLook(); } }
 
 void UBRMenuWidget::RefreshSwatches()
@@ -698,6 +723,7 @@ void UBRMenuWidget::OnRandomLook()
 	GI->Look.NoseSize = FMath::FRandRange(.3f, .7f);
 	GI->Look.LipSize = FMath::FRandRange(.35f, .65f);
 	GI->Look.EarSize = FMath::FRandRange(.35f, .65f);
+	BR::RandomizeFace(GI->Look, 0.45f);
 	GI->Look.HairColor = FMath::RandBool() ? 0.f : FMath::FRandRange(.06f, .4f);
 	const ABRPlayerController* PC = GetBRController();
 	const ABRCharacter* Me = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
@@ -707,6 +733,13 @@ void UBRMenuWidget::OnRandomLook()
 	if (NoseSlider) NoseSlider->SetValue(GI->Look.NoseSize);
 	if (LipSlider) LipSlider->SetValue(GI->Look.LipSize);
 	if (EarSlider) EarSlider->SetValue(GI->Look.EarSize);
+	{
+		const TArrayView<const FBRFaceSlider> Defs = BR::FaceSliders();
+		for (int32 i = 0; i < FaceSliders.Num() && i < Defs.Num(); ++i)
+		{
+			if (FaceSliders[i]) FaceSliders[i]->SetValue(GI->Look.*Defs[i].Field);
+		}
+	}
 	if (HairColorSlider) HairColorSlider->SetValue(GI->Look.HairColor);
 	RefreshPickers();
 	if (SkinSlider) SkinSlider->SetValue(GI->Look.SkinTone);

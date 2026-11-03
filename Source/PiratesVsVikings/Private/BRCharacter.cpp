@@ -282,6 +282,7 @@ void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 	Random.NoseSize = FMath::FRandRange(.35f, .65f);
 	Random.LipSize = FMath::FRandRange(.4f, .6f);
 	Random.EarSize = FMath::FRandRange(.4f, .6f);
+	BR::RandomizeFace(Random, 0.38f); // lots of different faces in the crowd
 	Random.HairStyle = HairStyles.Num() > 0 ? FMath::RandRange(1, HairStyles.Num()) : 1;
 	Random.FacialHair = (FacialHairStyles.Num() > 0 && FMath::RandRange(0, 2) == 0) ? FMath::RandRange(1, FacialHairStyles.Num()) : 0;
 	const float HairRoll = FMath::FRand();
@@ -543,6 +544,18 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor), BR::ClothColor(L.PantsColor), ClothMaterialSlot);
 	TintOutfit(Hair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	TintOutfit(FacialHair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
+	// Eyebrows (the "M_Brow" slot on the body) match the hair colour.
+	if (USkeletalMeshComponent* Body = GetMesh())
+	{
+		const TArray<FName> Slots = Body->GetMaterialSlotNames();
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			if (Slots[i].ToString().Contains(TEXT("Brow")))
+			{
+				TintOutfit(Body, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor), i);
+			}
+		}
+	}
 	if (OutfitHead && HatMeshes.Num() == 0)
 	{
 		OutfitHead->SetHiddenInGame(!L.bHat); // hat system off: the Hat checkbox shows/hides your Blueprint hat
@@ -579,6 +592,10 @@ void ABRCharacter::ApplyFaceShape(const FBRLook& InLook)
 	if (!bBodyHasShapes)
 	{
 		L.HeadSize = L.NoseSize = L.LipSize = L.EarSize = 0.5f; // keep hair/hats normal size so they still fit
+		for (const FBRFaceSlider& S : BR::FaceSliders())
+		{
+			L.*S.Field = 0.5f;
+		}
 		if (BodyMesh && !bWarnedNoMorphs && IsLocallyControlled() && GEngine)
 		{
 			bWarnedNoMorphs = true;
@@ -614,6 +631,10 @@ void ABRCharacter::ApplyFaceShape(const FBRLook& InLook)
 	Pair(TEXT("Nose_Small"), TEXT("Nose_Big"), L.NoseSize);
 	Pair(TEXT("Lips_Small"), TEXT("Lips_Big"), L.LipSize);
 	Pair(TEXT("Ears_Small"), TEXT("Ears_Big"), L.EarSize);
+	for (const FBRFaceSlider& S : BR::FaceSliders())
+	{
+		Pair(S.SmallKey, S.BigKey, L.*S.Field);
+	}
 }
 
 void ABRCharacter::ApplySkin(const FLinearColor& Color)

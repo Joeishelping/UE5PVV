@@ -26,6 +26,8 @@ This one guide replaces all the older ones. It covers everything you have to set
 1. In the Content Browser, find your character body mesh (the one BP_Runner uses).
 2. Right-click it → **Reimport With New File** → pick `Art/Characters/SK_PVV_Body_Custom.glb`.
 3. In the import window, tick **Import Morph Targets**. Click **Import**.
+   - The body now has **eyebrows** (slot **M_Brow**, they follow the hair colour) and 27 face shapes: head, nose size, lips, ears, **face width, jaw, nose width, nose bridge (flat ↔ hooked/Aztec), nose tip (pointy ↔ round), eye size, brow thickness, brow height, brow mood (worried ↔ angry)** and Blink. NPCs and bots get random faces from all of them.
+   - **Re-import the hair, beard and hat files too** (`SK_Hair_*`, `SK_Face_*`, `SK_Hat_*`, same way: Reimport With New File, tick Import Morph Targets). They got the face-width and jaw shapes so beards and masks follow the face.
    - The body now also has a **Blink** shape (everyone blinks at random and their eyes shut when knocked out). Re-import it if you imported the body before.
 4. Keep the same skeleton.
 
