@@ -363,7 +363,7 @@ Everything here is built on the test map automatically.
   - **THE BIG GUY** at the bar: hold E to shove him and start a **BAR FIGHT** (punching anybody in there starts one too). Everybody fights everybody, and they all gang up on you. You must be the **ONE last person standing** (if two players are left, you fight each other) within **75 seconds**. The winner gets a big **YOU WON THE BAR FIGHT!** banner and **$40 per knocked-out local** on the floor (only the winner can pick it up). **Get knocked out = YOU LOST, -$50**, nothing for you. Time runs out = the cops break it up, nobody wins. The top of the screen shows how many locals are still standing and the clock.
   - **El Bouncer** stays outside at the door. Start 2 bar fights and he shoves you away every time you try to come in.
   - Locals come back about 2.5 min after a fight.
-- **Car lot "Autos El Gato"** (north of the plaza): walk up to a car and **hold E** to buy it. Pickup $500, Sedan $500, **Lowrider $800** (fast, 2 seats), **Van $1200** (6 seats; the 4 in the back are hidden inside the box, great for smuggling). You and your team can drive it.
+- **Car lot "Autos El Gato"** (north of the plaza): walk up to a car and **hold E** to buy it. Pickup $500, Sedan $500, **Lowrider $800** (fast, 2 seats), **Van $1200** (6 seats, big windows). You and your team can drive it.
 - **NPC trucks** now come in all 4 car types and lots of colours, so you can't tell a player's car from an NPC's.
 - **Punch a local and they fight back.** Knock them out and they drop something: scrap, a taco, sometimes $50. **1 in 20 locals carries a fat wad ($200)**.
 - **Muggings:** now and then a local walks up, shoves you over and **steals an item**. Beat them up and it drops; only you can pick it back up.

@@ -681,7 +681,13 @@ ABRTruck::ABRTruck()
 	WheelPart(TEXT("Trim_SteeringSpoke"), CubeMesh, FVector(3.f, 40.f, 5.f), FRotator::ZeroRotator);
 
 	// Extra body parts for the other car models (hidden on the pickup - see ApplyModel).
-	Part(TEXT("Body_VanBox"), CubeMesh, FVector(-140.f, 0.f, 140.f), FVector(250.f, 218.f, 210.f));
+	// Van back: lower walls + a roof on pillars, with big open windows so Border Patrol can see who's inside.
+	Part(TEXT("Body_VanBox"), CubeMesh, FVector(-140.f, 0.f, 85.f), FVector(250.f, 218.f, 100.f));
+	Part(TEXT("Body_VanTop"), CubeMesh, FVector(-140.f, 0.f, 240.f), FVector(250.f, 218.f, 12.f));
+	Part(TEXT("Body_VanPillarBL"), CubeMesh, FVector(-260.f, -104.f, 188.f), FVector(10.f, 10.f, 106.f));
+	Part(TEXT("Body_VanPillarBR"), CubeMesh, FVector(-260.f, 104.f, 188.f), FVector(10.f, 10.f, 106.f));
+	Part(TEXT("Body_VanPillarML"), CubeMesh, FVector(-140.f, -104.f, 188.f), FVector(10.f, 10.f, 106.f));
+	Part(TEXT("Body_VanPillarMR"), CubeMesh, FVector(-140.f, 104.f, 188.f), FVector(10.f, 10.f, 106.f));
 	Part(TEXT("Body_VanRoof"), CubeMesh, FVector(65.f, 0.f, 240.f), FVector(185.f, 218.f, 12.f));
 	Part(TEXT("Body_Trunk"), CubeMesh, FVector(-185.f, 0.f, 70.f), FVector(150.f, 212.f, 50.f));
 	Part(TEXT("Body_RearRoof"), CubeMesh, FVector(-60.f, 0.f, 238.f), FVector(90.f, 215.f, 8.f));
@@ -745,6 +751,10 @@ void ABRTruck::ApplyModel()
 		}
 	};
 	Show(TEXT("Body_VanBox"), bVan);
+	for (const TCHAR* VanPart : { TEXT("Body_VanTop"), TEXT("Body_VanPillarBL"), TEXT("Body_VanPillarBR"), TEXT("Body_VanPillarML"), TEXT("Body_VanPillarMR") })
+	{
+		Show(VanPart, bVan);
+	}
 	Show(TEXT("Body_VanRoof"), bVan);
 	Show(TEXT("Body_Roof"), !bVan);
 	Show(TEXT("Body_Trunk"), bSedan || bLow);
@@ -783,7 +793,7 @@ void ABRTruck::ApplyModel()
 		RideHeight *= 0.75f;
 		break;
 	case EBRCarModel::Van:
-		// Six seats - the four in the back are inside the box where nobody can see you.
+		// Six seats: two up front, four in the back (visible through the windows).
 		SeatOffsets = { FVector(80.f, -50.f, 125.f), FVector(80.f, 50.f, 125.f), FVector(-70.f, -50.f, 125.f), FVector(-70.f, 50.f, 125.f),
 			FVector(-190.f, -50.f, 125.f), FVector(-190.f, 50.f, 125.f) };
 		ForwardAcceleration *= 0.8f;
