@@ -158,19 +158,25 @@ Each slot has a description of what to look for.
 | Key | What it does |
 |---|---|
 | WASD / Shift / Space / C | move / sprint / jump / crouch |
-| **Left click** | punch (alternates fists, aims at whoever's in front of you) |
+| **Left click / Right click** | your **left / right hand**. **Tap = punch** with that hand. **Hold = reach out and grab** whoever it touches; let go to drop them. Hold one hand on someone and tap the other to punch them. |
+| **Space while grabbed** | mash it to wriggle free |
 | **Left Ctrl, Left Alt or mouse thumb button** | **dive / tackle** |
-| Z | grab people or things; Z again to throw; on a teammate: climb on their shoulders |
+| Z | grab with both hands (people) or pick up things; Z again to throw; on a teammate: climb on their shoulders |
 | E | interact (hold for jobs, zip-ties, ladders) |
 | Mouse wheel / F / G | pick an item / use it / drop it |
 | Hold T | emote wheel |
 | H | drop $50 |
-| Right mouse + left click | aim and shoot |
-| V / B / Q / X | (Border Patrol) scan / trap / drone / taser or gun |
+| **X** | weapon: fists → taser → pistol → fists (Runners: fists ↔ revolver, if you bought one). With a weapon out, right mouse aims and left click shoots. |
+| V / B / Q | (Border Patrol) scan / trap / drone |
 | Y | ready up in the lobby |
 | N | watch other players while in the pen |
 | K | mute mic |
 | M | menu (team, customize, host settings) |
+
+### Grabbing and arresting (Gang Beasts style)
+- **Hold right click** next to someone to grab them with your right hand. **Tap left click** to punch them in the face while you hold them.
+- **Border Patrol:** while holding someone, **hold E** to zip-tie them. It takes a bit longer than cuffing a knocked-out person, and they can **mash Space** to wriggle free. One hand is easier to escape than two (Z grabs with both).
+- NPCs with no papers fight back when grabbed.
 
 ### How fighting works now (Gang Beasts style)
 - **Any hand moving fast enough hits whoever it touches.** That covers punches, flailing arms and swinging around, and it hits players, bots, villagers and the luchador alike.

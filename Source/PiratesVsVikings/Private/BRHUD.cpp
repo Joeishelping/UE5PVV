@@ -390,8 +390,8 @@ void ABRHUD::DrawHUD()
 	}
 
 	DrawText(bWarden
-		? TEXT("WASD move | Shift sprint | C crouch | LMB punch | hold RMB aim + LMB shoot | R reload | X taser/gun | V scan | B trap | Q drone | E interact")
-		: TEXT("WASD move | Shift sprint | C crouch | LMB punch | RMB aim + LMB shoot | Mouse wheel pick item | F use item | G drop | E interact"),
+		? TEXT("WASD move | Shift sprint | C crouch | Left/Right click = left/right hand (tap punch, hold grab) | X fists/taser/gun | V scan | B trap | Q drone | E interact")
+		: TEXT("WASD move | Shift sprint | C crouch | Left/Right click = left/right hand (tap punch, hold grab) | Mouse wheel item | F use | G drop | E interact"),
 		FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 40.f, Small, 1.1f);
 	DrawText(TEXT("Z grab/throw | Left Alt dive | hold T emotes | H drop $ | K mute mic | M menu"), FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 22.f, Small, 1.1f);
 
@@ -443,6 +443,22 @@ void ABRHUD::DrawHUD()
 				}
 			}
 		}
+	}
+
+	// --- Hand grabs
+	if (Me->GetGrabbedBy() && Me->GetCondition() == EPVVCondition::Normal)
+	{
+		Centered(TEXT("GRABBED!  MASH SPACE TO WRIGGLE FREE"), SY * 0.45f, Red, Big, 1.6f);
+		Bar(SX * 0.5f - 150.f, SY * 0.45f + 40.f, 300.f, 16.f, Me->GetGrabStruggle(), Yellow);
+	}
+	else if (const ABRCharacter* Held = Me->GetHandGrabTarget())
+	{
+		Centered(FString::Printf(TEXT("HOLDING %s  -  tap the other click to punch | Z throw%s"), *Held->GetPlayerDisplayName(),
+			bWarden ? TEXT(" | hold E zip-tie") : TEXT("")), SY * 0.7f, Yellow, Small, 1.3f);
+	}
+	if (!Me->HasWeapon() && bWarden)
+	{
+		DrawText(TEXT("FISTS   (X = taser)"), FLinearColor(0.8f, 0.8f, 0.8f), SX - 520.f, SY - 70.f, Big, 1.2f);
 	}
 
 	// --- Status

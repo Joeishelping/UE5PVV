@@ -529,7 +529,7 @@ void APVVCharacter::ApplyKnockdown(AActor* Cause, const FVector& Impulse)
 
 void APVVCharacter::Recover(float BalanceFraction)
 {
-	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)
+	if (!HasAuthority() || (Condition != EPVVCondition::KnockedDown && !(Condition == EPVVCondition::Normal && IsHeldByHands(Captor))))
 	{
 		return;
 	}
@@ -1164,8 +1164,16 @@ void APVVCharacter::CancelHold()
 bool APVVCharacter::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
 	if (!Interactor || Interactor == this || CarriedBy || Interactor->CarriedCharacter
-		|| Interactor->Condition != EPVVCondition::Normal
-		|| (Condition != EPVVCondition::KnockedDown && Condition != EPVVCondition::Restrained))
+		|| Interactor->Condition != EPVVCondition::Normal)
+	{
+		return false;
+	}
+	// Holding them in your hands: zip-tie them while they try to wriggle free.
+	if (Condition == EPVVCondition::Normal && IsHeldByHands(Interactor))
+	{
+		return PVV::CanCapture(Interactor->Faction) && PVV::IsHostile(Interactor->Faction, Faction);
+	}
+	if (Condition != EPVVCondition::KnockedDown && Condition != EPVVCondition::Restrained)
 	{
 		return false;
 	}
@@ -1184,6 +1192,10 @@ bool APVVCharacter::CanInteract_Implementation(APVVCharacter* Interactor) const
 float APVVCharacter::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
 	const bool bTeammate = Interactor && Interactor->Faction == Faction;
+	if (Condition == EPVVCondition::Normal)
+	{
+		return CaptureDuration * 1.5f; // they're awake and fighting it
+	}
 	if (Condition == EPVVCondition::KnockedDown)
 	{
 		return bTeammate ? HelpUpDuration : CaptureDuration;
@@ -1194,6 +1206,10 @@ float APVVCharacter::GetInteractDuration_Implementation(APVVCharacter* Interacto
 FText APVVCharacter::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
 	const bool bTeammate = Interactor && Interactor->Faction == Faction;
+	if (Condition == EPVVCondition::Normal)
+	{
+		return LOCTEXT("RestrainHeld", "Zip-tie them (hold) - they'll try to wriggle free!");
+	}
 	if (Condition == EPVVCondition::KnockedDown)
 	{
 		return bTeammate ? LOCTEXT("HelpUp", "Help up (hold)") : LOCTEXT("Restrain", "Zip-tie (hold)");
@@ -1209,6 +1225,11 @@ void APVVCharacter::OnInteract_Implementation(APVVCharacter* Interactor)
 	}
 
 	const bool bTeammate = Interactor->Faction == Faction;
+	if (Condition == EPVVCondition::Normal && IsHeldByHands(Interactor) && !bTeammate)
+	{
+		Restrain(Interactor); // cuffed while they were held
+		return;
+	}
 	if (Condition == EPVVCondition::KnockedDown)
 	{
 		if (bTeammate)

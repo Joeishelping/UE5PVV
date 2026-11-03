@@ -126,6 +126,8 @@ public:
 	void BotStruggle();
 	void BotSetSprinting(bool bSprint);
 	bool IsBusyInteracting() const { return HoldTarget != nullptr; }
+	/** Is this character being held in someone's hands right now (Gang Beasts grab)? Lets Border Patrol zip-tie them while they struggle. */
+	virtual bool IsHeldByHands(const APVVCharacter* By) const { return false; }
 	/** Server: make this character tougher / hit harder (the luchador). */
 	void SetCombatStats(float NewMaxBalance, float NewAttackDamage) { MaxBalance = NewMaxBalance; Balance = NewMaxBalance; AttackDamage = NewAttackDamage; }
 

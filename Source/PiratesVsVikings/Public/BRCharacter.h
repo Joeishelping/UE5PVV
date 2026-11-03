@@ -127,6 +127,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") float GetVisibility() const { return Visibility; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") float GetBreath() const { return Breath; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsLethalMode() const { return bLethalMode; }
+	/** Taser / gun out (X). Holstered = both mouse buttons are your hands. */
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsWeaponDrawn() const { return bWeaponDrawn; }
+	/** Who you're holding with your hands (Gang Beasts grab), and who's holding you. */
+	ABRCharacter* GetHandGrabTarget() const { return HandGrabTarget; }
+	ABRCharacter* GetGrabbedBy() const { return GrabbedBy; }
+	float GetGrabStruggle() const { return GrabStruggle; }
+	/** Server: let go of whoever you're holding. */
+	void ReleaseHandGrab();
+	void BotStruggleGrab();
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsAiming() const { return bAiming; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsReloading() const { return bReloading; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsSlowed() const;
@@ -159,7 +168,8 @@ protected:
 	virtual void EnsureDefaultInput() override;
 	virtual void UpdateMovementSpeed() override;
 	virtual void OnStateEffectsRefreshed() override;
-	virtual bool WantsMeleeOnAttack() const override { return !bAiming; }
+	virtual bool WantsMeleeOnAttack() const override { return false; } // left / right click are handled per hand below
+	virtual bool IsHeldByHands(const APVVCharacter* By) const override;
 	virtual void OnHitReceivedNative(APVVCharacter* Attacker) override;
 	virtual void OnAttackStartedNative() override;
 
@@ -246,7 +256,7 @@ protected:
 	// --- Brawling (Gang Beasts style) ------------------------------------------------------
 	/** Flailing hands faster than this (cm/s, relative to you) smack people they hit. 0 = off. */
 	/** Any hand moving faster than this (cm/s, compared to your body) hits whoever it touches - Gang Beasts style. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 420.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 300.f;
 	/** Balance damage for the slowest / fastest hand hit (a full punch always does at least Attack Damage). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HandHitMinDamage = 5.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HandHitMaxDamage = 22.f;
@@ -579,6 +589,34 @@ private:
 	UFUNCTION() void OnRep_Slow();
 
 	void Input_AimStart();
+	void Input_LeftHandStart();
+	void Input_LeftHandStop();
+	void Input_RightHandStop();
+	UFUNCTION(Server, Reliable) void Server_PunchHand(bool bLeft);
+	UFUNCTION(Server, Reliable) void Server_HandHold(uint8 Hand, bool bDown);
+	UFUNCTION(Server, Reliable) void Server_GrabStruggle();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_PunchHand(bool bLeft);
+	void TickHandGrab(float DeltaSeconds);
+	void TickReachVisuals();
+	bool TryHandGrab(uint8 HandMask);
+	bool OwnsWeapon() const;
+	UPROPERTY(Replicated) bool bWeaponDrawn = false;
+	/** Hands raised/reaching (bit 1 = left, 2 = right). */
+	UPROPERTY(Replicated) uint8 ArmsReaching = 0;
+	/** Hands actually gripping HandGrabTarget. */
+	UPROPERTY(Replicated) uint8 HandGrabMask = 0;
+	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> HandGrabTarget;
+	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> GrabbedBy;
+	UPROPERTY(Replicated) float GrabStruggle = 0.f;
+	bool bLeftDown = false;
+	bool bRightDown = false;
+	float LeftDownAt = 0.f;
+	float RightDownAt = 0.f;
+	bool bRightIsAim = false;
+	uint8 SentReach = 0;
+	uint8 AppliedReachMuscles = 0;
+	int8 ForcedPunchHand = -1;
+	float LastGrabTryTime = 0.f;
 	void Input_AimStop();
 	void Input_FireIfAiming();
 	void Input_Reload();

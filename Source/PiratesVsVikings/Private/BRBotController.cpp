@@ -60,6 +60,11 @@ void ABRBotController::Tick(float DeltaSeconds)
 	const float Now = GetWorld()->GetTimeSeconds();
 
 	// Struggle / wake up like a person mashing a key (about 5 presses a second, not every frame).
+	if (C->GetGrabbedBy() && C->GetCondition() == EPVVCondition::Normal && Now >= NextMash)
+	{
+		NextMash = Now + FMath::FRandRange(0.15f, 0.25f);
+		C->BotStruggleGrab(); // wriggle out of their hands
+	}
 	if (C->GetCondition() == EPVVCondition::Restrained || C->GetCondition() == EPVVCondition::KnockedDown)
 	{
 		if (Now >= NextMash)

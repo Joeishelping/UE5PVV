@@ -142,6 +142,12 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bDisguised);
 	DOREPLIFETIME(ABRCharacter, HeldItem);
 	DOREPLIFETIME(ABRCharacter, LuchaName);
+	DOREPLIFETIME(ABRCharacter, bWeaponDrawn);
+	DOREPLIFETIME(ABRCharacter, ArmsReaching);
+	DOREPLIFETIME(ABRCharacter, HandGrabMask);
+	DOREPLIFETIME(ABRCharacter, HandGrabTarget);
+	DOREPLIFETIME(ABRCharacter, GrabbedBy);
+	DOREPLIFETIME(ABRCharacter, GrabStruggle);
 }
 
 void ABRCharacter::StartFleeing(float Seconds)
@@ -759,6 +765,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	{
 		Multiplier *= 1.12f; // Cowboy Hat: rodeo legs
 	}
+	if (GrabbedBy)
+	{
+		Multiplier *= 0.4f; // someone's got hold of you
+	}
 	Move->MaxWalkSpeed *= Multiplier;
 	Move->MaxWalkSpeedCrouched = 220.f * Multiplier;
 }
@@ -839,7 +849,11 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		Input->BindAction(AimAction, ETriggerEvent::Started, this, &ABRCharacter::Input_AimStart);
 		Input->BindAction(AimAction, ETriggerEvent::Completed, this, &ABRCharacter::Input_AimStop);
 	}
-	if (AttackAction) Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ABRCharacter::Input_FireIfAiming);
+	if (AttackAction)
+	{
+		Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ABRCharacter::Input_FireIfAiming);
+		Input->BindAction(AttackAction, ETriggerEvent::Completed, this, &ABRCharacter::Input_LeftHandStop);
+	}
 	if (ReloadAction) Input->BindAction(ReloadAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Reload);
 	if (CrouchAction) Input->BindAction(CrouchAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Crouch);
 	if (EatAction) Input->BindAction(EatAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Eat);
@@ -1051,6 +1065,11 @@ void ABRCharacter::Input_Scan()
 
 bool ABRCharacter::HasWeapon() const
 {
+	return bWeaponDrawn && OwnsWeapon();
+}
+
+bool ABRCharacter::OwnsWeapon() const
+{
 	if (bIsNPC)
 	{
 		return false;
@@ -1119,7 +1138,20 @@ float ABRCharacter::ReloadSeconds() const
 
 void ABRCharacter::Input_AimStart()
 {
-	if (!HasWeapon() || !CanAttack())
+	if (!HasWeapon())
+	{
+		// Fists: right hand. Tap = punch, hold = reach out and grab.
+		bRightIsAim = false;
+		bRightDown = true;
+		RightDownAt = GetWorld()->GetTimeSeconds();
+		if (CanAttack())
+		{
+			Server_PunchHand(false);
+		}
+		return;
+	}
+	bRightIsAim = true;
+	if (!CanAttack())
 	{
 		return;
 	}
@@ -1131,6 +1163,10 @@ void ABRCharacter::Input_AimStart()
 
 void ABRCharacter::Input_AimStop()
 {
+	if (!bRightIsAim)
+	{
+		Input_RightHandStop();
+	}
 	if (!bAiming)
 	{
 		return;
@@ -1171,7 +1207,12 @@ void ABRCharacter::UpdateAimCamera(float DeltaSeconds)
 
 void ABRCharacter::Input_FireIfAiming()
 {
-	if (!bAiming || !CanAttack() || !HasWeapon())
+	if (!bAiming || !HasWeapon())
+	{
+		Input_LeftHandStart(); // fists: left hand
+		return;
+	}
+	if (!CanAttack())
 	{
 		return;
 	}
@@ -1223,21 +1264,37 @@ void ABRCharacter::FinishReload()
 
 void ABRCharacter::Server_ToggleWeaponMode_Implementation()
 {
-	if (!IsWarden())
+	// X cycles: FISTS -> TASER -> PISTOL -> FISTS (Runners: fists <-> revolver).
+	if (!OwnsWeapon())
 	{
-		return;
-	}
-	const ABRGameState* GS = GetBRGameState();
-	if (!bLethalMode && GS && !GS->LethalAllowed())
-	{
-		Notify(LOCTEXT("GunsRevoked", "Approval too low - your guns were confiscated. Taser only."));
 		return;
 	}
 	GetWorldTimerManager().ClearTimer(ReloadTimer);
 	bReloading = false;
-	bLethalMode = !bLethalMode;
-	Notify(bLethalMode ? LOCTEXT("Lethal", "SERVICE PISTOL. Shooting someone who hasn't crossed = SCANDAL.")
-		: LOCTEXT("Taser", "TASER. Knocks them down so you can cuff them."));
+	const ABRGameState* GS = GetBRGameState();
+	if (!bWeaponDrawn)
+	{
+		bWeaponDrawn = true;
+		bLethalMode = IsRunner();
+		Notify(IsRunner() ? LOCTEXT("RevolverOut", "REVOLVER out. Right mouse to aim. X to put it away.")
+			: LOCTEXT("Taser", "TASER out. Right mouse to aim, left click to shoot. Knocks them down so you can cuff them."));
+	}
+	else if (IsWarden() && !bLethalMode && GS && GS->LethalAllowed())
+	{
+		bLethalMode = true;
+		Notify(LOCTEXT("Lethal", "SERVICE PISTOL. Shooting someone who hasn't crossed = SCANDAL."));
+	}
+	else
+	{
+		bWeaponDrawn = false;
+		bLethalMode = false;
+		if (bAiming)
+		{
+			Server_SetAiming_Implementation(false);
+		}
+		Notify(LOCTEXT("Fists", "FISTS. Left / right click = left / right hand: tap to punch, hold to grab."));
+	}
+	ForceNetUpdate();
 }
 
 void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector_NetQuantizeNormal Direction)
@@ -1331,7 +1388,15 @@ void ABRCharacter::OnAttackStartedNative()
 		BlowDisguise(); // nobody in a poncho throws punches
 	}
 	// Physics fists: throw one arm forward (alternating), on every screen.
-	bPunchLeft = !bPunchLeft;
+	if (ForcedPunchHand >= 0)
+	{
+		bPunchLeft = ForcedPunchHand == 1;
+		ForcedPunchHand = -1;
+	}
+	else
+	{
+		bPunchLeft = !bPunchLeft;
+	}
 	if (bWobbleOn && GetMesh())
 	{
 		const FName Hand = bPunchLeft ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
@@ -1383,6 +1448,15 @@ bool ABRCharacter::CanAttackWhileCarrying() const
 
 bool ABRCharacter::HandlePunchHit()
 {
+	// Holding someone with one hand? The other fist lands on them.
+	if (ABRCharacter* Held = HandGrabTarget.Get(); Held && FVector::Dist(Held->GetActorLocation(), GetActorLocation()) < 220.f)
+	{
+		const FVector Dir = (Held->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+		Held->ReceiveMeleeHit(this, AttackDamage * 1.2f, Dir * 150.f);
+		Held->Multicast_BodyHit(TEXT("head"), Dir * HitReaction);
+		Multicast_Sfx(3);
+		return true;
+	}
 	// Holding someone? Punch them in the face with your free hand.
 	if (APVVCharacter* Held = GetCarriedCharacter())
 	{
@@ -1778,6 +1852,7 @@ void ABRCharacter::TickWobble()
 	{
 		PunchArmRestoreAt = -1.f;
 		ApplyMuscles(CurrentArmMuscle());
+		AppliedReachMuscles = 0xFF; // re-loosen any reaching arm
 	}
 	// Getting beaten up makes you woozy: weaker muscles, floppier body (Gang Beasts).
 	const float WantDizzy = GetCondition() == EPVVCondition::Normal ? FMath::Lerp(0.3f, 1.f, GetBalanceFraction()) : 1.f;
@@ -1785,6 +1860,7 @@ void ABRCharacter::TickWobble()
 	{
 		DizzyScale = WantDizzy;
 		ApplyMuscles(CurrentArmMuscle());
+		AppliedReachMuscles = 0xFF;
 	}
 	// Drunken sway: little random shoves to the upper body.
 	if (Now >= NextSwayTime && GetCondition() == EPVVCondition::Normal && !bAiming && !IsDriving())
@@ -1969,6 +2045,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickOutfitState();
 	}
 	TickShake(DeltaSeconds);
+	TickReachVisuals();
 	TickEmoteWheel();
 	TickHeadTag();
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
@@ -2238,6 +2315,11 @@ bool ABRCharacter::HandleJumpPressed()
 		Server_Mash(); // mash Space to wake up
 		return true;
 	}
+	if (GrabbedBy)
+	{
+		Server_GrabStruggle(); // mash Space to wriggle out of their hands
+		return true;
+	}
 	return false;
 }
 
@@ -2286,6 +2368,22 @@ void ABRCharacter::Server_Grab_Implementation()
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	BlowDisguise();
 
+	// Holding someone with your hands? THROW them.
+	if (ABRCharacter* Held = HandGrabTarget.Get())
+	{
+		ReleaseHandGrab();
+		Held->LaunchCharacter(Forward * ThrowSpeed + FVector(0.f, 0.f, ThrowSpeed * 0.45f), true, true);
+		if (ABRPlayerState* PS = GetBRPlayerState())
+		{
+			++PS->StatThrows;
+		}
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->Feed(FString::Printf(TEXT("%s THREW %s"), *GetPlayerDisplayName(), *Held->GetPlayerDisplayName()));
+		}
+		Multicast_Sfx(2);
+		return;
+	}
 	// Holding something? Throw it.
 	if (HeldProp)
 	{
@@ -2361,12 +2459,11 @@ void ABRCharacter::Server_Grab_Implementation()
 		ClimbOnto(Target);
 		return;
 	}
-	Grab(Target);
-	if (GetCarriedCharacter() == Target)
+	// Grab them with both hands (they can mash Space to wriggle free).
+	ArmsReaching = 3;
+	if (!TryHandGrab(3))
 	{
-		Multicast_Sfx(5);
-		GrabStartTime = GetWorld()->GetTimeSeconds();
-		Notify(LOCTEXT("Grabbed", "Grabbed! Left click to PUNCH them, Z to THROW them."));
+		ArmsReaching = 0;
 	}
 }
 
@@ -2496,6 +2593,7 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 	}
 
 	TickHands(DeltaSeconds);
+	TickHandGrab(DeltaSeconds);
 
 	// (Old fist check, only used when the hands can't be tracked.)
 	if (!bHandsTracked && Now < PunchUntil && !bPunchConnected && GetMesh())
@@ -2516,6 +2614,275 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 				break;
 			}
 		}
+	}
+}
+
+// -------------------------------------------------------------------------------------------
+// Hand grabs (Gang Beasts): hold a mouse button to reach out and grab with that hand
+
+void ABRCharacter::Input_LeftHandStart()
+{
+	bLeftDown = true;
+	LeftDownAt = GetWorld()->GetTimeSeconds();
+	if (CanAttack())
+	{
+		Server_PunchHand(true);
+	}
+}
+
+void ABRCharacter::Input_LeftHandStop()
+{
+	bLeftDown = false;
+	if (SentReach & 1)
+	{
+		SentReach = static_cast<uint8>(SentReach & ~1);
+		Server_HandHold(1, false);
+	}
+}
+
+void ABRCharacter::Input_RightHandStop()
+{
+	bRightDown = false;
+	if (SentReach & 2)
+	{
+		SentReach = static_cast<uint8>(SentReach & ~2);
+		Server_HandHold(2, false);
+	}
+}
+
+void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
+{
+	Multicast_PunchHand(bLeft);
+	BotAttack(); // same punch as before, just with the hand you chose
+}
+
+void ABRCharacter::Multicast_PunchHand_Implementation(bool bLeft)
+{
+	ForcedPunchHand = bLeft ? 1 : 0;
+}
+
+void ABRCharacter::Server_HandHold_Implementation(uint8 Hand, bool bDown)
+{
+	Hand = static_cast<uint8>(Hand & 3);
+	if (bDown)
+	{
+		ArmsReaching = static_cast<uint8>(ArmsReaching | Hand);
+		return;
+	}
+	ArmsReaching = static_cast<uint8>(ArmsReaching & ~Hand);
+	HandGrabMask = static_cast<uint8>(HandGrabMask & ~Hand);
+	if (HandGrabMask == 0 && HandGrabTarget)
+	{
+		ReleaseHandGrab();
+	}
+}
+
+bool ABRCharacter::IsHeldByHands(const APVVCharacter* By) const
+{
+	return By && GrabbedBy.Get() == By;
+}
+
+bool ABRCharacter::TryHandGrab(uint8 HandMask)
+{
+	if (!HasAuthority() || GetCondition() != EPVVCondition::Normal || GetCarriedCharacter() || GetCurrentBoat() || HeldProp)
+	{
+		return false;
+	}
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	ABRCharacter* Best = HandGrabTarget.Get();
+	if (!Best)
+	{
+		float BestDist = 170.f;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			ABRCharacter* Other = *It;
+			if (Other == this || Other->GetCarrier() || Other->GetCurrentBoat() || Other->IsInCannon() || Other->GrabbedBy
+				|| Other->GetCondition() == EPVVCondition::Detained || Other->GetCondition() == EPVVCondition::Restrained)
+			{
+				continue;
+			}
+			const FVector To = Other->GetActorLocation() - GetActorLocation();
+			const float D = To.Size2D();
+			if (D < BestDist && FVector::DotProduct(To.GetSafeNormal2D(), Forward) > 0.3f && FMath::Abs(To.Z) < 150.f)
+			{
+				BestDist = D;
+				Best = Other;
+			}
+		}
+	}
+	if (!Best)
+	{
+		return false;
+	}
+	const bool bNew = HandGrabTarget.Get() != Best;
+	HandGrabTarget = Best;
+	HandGrabMask = static_cast<uint8>(HandGrabMask | HandMask);
+	if (bNew)
+	{
+		Best->GrabbedBy = this;
+		Best->GrabStruggle = 0.f;
+		Best->CancelHold();
+		Best->UpdateMovementSpeed();
+		Best->BlowDisguise();
+		BlowDisguise();
+		Multicast_Sfx(5);
+		Notify(IsWarden() ? LOCTEXT("GrabbedW", "Got them! Other click = punch, Z = throw, hold E = zip-tie (they can fight it).")
+			: LOCTEXT("GrabbedR", "Got them! Other click = punch, Z = throw."));
+		Best->Notify(LOCTEXT("YouGrabbed", "GRABBED! Mash SPACE to wriggle free (or punch back)."));
+	}
+	ForceNetUpdate();
+	return true;
+}
+
+void ABRCharacter::ReleaseHandGrab()
+{
+	if (ABRCharacter* Held = HandGrabTarget.Get())
+	{
+		if (Held->GrabbedBy.Get() == this)
+		{
+			Held->GrabbedBy = nullptr;
+			Held->GrabStruggle = 0.f;
+			Held->UpdateMovementSpeed();
+			Held->ForceNetUpdate();
+		}
+	}
+	HandGrabTarget = nullptr;
+	HandGrabMask = 0;
+	ArmsReaching = 0; // let go completely (press again to grab again)
+	ForceNetUpdate();
+}
+
+void ABRCharacter::Server_GrabStruggle_Implementation()
+{
+	ABRCharacter* Holder = GrabbedBy.Get();
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!Holder || Now - LastMashTime < 0.08f)
+	{
+		return;
+	}
+	LastMashTime = Now;
+	// One hand is easier to slip than two.
+	GrabStruggle += Holder->HandGrabMask == 3 ? 0.07f : 0.12f;
+	if (GrabStruggle >= 1.f)
+	{
+		Holder->ReleaseHandGrab();
+		Holder->LaunchCharacter((Holder->GetActorLocation() - GetActorLocation()).GetSafeNormal2D() * 300.f, true, false);
+		Notify(LOCTEXT("WriggledFree", "You wriggled free!"));
+		Holder->Notify(LOCTEXT("TheyEscaped", "They broke free!"));
+	}
+	ForceNetUpdate();
+}
+
+void ABRCharacter::BotStruggleGrab()
+{
+	Server_GrabStruggle_Implementation();
+}
+
+void ABRCharacter::TickHandGrab(float DeltaSeconds)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (GrabStruggle > 0.f)
+	{
+		GrabStruggle = FMath::Max(0.f, GrabStruggle - 0.12f * DeltaSeconds);
+	}
+	// Whoever held us is gone (or let go): free to move again.
+	if (GrabbedBy && (!IsValid(GrabbedBy) || GrabbedBy->HandGrabTarget.Get() != this))
+	{
+		GrabbedBy = nullptr;
+		GrabStruggle = 0.f;
+		UpdateMovementSpeed();
+	}
+	// NPCs with no papers fight back when grabbed.
+	if (bIsNPC && GrabbedBy && bIllegal && FMath::FRand() < DeltaSeconds * 3.f)
+	{
+		Server_GrabStruggle_Implementation();
+	}
+	ABRCharacter* Held = HandGrabTarget.Get();
+	if (!Held)
+	{
+		// Reaching with an empty hand: grab whoever it touches.
+		if (ArmsReaching != 0 && Now - LastGrabTryTime > 0.1f)
+		{
+			LastGrabTryTime = Now;
+			TryHandGrab(ArmsReaching);
+		}
+		return;
+	}
+	const float Dist = FVector::Dist2D(Held->GetActorLocation(), GetActorLocation());
+	if (GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || Held->GetCurrentBoat() || Held->GetCarrier()
+		|| Held->GetCondition() == EPVVCondition::Detained || Held->GetCondition() == EPVVCondition::Restrained || Dist > 280.f
+		|| (HandGrabMask == 0 && ArmsReaching == 0))
+	{
+		ReleaseHandGrab();
+		return;
+	}
+	// Grip more hands if they're reaching too.
+	HandGrabMask = static_cast<uint8>(HandGrabMask | ArmsReaching);
+	// Keep them at arm's length: drag them along.
+	if (Held->GetCondition() == EPVVCondition::Normal && Dist > 115.f)
+	{
+		const FVector Want = GetActorLocation() + GetActorForwardVector().GetSafeNormal2D() * 95.f;
+		const FVector Pull = (Want - Held->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+		Held->LaunchCharacter(Pull.GetSafeNormal() * FMath::Min(Pull.Size() * 5.f, 650.f), true, false);
+	}
+}
+
+void ABRCharacter::TickReachVisuals()
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	// Local player: tell the server when a mouse button has been held long enough to reach.
+	if (IsLocallyControlled() && Cast<APlayerController>(GetController()))
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		if (bLeftDown && !(SentReach & 1) && Now - LeftDownAt > 0.22f)
+		{
+			SentReach = static_cast<uint8>(SentReach | 1);
+			Server_HandHold(1, true);
+		}
+		if (bRightDown && !(SentReach & 2) && Now - RightDownAt > 0.22f)
+		{
+			SentReach = static_cast<uint8>(SentReach | 2);
+			Server_HandHold(2, true);
+		}
+	}
+	if (!bWobbleOn || !Body || Body->GetBoneIndex(TEXT("hand_l")) == INDEX_NONE)
+	{
+		return;
+	}
+	// Loosen the reaching arms so they can stretch out.
+	if (ArmsReaching != AppliedReachMuscles)
+	{
+		AppliedReachMuscles = ArmsReaching;
+		ApplyMuscles(CurrentArmMuscle());
+		FPhysicalAnimationData Loose;
+		Loose.bIsLocalSimulation = false;
+		Loose.OrientationStrength = 40.f;
+		Loose.AngularVelocityStrength = 4.f;
+		if (ArmsReaching & 1) PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_l"), Loose, true);
+		if (ArmsReaching & 2) PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_r"), Loose, true);
+	}
+	if (ArmsReaching == 0)
+	{
+		return;
+	}
+	// Steer each reaching hand to the person you're holding (or straight out in front).
+	const ABRCharacter* Held = HandGrabTarget.Get();
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	const FName HandBones[2] = { FName(TEXT("hand_l")), FName(TEXT("hand_r")) };
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (!(ArmsReaching & (1 << i)))
+		{
+			continue;
+		}
+		const float Side = i == 0 ? -1.f : 1.f;
+		FVector Point = GetActorLocation() + Forward * 75.f + GetActorRightVector() * Side * 18.f + FVector(0.f, 0.f, 45.f);
+		if (Held)
+		{
+			Point = Held->GetActorLocation() + Held->GetActorRightVector() * Side * 14.f + FVector(0.f, 0.f, 40.f);
+		}
+		const FVector Hand = Body->GetBoneLocation(HandBones[i]);
+		Body->SetPhysicsLinearVelocity(((Point - Hand) * 9.f).GetClampedToMaxSize(900.f), false, HandBones[i]);
 	}
 }
 
@@ -2541,9 +2908,16 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			LastHandPos[i] = Pos;
 			continue;
 		}
-		const FVector HandVel = (Pos - LastHandPos[i]) / DeltaSeconds - GetVelocity();
+		// Counts how fast the hand swings (relative to you) AND how fast it actually moves (running into people with your arms out hits too).
+		const FVector WorldVel = (Pos - LastHandPos[i]) / DeltaSeconds;
+		const FVector RelVel = WorldVel - GetVelocity();
+		const FVector HandVel = RelVel.SizeSquared() >= (WorldVel * 0.7f).SizeSquared() ? RelVel : WorldVel * 0.7f;
 		LastHandPos[i] = Pos;
 		const bool bPunching = Now < PunchUntil && (i == 0) == bPunchLeft;
+		if ((ArmsReaching & (1 << i)) && !bPunching)
+		{
+			continue; // a hand that's reaching / holding doesn't slap
+		}
 		const float Speed = HandVel.Size();
 		if (Now < HandReadyAt[i] || (Speed < SlapSpeed && !bPunching) || Speed > 6000.f)
 		{
@@ -2555,9 +2929,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 		for (const FOverlapResult& H : Hits)
 		{
 			APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
-			if (!Victim || Victim == this || Victim == GetCarriedCharacter() || Victim->GetCarrier() || Victim->GetCondition() != EPVVCondition::Normal)
+			if (!Victim || Victim == this || Victim == GetCarriedCharacter() || Victim->GetCarrier() || Victim->GetCondition() != EPVVCondition::Normal
+				|| Victim == HandGrabTarget.Get())
 			{
-				continue;
+				continue; // (the person you're holding gets hit by your punches instead - see HandlePunchHit)
 			}
 			const float Hard = FMath::Clamp((Speed - SlapSpeed) / 900.f, 0.f, 1.f);
 			float Damage = FMath::Lerp(HandHitMinDamage, HandHitMaxDamage, Hard);
