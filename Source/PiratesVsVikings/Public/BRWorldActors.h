@@ -40,6 +40,8 @@ protected:
 	UStaticMeshComponent* AddMesh(const TCHAR* Name, UStaticMesh* Mesh, const FVector& Location, const FVector& SizeCm, const FLinearColor& Color,
 		const FRotator& Rotation = FRotator::ZeroRotator, bool bCollide = true);
 	UTextRenderComponent* AddLabel(const TCHAR* Name, const FVector& Location, float Size, const FColor& Color);
+	/** Invisible ball that lets players find this with E (things with no collision are invisible to the E key). */
+	USphereComponent* AddPickupZone(float Radius);
 	static void Paint(UStaticMeshComponent* Mesh, const FLinearColor& Color);
 };
 
