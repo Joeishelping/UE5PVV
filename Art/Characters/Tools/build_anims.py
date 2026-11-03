@@ -370,6 +370,18 @@ def headbutt(t, p):
         p[f"upperarm_{s}"] = arm(s, 20 * max(0, k), 0, 15)
 
 
+def block(t, p):
+    # Boxer's guard: elbows in, forearms up, fists in front of the face, chin tucked, a little bounce.
+    idle(t, p)
+    b = S(t * TAU) * 2
+    p["spine_02"] = rot(10 + b)
+    p["neck_01"] = rot(12)
+    for s in "lr":
+        p[f"upperarm_{s}"] = arm(s, -62, 34, 12)
+        p[f"lowerarm_{s}"] = rot(-118)
+        p[f"hand_{s}"] = rot(-10)
+
+
 ANIMS = [
     ("Idle", idle, 2.0, True), ("Walk", lambda t, p: walk(t, p, 1.0), 1.0, True), ("Run", lambda t, p: walk(t, p, 1.8), .62, True),
     ("CrouchIdle", crouch_idle, 2.0, True), ("CrouchWalk", lambda t, p: walk(t, p, .7, .13), 1.1, True),
@@ -381,6 +393,7 @@ ANIMS = [
     ("Emote_Wave", wave, 1.0, True), ("Emote_Flex", flex, 1.5, True), ("Emote_Taunt", taunt, 1.0, True),
     ("Emote_Beg", beg, 1.0, True), ("Emote_Cheer", cheer, 1.0, True),
     ("Emote_Smoke", smoke, 4.0, True), ("Kick", kick, .5, False), ("Headbutt", headbutt, .45, False),
+    ("Block", block, 1.0, True),
 ]
 
 

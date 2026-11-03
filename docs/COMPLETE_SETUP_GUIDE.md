@@ -48,7 +48,7 @@ This one guide replaces all the older ones. It covers everything you have to set
 Drag `SM_Trumpet.glb` into the same folder. It's a normal static mesh, so the skeleton doesn't matter.
 
 ### 2d. Animations
-**Already imported the animations before?** Just import **`SK_PVV_Animations_NewMoves.glb`** (same folder): it only has the 3 new ones, **Emote_Smoke, Kick, Headbutt**. Same import settings as below. Then set them in BP_Runner / BP_Warden (Part 3a).
+**Already imported the animations before?** Just import **`SK_PVV_Animations_NewMoves.glb`** (same folder): it only has the new ones, **Emote_Smoke, Kick, Headbutt, Block**. Same import settings as below. Then set them in BP_Runner / BP_Warden (Part 3a).
 
 1. Make a folder **Characters → Animations**.
 2. Drag in `SK_PVV_Animations.glb`.
@@ -199,7 +199,7 @@ Empty slots use simple built-in puffs.
 | **Space while grabbed** | mash it to wriggle free |
 | **Left Ctrl or mouse thumb button** | **dive / tackle** |
 | **O** (Border Patrol) | **order the suspects OUT of the vehicle you're next to** (whistle!) |
-| **hold Left Alt** | **BLOCK** (hits from the front do ~15% damage; too many hits = guard break; grabs and hits from behind still get you) |
+| **hold Left Alt** | **BLOCK**: fists up in front of your face. Hits on your guard only drain the guard bar, not you. Guard bar empty = GUARD BREAK (staggered, can't block 2.5 s). Grabs and hits from behind still get you. |
 | Z | grab with both hands (people) or pick up things; Z again to throw; on a teammate: climb on their shoulders |
 | E | interact (hold for jobs, zip-ties, ladders) |
 | Mouse wheel / F / G | pick an item / use it / drop it |

@@ -393,7 +393,7 @@ void ABRCharacter::AutoFillSlots()
 	FillAnim(EatAnim, TEXT("Eat")); FillAnim(TrumpetAnim, TEXT("Trumpet")); FillAnim(DanceAnim, TEXT("Dance"));
 	FillAnim(EmoteWaveAnim, TEXT("Emote_Wave")); FillAnim(EmoteFlexAnim, TEXT("Emote_Flex")); FillAnim(EmoteTauntAnim, TEXT("Emote_Taunt"));
 	FillAnim(EmoteBegAnim, TEXT("Emote_Beg")); FillAnim(EmoteCheerAnim, TEXT("Emote_Cheer")); FillAnim(EmoteSmokeAnim, TEXT("Emote_Smoke"));
-	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt"));
+	FillAnim(KickAnim, TEXT("Kick")); FillAnim(HeadbuttAnim, TEXT("Headbutt")); FillAnim(BlockAnim, TEXT("Block"));
 }
 
 void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
@@ -2131,6 +2131,7 @@ void ABRCharacter::TickAnimationSlots()
 	else if (GetHoldProgress() > 0.f) Wanted = Pick(WorkAnim, Locomotion);
 	else if (IsDancing() && DanceAnim) Wanted = DanceAnim.Get();
 	else if (ActiveEmote >= 0 && EmoteAnimFor(ActiveEmote)) Wanted = EmoteAnimFor(ActiveEmote);
+	else if (bBlocking && BlockAnim) Wanted = BlockAnim.Get();
 	else if (bAiming) Wanted = (Speed > 15.f && AimWalkAnim) ? AimWalkAnim.Get() : Pick(AimAnim, Locomotion);
 	else if (bIsCrouched) Wanted = Speed > 15.f ? Pick(CrouchWalkAnim, Locomotion) : Pick(CrouchIdleAnim, Locomotion);
 	else Wanted = Locomotion;
@@ -3669,23 +3670,28 @@ float ABRCharacter::ApplyBlock(APVVCharacter* Attacker, float Damage, FVector& I
 	{
 		return Damage;
 	}
-	GuardMeter -= FMath::Clamp(Damage / 60.f, 0.12f, 0.45f);
-	ABRGameState::FX(this, EBRFX::Sparks, GetActorLocation() + GetActorForwardVector() * 40.f + FVector(0.f, 0.f, 50.f));
+	// Hits on your guard (arms up in front) only wear down the GUARD, not you - like Gang Beasts.
+	GuardMeter -= FMath::Clamp(Damage / 25.f, 0.1f, 0.4f);
+	ABRGameState::FX(this, EBRFX::Sparks, GetActorLocation() + GetActorForwardVector() * 40.f + FVector(0.f, 0.f, 60.f));
+	Impulse *= 0.25f; // your arms soak the hit; you slide back a little
 	if (GuardMeter <= 0.f)
 	{
-		// GUARD BREAK: arms knocked aside, stunned for a moment.
+		// GUARD BREAK: arms knocked aside, you stagger for a moment and can't block.
 		GuardMeter = 0.f;
 		bBlocking = false;
 		GuardBrokenUntil = GetWorld()->GetTimeSeconds() + 2.5f;
+		if (const ABRGameState* GBS = GetBRGameState())
+		{
+			DazedUntil = GBS->GetServerWorldTimeSeconds() + 1.2f;
+		}
 		UpdateMovementSpeed();
 		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("GUARD BREAK!"));
-		Notify(LOCTEXT("GuardBreak", "GUARD BROKEN! You can't block for a moment."));
+		Notify(LOCTEXT("GuardBreak", "GUARD BROKEN! You're staggered and can't block for a moment."));
 		ForceNetUpdate();
-		return Damage * 1.3f;
+		return 0.f;
 	}
 	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("BLOCKED"));
-	Impulse *= 0.2f;
-	return Damage * 0.15f;
+	return 0.f;
 }
 
 void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)

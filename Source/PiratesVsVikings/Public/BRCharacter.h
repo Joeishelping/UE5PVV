@@ -464,6 +464,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteSmokeAnim;
 	/** Optional: played with the physics kick / headbutt / while climbing. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> KickAnim;
+	/** Guard up (looping): fists in front of the face while you hold Left Alt. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> BlockAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> HeadbuttAnim;
 
 	// --- Cash ---------------------------------------------------------------------------
