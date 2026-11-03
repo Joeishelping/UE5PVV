@@ -1,4 +1,5 @@
 #include "BRMenuWidget.h"
+#include "BRSettings.h"
 #include "BRGameInstance.h"
 #include "BRCharacter.h"
 #include "BRPlayerController.h"
@@ -703,7 +704,7 @@ void UBRMenuWidget::RefreshSwatches()
 		return;
 	}
 	const FLinearColor Original(0.3f, 0.3f, 0.3f);
-	if (SkinSwatch) SkinSwatch->SetBrushColor(BR::SkinColor(GI->Look.SkinTone));
+	if (SkinSwatch) SkinSwatch->SetBrushColor(BR::SkinColor(UBRSettings::SkinToneFor(GI->PreferredTeam, GI->Look.SkinTone)));
 	if (ShirtSwatch) ShirtSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.ShirtColor) ? Original : BR::ClothColor(GI->Look.ShirtColor));
 	if (PantsSwatch) PantsSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.PantsColor) ? Original : BR::ClothColor(GI->Look.PantsColor));
 	if (HairColorSwatch) HairColorSwatch->SetBrushColor(BR::IsOriginalCloth(GI->Look.HairColor) ? Original : BR::HairColor(GI->Look.HairColor));

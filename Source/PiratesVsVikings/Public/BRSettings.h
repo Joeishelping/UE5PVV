@@ -37,6 +37,21 @@ class PIRATESVSVIKINGS_API UBRSettings : public UDeveloperSettings
 public:
 	UBRSettings();
 
+	/**
+	 * SKIN RANGE. Skin tones run 0 = very light ... 1 = very dark. The skin slider (and NPC/bot skin) only goes
+	 * between Min and Max for each team, e.g. Runners 0.2 - 0.75 = light tan through medium brown to dark brown.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Skin Range", meta = (ClampMin = "0", ClampMax = "1", DisplayName = "Runner skin: lightest allowed"))
+	float RunnerSkinMin = 0.2f;
+	UPROPERTY(Config, EditAnywhere, Category = "Skin Range", meta = (ClampMin = "0", ClampMax = "1", DisplayName = "Runner skin: darkest allowed"))
+	float RunnerSkinMax = 0.75f;
+	UPROPERTY(Config, EditAnywhere, Category = "Skin Range", meta = (ClampMin = "0", ClampMax = "1", DisplayName = "Border Patrol skin: lightest allowed"))
+	float WardenSkinMin = 0.f;
+	UPROPERTY(Config, EditAnywhere, Category = "Skin Range", meta = (ClampMin = "0", ClampMax = "1", DisplayName = "Border Patrol skin: darkest allowed"))
+	float WardenSkinMax = 1.f;
+	/** Slider 0..1 -> the real skin tone inside this team's allowed range. */
+	static float SkinToneFor(EPVVFaction Team, float Slider);
+
 	/** Name of the team that crosses (menu buttons, HUD, announcements). */
 	UPROPERTY(Config, EditAnywhere, Category = "Team Names")
 	FString RunnerTeamName = TEXT("Runners");

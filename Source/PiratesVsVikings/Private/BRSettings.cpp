@@ -312,3 +312,12 @@ namespace BR
 		return FLinearColor::FromSRGBColor(Swatches[Index]);
 	}
 }
+
+float UBRSettings::SkinToneFor(EPVVFaction Team, float Slider)
+{
+	const UBRSettings* S = GetDefault<UBRSettings>();
+	const bool bWarden = Team == BR::Wardens;
+	const float Lo = bWarden ? S->WardenSkinMin : S->RunnerSkinMin;
+	const float Hi = bWarden ? S->WardenSkinMax : S->RunnerSkinMax;
+	return FMath::Lerp(FMath::Min(Lo, Hi), FMath::Max(Lo, Hi), FMath::Clamp(Slider, 0.f, 1.f));
+}

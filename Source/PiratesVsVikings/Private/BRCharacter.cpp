@@ -428,7 +428,11 @@ void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 	// Every NPC gets a random look so the crowd isn't all clones (and players can blend in).
 	// Every slider gets used: all sorts of faces, natural hair colours, any of the clothes / beards / glasses.
 	FBRLook Random;
-	BR::RandomizeLook(Random, SkinToneMin, SkinToneMax, HairStyles.Num(), FacialHairStyles.Num(), ShirtStyles.Num(), PantsStyles.Num(), GlassesStyles.Num());
+	// Locals use the Runner skin range (Project Settings) unless the game mode narrows it further.
+	const UBRSettings* SkinRange = GetDefault<UBRSettings>();
+	const float NPCMin = FMath::Max(FMath::Min(SkinToneMin, SkinToneMax), FMath::Min(SkinRange->RunnerSkinMin, SkinRange->RunnerSkinMax));
+	const float NPCMax = FMath::Min(FMath::Max(SkinToneMin, SkinToneMax), FMath::Max(SkinRange->RunnerSkinMin, SkinRange->RunnerSkinMax));
+	BR::RandomizeLook(Random, NPCMin, FMath::Max(NPCMin, NPCMax), HairStyles.Num(), FacialHairStyles.Num(), ShirtStyles.Num(), PantsStyles.Num(), GlassesStyles.Num());
 	Random.bHat = FMath::RandRange(0, 2) != 0;
 	Random.bSet = true;
 	Look = Random;
@@ -718,7 +722,9 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	PickOrDefault(OutfitBottom, PantsStyles, IsWarden() ? 0 : L.PantsStyle, DefaultBottomMesh.Get());
 	PickOrDefault(OutfitFace, GlassesStyles, L.Glasses, nullptr);
 	PickStyle(FacialHair, FacialHairStyles, L.FacialHair);
-	ApplySkin(BR::SkinColor(L.SkinTone));
+	// Players: the slider only covers their team's allowed skin range (Project Settings -> Border Run -> Skin Range).
+	// NPCs already rolled a tone inside the village range.
+	ApplySkin(BR::SkinColor(bIsNPC ? L.SkinTone : UBRSettings::SkinToneFor(GetFaction(), L.SkinTone)));
 	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor) || IsWarden(), BR::ClothColor(L.ShirtColor), ClothMaterialSlot);
 	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor) || IsWarden(), BR::ClothColor(L.PantsColor), ClothMaterialSlot);
 	TintOutfit(Hair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));

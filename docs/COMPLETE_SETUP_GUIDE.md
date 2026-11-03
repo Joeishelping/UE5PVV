@@ -856,6 +856,18 @@ All of these are sold in the Runner town by the other shops; the smoke bomb is a
 
 ---
 
+## Part 15u: Skin range (limit the skin slider)
+
+Skin tones go from **0 = very light** to **1 = very dark** (see **Art/Characters/Previews/SkinTones.png** for every value).
+
+**Set the allowed range:** Project Settings -> Game -> **Border Run** -> **Skin Range**:
+- **Runner skin: lightest allowed / darkest allowed** (default **0.20 - 0.75**: light tan to dark brown).
+- **Border Patrol skin: lightest allowed / darkest allowed** (default 0 - 1: anything).
+
+The **Skin slider** in the Customize menu now covers *only* that range: all the way left = the lightest allowed, all the way right = the darkest allowed. NPCs (locals) and bots also stay inside the Runner range. (The game mode's NPC Skin Tone Min/Max can narrow it further.)
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
