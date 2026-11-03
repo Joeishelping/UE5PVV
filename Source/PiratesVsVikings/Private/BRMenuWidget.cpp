@@ -173,7 +173,68 @@ void UBRMenuWidget::BuildLayout()
 	AddRow(Box, StatusLine);
 	AddRow(Box, MakeText(TEXT("Press M in game to open this menu again."), 12, FLinearColor(0.55f, 0.55f, 0.55f)));
 	BuildHostPanel(Canvas);
+	BuildSettingsPanel(Canvas);
 }
+
+void UBRMenuWidget::BuildSettingsPanel(UCanvasPanel* Canvas)
+{
+	USizeBox* Frame = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	Frame->SetWidthOverride(330.f);
+	if (UCanvasPanelSlot* FrameSlot = Canvas->AddChildToCanvas(Frame))
+	{
+		FrameSlot->SetAnchors(FAnchors(0.f, 0.5f));
+		FrameSlot->SetAlignment(FVector2D(0.f, 0.5f));
+		FrameSlot->SetPosition(FVector2D(30.f, 0.f));
+		FrameSlot->SetAutoSize(true);
+	}
+	UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	Frame->AddChild(Box);
+	AddRow(Box, MakeText(TEXT("SETTINGS"), 22, FLinearColor(1.f, 0.85f, 0.3f)), 4.f);
+	TObjectPtr<UBorder> NoSwatch;
+	AddRow(Box, MakeSliderRow(TEXT("Mouse"), (FPVVPlayerOptions::LookSensitivity - 0.2f) / 2.8f, SensSlider, NoSwatch), 2.f);
+	AddRow(Box, MakeSliderRow(TEXT("Field of view"), (FPVVPlayerOptions::FieldOfView - 70.f) / 40.f, FovSlider, NoSwatch), 2.f);
+	AddRow(Box, MakeSliderRow(TEXT("Volume"), FPVVPlayerOptions::MasterVolume, MasterSlider, NoSwatch), 2.f);
+	AddRow(Box, MakeSliderRow(TEXT("Music"), FPVVPlayerOptions::MusicVolume, MusicSlider, NoSwatch), 2.f);
+	SensSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnSensChanged);
+	FovSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnFovChanged);
+	MasterSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnMasterChanged);
+	MusicSlider->OnValueChanged.AddDynamic(this, &UBRMenuWidget::OnMusicChanged);
+	UHorizontalBox* InvertRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	InvertBox = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass());
+	InvertBox->SetIsChecked(FPVVPlayerOptions::bInvertLook);
+	InvertBox->OnCheckStateChanged.AddDynamic(this, &UBRMenuWidget::OnInvertChanged);
+	if (UHorizontalBoxSlot* S = InvertRow->AddChildToHorizontalBox(InvertBox)) { S->SetVerticalAlignment(VAlign_Center); }
+	if (UHorizontalBoxSlot* S = InvertRow->AddChildToHorizontalBox(MakeText(TEXT("Invert mouse up/down"), 15, FLinearColor::White)))
+	{
+		S->SetVerticalAlignment(VAlign_Center);
+		S->SetPadding(FMargin(6.f, 0.f, 0.f, 0.f));
+	}
+	AddRow(Box, InvertRow, 4.f);
+	SettingsReadout = MakeText(TEXT(""), 13, FLinearColor(0.7f, 0.7f, 0.7f));
+	AddRow(Box, SettingsReadout, 4.f);
+	SettingsChanged();
+}
+
+void UBRMenuWidget::SettingsChanged()
+{
+	if (SettingsReadout)
+	{
+		SettingsReadout->SetText(FText::FromString(FString::Printf(TEXT("Mouse x%.1f  |  FOV %d  |  Volume %d%%  |  Music %d%%"),
+			FPVVPlayerOptions::LookSensitivity, FMath::RoundToInt(FPVVPlayerOptions::FieldOfView),
+			FMath::RoundToInt(FPVVPlayerOptions::MasterVolume * 100.f), FMath::RoundToInt(FPVVPlayerOptions::MusicVolume * 100.f))));
+	}
+	if (UBRGameInstance* GI = GetBRGameInstance())
+	{
+		GI->ApplyOptions();
+		GI->SaveOptions();
+	}
+}
+
+void UBRMenuWidget::OnSensChanged(float Value) { FPVVPlayerOptions::LookSensitivity = 0.2f + Value * 2.8f; SettingsChanged(); }
+void UBRMenuWidget::OnFovChanged(float Value) { FPVVPlayerOptions::FieldOfView = 70.f + Value * 40.f; SettingsChanged(); }
+void UBRMenuWidget::OnMasterChanged(float Value) { FPVVPlayerOptions::MasterVolume = Value; SettingsChanged(); }
+void UBRMenuWidget::OnMusicChanged(float Value) { FPVVPlayerOptions::MusicVolume = Value; SettingsChanged(); }
+void UBRMenuWidget::OnInvertChanged(bool bChecked) { FPVVPlayerOptions::bInvertLook = bChecked; SettingsChanged(); }
 
 UHorizontalBox* UBRMenuWidget::MakeStepRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, UButton*& OutPrev, UButton*& OutNext)
 {

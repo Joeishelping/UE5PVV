@@ -1,6 +1,8 @@
 #include "BRGameInstance.h"
 #include "PiratesVsVikings.h"
 #include "BRPlayerState.h"
+#include "BRCharacter.h"
+#include "AudioDevice.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -161,10 +163,65 @@ FString UBRGameInstance::HatUnlockText(EBRHat Hat) const
 	}
 }
 
+void UBRGameInstance::SaveOptions() const
+{
+	if (!GConfig)
+	{
+		return;
+	}
+	GConfig->SetFloat(LookSection, TEXT("OptSensitivity"), FPVVPlayerOptions::LookSensitivity, GGameUserSettingsIni);
+	GConfig->SetBool(LookSection, TEXT("OptInvert"), FPVVPlayerOptions::bInvertLook, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("OptFOV"), FPVVPlayerOptions::FieldOfView, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("OptMaster"), FPVVPlayerOptions::MasterVolume, GGameUserSettingsIni);
+	GConfig->SetFloat(LookSection, TEXT("OptMusic"), FPVVPlayerOptions::MusicVolume, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+void UBRGameInstance::LoadOptions()
+{
+	if (!GConfig)
+	{
+		return;
+	}
+	GConfig->GetFloat(LookSection, TEXT("OptSensitivity"), FPVVPlayerOptions::LookSensitivity, GGameUserSettingsIni);
+	GConfig->GetBool(LookSection, TEXT("OptInvert"), FPVVPlayerOptions::bInvertLook, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("OptFOV"), FPVVPlayerOptions::FieldOfView, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("OptMaster"), FPVVPlayerOptions::MasterVolume, GGameUserSettingsIni);
+	GConfig->GetFloat(LookSection, TEXT("OptMusic"), FPVVPlayerOptions::MusicVolume, GGameUserSettingsIni);
+	FPVVPlayerOptions::LookSensitivity = FMath::Clamp(FPVVPlayerOptions::LookSensitivity, 0.1f, 4.f);
+	FPVVPlayerOptions::FieldOfView = FMath::Clamp(FPVVPlayerOptions::FieldOfView, 60.f, 120.f);
+}
+
+void UBRGameInstance::ApplyOptions()
+{
+	if (GEngine)
+	{
+		if (FAudioDeviceHandle Device = GEngine->GetMainAudioDevice())
+		{
+			Device->SetTransientPrimaryVolume(FMath::Clamp(FPVVPlayerOptions::MasterVolume, 0.f, 1.f));
+		}
+	}
+	if (UWorld* World = GetWorld())
+	{
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (const APlayerController* PC = It->Get(); PC && PC->IsLocalController())
+			{
+				if (ABRCharacter* Me = Cast<ABRCharacter>(PC->GetPawn()))
+				{
+					Me->ApplyCameraOptions();
+				}
+			}
+		}
+	}
+}
+
 void UBRGameInstance::Init()
 {
 	Super::Init();
 	LoadLook();
+	LoadOptions();
+	ApplyOptions();
 	if (IOnlineSessionPtr Sessions = GetSessions())
 	{
 		CreateHandle = Sessions->AddOnCreateSessionCompleteDelegate_Handle(FOnCreateSessionCompleteDelegate::CreateUObject(this, &UBRGameInstance::OnCreateSessionComplete));

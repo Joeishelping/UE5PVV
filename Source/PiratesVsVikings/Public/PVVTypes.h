@@ -31,6 +31,16 @@ enum class EPVVMatchPhase : uint8
 	Ended
 };
 
+/** This player's options (Settings menu). Saved by the game instance. */
+struct PIRATESVSVIKINGS_API FPVVPlayerOptions
+{
+	static float LookSensitivity;
+	static bool bInvertLook;
+	static float FieldOfView;
+	static float MasterVolume;
+	static float MusicVolume;
+};
+
 namespace PVV
 {
 	/** Only enforcement can restrain and detain. */

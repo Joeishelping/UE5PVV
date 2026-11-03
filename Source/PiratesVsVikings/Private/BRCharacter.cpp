@@ -264,6 +264,10 @@ void ABRCharacter::StartFlight(const FVector& Velocity)
 void ABRCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+	if (GetNetMode() != NM_DedicatedServer && GetVelocity().Z < -700.f)
+	{
+		PlayBodySound(GetDefault<UBRSettings>()->BodyThumpSounds, GetActorLocation() - FVector(0.f, 0.f, 80.f), FMath::Clamp(-GetVelocity().Z / 1400.f, 0.3f, 1.f));
+	}
 	if (HasAuthority() && FallFromZ > 0.f)
 	{
 		const float Drop = FallFromZ - GetActorLocation().Z;
@@ -703,6 +707,7 @@ void ABRCharacter::BeginPlay()
 	DefaultArmLength = CameraBoom->TargetArmLength;
 	DefaultSocketOffset = CameraBoom->SocketOffset;
 	DefaultFOV = FollowCamera->FieldOfView;
+	ApplyCameraOptions();
 	CameraBaseLocation = FollowCamera->GetRelativeLocation();
 	SetupProximityVoice();
 	EnableWobble();
@@ -1549,6 +1554,10 @@ void ABRCharacter::OnAttackStartedNative()
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, PunchSwingSound, GetActorLocation());
 	}
+	else if (GetNetMode() != NM_DedicatedServer)
+	{
+		PlayBodySound(GetDefault<UBRSettings>()->WhooshSounds, GetActorLocation(), 0.7f);
+	}
 }
 
 bool ABRCharacter::CanAttackWhileCarrying() const
@@ -2039,6 +2048,11 @@ void ABRCharacter::TickShake(float DeltaSeconds)
 
 void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 {
+	if (GetNetMode() != NM_DedicatedServer && GetWorld()->GetTimeSeconds() - LastGruntTime > 0.4f && FMath::FRand() < 0.75f)
+	{
+		LastGruntTime = GetWorld()->GetTimeSeconds();
+		PlayBodySound(GetDefault<UBRSettings>()->HitGruntSounds, GetActorLocation() + FVector(0.f, 0.f, 60.f));
+	}
 	if (HasAuthority())
 	{
 		BlowDisguise();
@@ -2168,6 +2182,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		const FVector Mouth = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation() + FVector(0.f, 0.f, 70.f);
 		ABRGameState::SpawnLocalFX(this, EBRFX::CigaretteSmoke, Mouth + GetActorForwardVector() * 25.f + FVector(0.f, 0.f, -5.f));
 	}
+	TickBodySounds(DeltaSeconds);
 	TickShake(DeltaSeconds);
 	TickReachVisuals();
 	TickRope();
@@ -3093,6 +3108,75 @@ void ABRCharacter::TickReachVisuals()
 // -------------------------------------------------------------------------------------------
 // Hiding spots, cardboard box, lasso, K9 leash
 
+void ABRCharacter::ApplyCameraOptions()
+{
+	if (FollowCamera && IsLocallyControlled())
+	{
+		DefaultFOV = FMath::Clamp(FPVVPlayerOptions::FieldOfView, 60.f, 120.f);
+		FollowCamera->SetFieldOfView(DefaultFOV);
+	}
+}
+
+void ABRCharacter::PlayBodySound(const TArray<TSoftObjectPtr<USoundBase>>& List, const FVector& Where, float Volume)
+{
+	if (USoundBase* Sound = UBRSettings::PickSound(List))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, Where, FMath::Clamp(Volume, 0.05f, 1.5f), FMath::FRandRange(0.92f, 1.08f));
+	}
+}
+
+void ABRCharacter::TickBodySounds(float DeltaSeconds)
+{
+	if (GetNetMode() == NM_DedicatedServer || bHiddenInSpot)
+	{
+		return;
+	}
+	const UBRSettings* Sounds = GetDefault<UBRSettings>();
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float Half = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	// Footsteps in time with your stride.
+	const float Speed = GetVelocity().Size2D();
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (GetCondition() == EPVVCondition::Normal && Move && Move->IsMovingOnGround() && Speed > 80.f && !GetCurrentBoat() && !GetCarrier())
+	{
+		StepClock -= DeltaSeconds;
+		if (StepClock <= 0.f)
+		{
+			StepClock = FMath::Clamp(165.f / Speed, 0.25f, 0.7f);
+			PlayBodySound(Sounds->FootstepSounds, GetActorLocation() - FVector(0.f, 0.f, Half), bIsCrouched ? 0.3f : 0.6f);
+		}
+	}
+	else
+	{
+		StepClock = 0.05f;
+	}
+	// Ragdoll tumbling: thump when the body slams into the ground.
+	if (GetCondition() == EPVVCondition::KnockedDown && GetMesh() && GetMesh()->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE)
+	{
+		const float Vz = GetMesh()->GetPhysicsLinearVelocity(TEXT("pelvis")).Z;
+		if (PelvisFallSpeed < -350.f && Vz > -80.f && Now - LastThumpTime > 0.25f)
+		{
+			LastThumpTime = Now;
+			PlayBodySound(Sounds->BodyThumpSounds, GetMesh()->GetBoneLocation(TEXT("pelvis")), FMath::Clamp(-PelvisFallSpeed / 900.f, 0.3f, 1.2f));
+		}
+		PelvisFallSpeed = Vz;
+	}
+	else
+	{
+		PelvisFallSpeed = 0.f;
+	}
+	// Screaming while flying through the air.
+	if (bFlying && !bYelled)
+	{
+		bYelled = true;
+		PlayBodySound(Sounds->FlyingYellSounds, GetActorLocation());
+	}
+	else if (!bFlying)
+	{
+		bYelled = false;
+	}
+}
+
 ABRDog* ABRCharacter::GetLeashedDog() const
 {
 	return LeashedDog.Get();
@@ -3382,6 +3466,7 @@ void ABRCharacter::DoHeadbutt()
 void ABRCharacter::Multicast_Kick_Implementation()
 {
 	PlayOneShot(KickAnim);
+	PlayBodySound(GetDefault<UBRSettings>()->WhooshSounds, GetActorLocation(), 0.8f);
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("foot_r")) != INDEX_NONE)
 	{
 		const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
@@ -3394,6 +3479,7 @@ void ABRCharacter::Multicast_Kick_Implementation()
 void ABRCharacter::Multicast_Headbutt_Implementation()
 {
 	PlayOneShot(HeadbuttAnim);
+	PlayBodySound(GetDefault<UBRSettings>()->WhooshSounds, GetActorLocation(), 0.6f);
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE)
 	{
 		const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
@@ -3744,6 +3830,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 
 void ABRCharacter::Multicast_DiveLunge_Implementation()
 {
+	PlayBodySound(GetDefault<UBRSettings>()->WhooshSounds, GetActorLocation(), 1.f);
 	// Superman: throw the upper body and arms forward so the dive reads from far away.
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
 	{

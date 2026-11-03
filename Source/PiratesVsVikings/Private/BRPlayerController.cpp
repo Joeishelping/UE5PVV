@@ -146,6 +146,8 @@ void ABRPlayerController::SetupInputComponent()
 		InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ABRPlayerController::ToggleMenu);
 		InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ABRPlayerController::ToggleMic);
 		InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ABRPlayerController::ToggleReady);
+		InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ABRPlayerController::ScoreboardOn);
+		InputComponent->BindKey(EKeys::Tab, IE_Released, this, &ABRPlayerController::ScoreboardOff);
 		InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ABRPlayerController::SpectateNext);
 	}
 }

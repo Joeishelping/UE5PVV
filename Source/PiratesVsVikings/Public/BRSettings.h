@@ -98,6 +98,21 @@ public:
 
 	USoundBase* GetSound(EBRSfx Sfx) const;
 
+	// --- Body sounds (every character). Add several of each and one is picked at random. -------------------
+	/** Footsteps (played in step with walking / running; quieter crouched). */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Sounds") TArray<TSoftObjectPtr<USoundBase>> FootstepSounds;
+	/** A body hitting the ground (ragdoll tumbles, hard landings). Louder the harder they land. */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Sounds") TArray<TSoftObjectPtr<USoundBase>> BodyThumpSounds;
+	/** "Oof!" when you get hit. */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Sounds") TArray<TSoftObjectPtr<USoundBase>> HitGruntSounds;
+	/** Screams when you get thrown, launched or catapulted. */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Sounds") TArray<TSoftObjectPtr<USoundBase>> FlyingYellSounds;
+	/** Whoosh of a punch, kick, headbutt or dive. */
+	UPROPERTY(Config, EditAnywhere, Category = "Body Sounds") TArray<TSoftObjectPtr<USoundBase>> WhooshSounds;
+
+	/** One random sound from a list (nullptr if empty). */
+	static USoundBase* PickSound(const TArray<TSoftObjectPtr<USoundBase>>& List);
+
 	// --- Effects: drag in a Niagara particle system (free ones on Fab). Empty = the simple built-in look. ---------
 	/** Dust when someone lands hard, belly-flops or falls off a wall. */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> DustEffect;

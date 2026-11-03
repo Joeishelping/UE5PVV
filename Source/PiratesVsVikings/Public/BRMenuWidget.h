@@ -108,6 +108,20 @@ private:
 	UFUNCTION() void OnFacialPrev();
 	UFUNCTION() void OnFacialNext();
 	UFUNCTION() void OnHatPrev();
+	// Settings panel (left side).
+	void BuildSettingsPanel(class UCanvasPanel* Canvas);
+	UPROPERTY() TObjectPtr<USlider> SensSlider;
+	UPROPERTY() TObjectPtr<USlider> FovSlider;
+	UPROPERTY() TObjectPtr<USlider> MasterSlider;
+	UPROPERTY() TObjectPtr<USlider> MusicSlider;
+	UPROPERTY() TObjectPtr<UCheckBox> InvertBox;
+	UPROPERTY() TObjectPtr<UTextBlock> SettingsReadout;
+	UFUNCTION() void OnSensChanged(float Value);
+	UFUNCTION() void OnFovChanged(float Value);
+	UFUNCTION() void OnMasterChanged(float Value);
+	UFUNCTION() void OnMusicChanged(float Value);
+	UFUNCTION() void OnInvertChanged(bool bChecked);
+	void SettingsChanged();
 	UFUNCTION() void OnHatNext();
 	void StepStyle(bool bFacial, int32 Step);
 	UHorizontalBox* MakePickerRow(const FString& Label, TObjectPtr<UTextBlock>& OutValue, int32 Which); // 0 hair, 1 beard, 2 hat

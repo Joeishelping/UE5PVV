@@ -49,6 +49,12 @@ public:
 	void SaveLook() const;
 	void LoadLook();
 
+	// --- Settings menu (this PC) ---------------------------------------------------------
+	void SaveOptions() const;
+	void LoadOptions();
+	/** Push the options into the game (volume, camera). */
+	void ApplyOptions();
+
 	// --- Host (kept between rounds on the host's PC) ------------------------------------------
 	FBRHostSettings Host;
 	void SaveHost() const;

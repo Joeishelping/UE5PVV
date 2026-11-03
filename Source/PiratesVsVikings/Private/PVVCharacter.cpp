@@ -317,11 +317,17 @@ void APVVCharacter::Input_Move(const FInputActionValue& Value)
 	AddMovementInput(FRotationMatrix(Yaw).GetUnitAxis(EAxis::Y), Axis.X);
 }
 
+float FPVVPlayerOptions::LookSensitivity = 1.f;
+bool FPVVPlayerOptions::bInvertLook = false;
+float FPVVPlayerOptions::FieldOfView = 90.f;
+float FPVVPlayerOptions::MasterVolume = 1.f;
+float FPVVPlayerOptions::MusicVolume = 1.f;
+
 void APVVCharacter::Input_Look(const FInputActionValue& Value)
 {
-	const FVector2D Axis = Value.Get<FVector2D>();
+	const FVector2D Axis = Value.Get<FVector2D>() * FPVVPlayerOptions::LookSensitivity;
 	AddControllerYawInput(Axis.X);
-	AddControllerPitchInput(-Axis.Y);
+	AddControllerPitchInput(FPVVPlayerOptions::bInvertLook ? Axis.Y : -Axis.Y);
 }
 
 void APVVCharacter::Input_Jump()

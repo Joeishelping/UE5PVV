@@ -269,7 +269,7 @@ void ABRDesertArena::PlayNextAmbient()
 	}
 	AmbientIndex = (AmbientIndex + 1 + (AmbientTracks.Num() > 1 ? FMath::RandRange(0, AmbientTracks.Num() - 2) : 0)) % AmbientTracks.Num();
 	AmbientMusic->SetSound(AmbientTracks[AmbientIndex]);
-	AmbientMusic->SetVolumeMultiplier(AmbientVolume);
+	AmbientMusic->SetVolumeMultiplier(AmbientVolume * FPVVPlayerOptions::MusicVolume);
 	AmbientMusic->Play();
 }
 
@@ -297,7 +297,7 @@ void ABRDesertArena::Tick(float DeltaSeconds)
 	{
 		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 		const ABRCar* Car = PC ? Cast<ABRCar>(PC->GetPawn()) : nullptr;
-		float Target = AmbientVolume;
+		float Target = AmbientVolume * FPVVPlayerOptions::MusicVolume;
 		if (Car && Car->IsRadioOn())
 		{
 			Target *= 0.15f; // radio takes over

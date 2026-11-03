@@ -25,6 +25,10 @@ public:
 	void ToggleMic();
 	/** Lobby: Y = ready / not ready. */
 	void ToggleReady();
+	/** Hold Tab: scoreboard. */
+	bool bShowScoreboard = false;
+	void ScoreboardOn() { bShowScoreboard = true; }
+	void ScoreboardOff() { bShowScoreboard = false; }
 	/** In the Holding Pen: N = watch the next player. */
 	void SpectateNext();
 	/** Host: change the match settings (M menu). */

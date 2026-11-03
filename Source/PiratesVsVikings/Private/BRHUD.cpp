@@ -204,6 +204,50 @@ void ABRHUD::DrawHUD()
 		DrawText(GI->StatusText, FLinearColor(0.7f, 0.7f, 0.7f), 20.f, SY - 230.f, Small, 1.0f);
 	}
 
+	// --- Scoreboard (hold Tab)
+	if (PC->bShowScoreboard)
+	{
+		const float W = FMath::Min(1100.f, SX - 80.f);
+		const float Left = (SX - W) * 0.5f, Top = SY * 0.14f;
+		TArray<ABRPlayerState*> Teams[2];
+		for (APlayerState* Each : GS->PlayerArray)
+		{
+			if (ABRPlayerState* Other = Cast<ABRPlayerState>(Each); Other && Other->GetFaction() != EPVVFaction::None)
+			{
+				Teams[Other->GetFaction() == BR::Wardens ? 1 : 0].Add(Other);
+			}
+		}
+		int32 Rows = 1;
+		for (TArray<ABRPlayerState*>& Team : Teams)
+		{
+			Team.Sort([](const ABRPlayerState& A, const ABRPlayerState& B) { return A.Points > B.Points; });
+			Rows = FMath::Max(Rows, Team.Num());
+		}
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.75f), Left, Top, W, 90.f + Rows * 26.f);
+		const float ColW = W * 0.5f;
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const float X = Left + Side * ColW + 16.f;
+			const bool bW = Side == 1;
+			DrawText(FString::Printf(TEXT("%s   %d"), *(bW ? BR::WardenName() : BR::RunnerName()).ToUpper(), bW ? GS->WardenScore : GS->RunnerScore),
+				bW ? WardenCol : RunnerCol, X, Top + 10.f, Big, 1.2f);
+			DrawText(bW ? TEXT("NAME                      PTS   CATCH  CLEARED  KO   PING") : TEXT("NAME                      PTS   CROSS  SMUGGLED  KO   PING"),
+				FLinearColor(0.7f, 0.7f, 0.7f), X, Top + 50.f, Small, 1.f);
+			for (int32 i = 0; i < Teams[Side].Num(); ++i)
+			{
+				const ABRPlayerState* R = Teams[Side][i];
+				const float Y = Top + 72.f + i * 26.f;
+				const FLinearColor RowCol = R == PS ? Yellow : White;
+				DrawText(R->GetPlayerName().Left(24), RowCol, X, Y, Small, 1.15f);
+				DrawText(FString::Printf(TEXT("%d"), R->Points), RowCol, X + ColW * 0.48f, Y, Small, 1.15f);
+				DrawText(FString::Printf(TEXT("%d"), bW ? R->StatCatches : R->StatCrossings), RowCol, X + ColW * 0.58f, Y, Small, 1.15f);
+				DrawText(FString::Printf(TEXT("%d"), bW ? R->StatClearedTrucks : R->StatSmuggled + R->StatContraband), RowCol, X + ColW * 0.69f, Y, Small, 1.15f);
+				DrawText(FString::Printf(TEXT("%d"), R->StatKnockdowns), RowCol, X + ColW * 0.81f, Y, Small, 1.15f);
+				DrawText(R->IsABot() ? FString(TEXT("BOT")) : FString::Printf(TEXT("%d"), FMath::RoundToInt(R->GetPingInMilliseconds())), RowCol, X + ColW * 0.88f, Y, Small, 1.15f);
+			}
+		}
+	}
+
 	// --- Tips for your first few rounds
 	if (const UBRGameInstance* TipGI = GetGameInstance<UBRGameInstance>(); TipGI && TipGI->RoundsPlayed < 3 && GS->Phase != EBRPhase::Ended && PS)
 	{

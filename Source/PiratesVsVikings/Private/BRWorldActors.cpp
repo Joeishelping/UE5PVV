@@ -3936,6 +3936,10 @@ void ABRMariachiBand::Multicast_Note_Implementation(FVector_NetQuantize Where, b
 void ABRMariachiBand::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (MusicAudio)
+	{
+		MusicAudio->SetVolumeMultiplier(FPVVPlayerOptions::MusicVolume);
+	}
 	if (!HasAuthority())
 	{
 		return;

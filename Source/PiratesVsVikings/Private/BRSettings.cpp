@@ -44,6 +44,16 @@ USoundBase* UBRSettings::GetSound(EBRSfx Sfx) const
 	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;
 }
 
+USoundBase* UBRSettings::PickSound(const TArray<TSoftObjectPtr<USoundBase>>& List)
+{
+	if (List.Num() == 0)
+	{
+		return nullptr;
+	}
+	const TSoftObjectPtr<USoundBase>& Pick = List[FMath::RandRange(0, List.Num() - 1)];
+	return Pick.IsNull() ? nullptr : Pick.LoadSynchronous();
+}
+
 UNiagaraSystem* UBRSettings::GetEffect(EBRFX Kind) const
 {
 	const TSoftObjectPtr<UNiagaraSystem>* Slot = nullptr;

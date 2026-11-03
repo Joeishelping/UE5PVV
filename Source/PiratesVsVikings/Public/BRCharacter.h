@@ -137,6 +137,8 @@ public:
 	ABRCharacter* GetHandGrabTarget() const { return HandGrabTarget; }
 	ABRCharacter* GetGrabbedBy() const { return GrabbedBy; }
 	float GetGrabStruggle() const { return GrabStruggle; }
+	/** Local: use the Settings menu's field of view. */
+	void ApplyCameraOptions();
 	/** Server: let go of whoever you're holding. */
 	void ReleaseHandGrab();
 	/**
@@ -603,6 +605,14 @@ private:
 	void StopEmote();
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> CigaretteMesh;
 	float NextSmokePuff = 0.f;
+	// Body sounds (local, every screen)
+	void TickBodySounds(float DeltaSeconds);
+	void PlayBodySound(const TArray<TSoftObjectPtr<USoundBase>>& List, const FVector& Where, float Volume = 1.f);
+	float StepClock = 0.f;
+	float PelvisFallSpeed = 0.f;
+	float LastThumpTime = -100.f;
+	float LastGruntTime = -100.f;
+	bool bYelled = false;
 	float EmoteBubbleUntil = -100.f;
 	float LastEmoteTime = -100.f;
 	EPVVCondition LastSoundCondition = EPVVCondition::Normal;

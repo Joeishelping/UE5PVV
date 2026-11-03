@@ -432,7 +432,7 @@ void ABRCar::OnRep_Radio()
 		Offset = FMath::Fmod(FMath::Max(0.f, GS->GetServerWorldTimeSeconds() - RadioStartTime), Duration);
 	}
 	RadioAudio->SetSound(Song);
-	RadioAudio->SetVolumeMultiplier(RadioVolume);
+	RadioAudio->SetVolumeMultiplier(RadioVolume * FPVVPlayerOptions::MusicVolume);
 	RadioAudio->Play(Offset);
 }
 
