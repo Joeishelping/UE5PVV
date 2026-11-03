@@ -51,6 +51,12 @@ public:
 	bool OrderOut(APVVCharacter* Officer);
 	/** Can this officer order people out of it right now? */
 	bool CanOrderOut(const APVVCharacter* Officer) const { return WantsSearch(Officer); }
+	/** A zip-tied prisoner this officer could pull out of the car (O key). */
+	bool HasPrisonerFor(const APVVCharacter* Officer) const { return FindPrisonerToUnload(Officer) != nullptr; }
+	/** Server: pull a zip-tied prisoner out onto the officer's shoulder. */
+	bool TakePrisonerOut(APVVCharacter* Officer);
+	/** Anyone aboard who isn't zip-tied (and isn't you)? */
+	bool HasFreePeopleAboard(const APVVCharacter* Except) const;
 	/** Server: beep beep. */
 	void HonkHorn() { Multicast_Horn(); }
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;
@@ -101,6 +107,8 @@ private:
 	UFUNCTION() void OnRep_Radio();
 	UFUNCTION() void OnRadioFinished();
 	bool WantsRefuel(const APVVCharacter* Interactor) const;
+	/** Driver's seat is free and you're allowed to drive: E = get in and drive (beats every other prompt). */
+	bool WantsDrive(const APVVCharacter* Interactor) const;
 	bool WantsSearch(const APVVCharacter* Interactor) const;
 	/** A zip-tied passenger a Border Patrol agent standing next to the truck can take out. */
 	APVVCharacter* FindPrisonerToUnload(const APVVCharacter* Interactor) const;

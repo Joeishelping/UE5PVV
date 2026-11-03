@@ -315,6 +315,38 @@ bool ABRCar::WantsSearch(const APVVCharacter* Interactor) const
 	return false;
 }
 
+bool ABRCar::WantsDrive(const APVVCharacter* Interactor) const
+{
+	return Interactor && !bForSale && !Interactor->GetCarriedCharacter() && !Interactor->GetCurrentBoat()
+		&& Interactor->GetCondition() == EPVVCondition::Normal && Occupants.Num() > 0 && !Occupants[0] && CanDrive(Interactor);
+}
+
+bool ABRCar::HasFreePeopleAboard(const APVVCharacter* Except) const
+{
+	for (const APVVCharacter* Occupant : Occupants)
+	{
+		if (Occupant && Occupant != Except && Occupant->GetCondition() == EPVVCondition::Normal)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ABRCar::TakePrisonerOut(APVVCharacter* Officer)
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+	if (APVVCharacter* Prisoner = FindPrisonerToUnload(Officer))
+	{
+		Officer->StartCarrying(Prisoner); // out of the seat, onto your shoulder
+		return true;
+	}
+	return false;
+}
+
 APVVCharacter* ABRCar::FindPrisonerToUnload(const APVVCharacter* Interactor) const
 {
 	if (!Interactor || Interactor->GetFaction() != BR::Wardens || Interactor->GetCurrentBoat() || Interactor->GetCarriedCharacter()
@@ -338,6 +370,10 @@ bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 	{
 		return WantsBuy(Interactor);
 	}
+	if (WantsDrive(Interactor))
+	{
+		return true; // (prisoners in the back come along for the ride - O takes one out)
+	}
 	if (FindPrisonerToUnload(Interactor))
 	{
 		return true;
@@ -356,6 +392,7 @@ bool ABRCar::CanInteract_Implementation(APVVCharacter* Interactor) const
 float ABRCar::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
 	if (WantsBuy(Interactor)) return 1.f;
+	if (WantsDrive(Interactor)) return 0.f;
 	if (FindPrisonerToUnload(Interactor)) return 0.6f;
 	if (WantsSearch(Interactor)) return 2.5f;
 	if (WantsRefuel(Interactor)) return 2.f;
@@ -367,6 +404,11 @@ FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 	if (WantsBuy(Interactor))
 	{
 		return FText::Format(LOCTEXT("BuyCar", "BUY this {0} - ${1} (hold)"), FText::FromString(GetModelName()), SalePrice);
+	}
+	if (WantsDrive(Interactor) && FindPrisonerToUnload(Interactor))
+	{
+		return GetDriveScale() > 0.f ? LOCTEXT("DriveWithPrisoner", "Drive (prisoner in the back) - O = take them out")
+			: LOCTEXT("DriveWithPrisonerNoGas", "Get in (TANK EMPTY) - O = take the prisoner out");
 	}
 	if (const APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))
 	{
@@ -396,7 +438,16 @@ FText ABRCar::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 
 bool ABRCar::OrderOut(APVVCharacter* Interactor)
 {
-	if (!HasAuthority() || !WantsSearch(Interactor))
+	if (!HasAuthority())
+	{
+		return false;
+	}
+	// Only zip-tied prisoners aboard (no free suspects): O pulls one out onto your shoulder.
+	if (!HasFreePeopleAboard(Interactor) && TakePrisonerOut(Interactor))
+	{
+		return true;
+	}
+	if (!WantsSearch(Interactor))
 	{
 		return false;
 	}
@@ -505,6 +556,11 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 		{
 			GM->Feed(FString::Printf(TEXT("%s bought a %s"), *Interactor->GetPlayerDisplayName(), *GetModelName()));
 		}
+		return;
+	}
+	if (WantsDrive(Interactor))
+	{
+		Super::OnInteract_Implementation(Interactor); // hop in the driver's seat (prisoners stay in the back)
 		return;
 	}
 	if (APVVCharacter* Prisoner = FindPrisonerToUnload(Interactor))

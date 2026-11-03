@@ -3756,7 +3756,7 @@ void ABRCharacter::Server_OrderOut_Implementation()
 	for (TActorIterator<ABRCar> It(GetWorld()); It; ++It)
 	{
 		const float D = FVector::Dist(It->GetActorLocation(), GetActorLocation());
-		if (D < BestDist && It->CanOrderOut(this))
+		if (D < BestDist && (It->CanOrderOut(this) || It->HasPrisonerFor(this)))
 		{
 			BestDist = D;
 			Best = *It;
@@ -3765,6 +3765,12 @@ void ABRCharacter::Server_OrderOut_Implementation()
 	if (!Best)
 	{
 		Notify(LOCTEXT("NoCarToOrder", "Walk up to a vehicle with people in it, then press O to order them out."));
+		return;
+	}
+	if (Best->HasPrisonerFor(this) && !Best->HasFreePeopleAboard(this))
+	{
+		// Just a zip-tied prisoner in there: haul them out onto your shoulder.
+		Best->TakePrisonerOut(this);
 		return;
 	}
 	ABRGameState::Sfx(this, EBRSfx::Whistle, GetActorLocation()); // *TWEEEET*
