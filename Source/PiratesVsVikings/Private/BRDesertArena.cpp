@@ -102,7 +102,7 @@ ABRDesertArena::ABRDesertArena()
 	AddBlock(TEXT("Cell_Left"), FVector(6100.f, 3700.f, Ground + 150.f), FVector(640.f, 40.f, 300.f), Concrete);
 	AddBlock(TEXT("Cell_Right"), FVector(6100.f, 4300.f, Ground + 150.f), FVector(640.f, 40.f, 300.f), Concrete);
 	AddSign(TEXT("Sign_Pen"), TEXT("HOLDING PEN"), FVector(6450.f, 4000.f, Ground + 380.f), 180.f, 80.f, FColor(255, 140, 40));
-	AddBlock(TEXT("Tower"), FVector(4400.f, -1000.f, Ground + 600.f), FVector(300.f, 300.f, 1200.f), Concrete);
+	AddBlock(TEXT("Tower"), FVector(4400.f, -2400.f, Ground + 600.f), FVector(300.f, 300.f, 1200.f), Concrete);
 	AddHut(TEXT("WardenHQ"), FVector(8500.f, 4000.f, Ground), FVector(1200.f, 1400.f, 400.f), FLinearColor(0.3f, 0.35f, 0.3f));
 	AddSign(TEXT("Sign_HQ"), TEXT("WARDEN HQ"), FVector(7880.f, 4000.f, Ground + 480.f), 180.f, 100.f, FColor(255, 140, 40));
 

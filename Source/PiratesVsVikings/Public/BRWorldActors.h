@@ -7,6 +7,7 @@
 #include "BRWorldActors.generated.h"
 
 class ABRCockfightPit;
+class ABRCharacter;
 class ABRLuchaRing;
 class ABRPlayerState;
 class APVVCharacter;

@@ -529,7 +529,7 @@ void APVVCharacter::ApplyKnockdown(AActor* Cause, const FVector& Impulse)
 
 void APVVCharacter::Recover(float BalanceFraction)
 {
-	if (!HasAuthority() || (Condition != EPVVCondition::KnockedDown && !(Condition == EPVVCondition::Normal && IsHeldByHands(Captor))))
+	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)
 	{
 		return;
 	}
@@ -543,7 +543,8 @@ void APVVCharacter::Recover(float BalanceFraction)
 
 void APVVCharacter::Restrain(APVVCharacter* Captor)
 {
-	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)
+	// Knocked down, or held in the captor's hands (they lost the struggle).
+	if (!HasAuthority() || (Condition != EPVVCondition::KnockedDown && !(Condition == EPVVCondition::Normal && IsHeldByHands(Captor))))
 	{
 		return;
 	}
