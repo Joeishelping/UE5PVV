@@ -244,6 +244,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Suspects") float SuspectSurrenderChance = 0.1f;
 	/** NPC finishing move on someone they knocked down: grab, drag, lift overhead, throw. */
 	void BrawlerFinish(ABRCharacter* Foe);
+	/** AI moves (bots / luchador / NPCs). */
+	void BotReach(uint8 Hands) { ArmsReaching = Hands; }
+	void BotDive();
+	void BotDropKick() { DoDropKick(); }
+	bool IsDropKicking() const { return bDropKicking; }
 	/** Getting up takes this long (can't walk while you push yourself up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GetUpSeconds = 1.f;
 	/** Thrown people go flying FLOPPY (ragdoll) and are down this long (unless they were already KO'd). */

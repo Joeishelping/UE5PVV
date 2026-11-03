@@ -3895,8 +3895,9 @@ void ABRLuchaRing::TickFight(float ServerNow)
 		}
 	}
 	// Knockdown counting.
-	const bool bCDown = C->GetCondition() == EPVVCondition::KnockedDown;
-	const bool bLDown = L->GetCondition() == EPVVCondition::KnockedDown;
+	// (going down from your OWN drop kick doesn't count against you)
+	const bool bCDown = C->GetCondition() == EPVVCondition::KnockedDown && !C->IsDropKicking();
+	const bool bLDown = L->GetCondition() == EPVVCondition::KnockedDown && !L->IsDropKicking();
 	if (bCDown && !bChallengerWasDown) { ++LuchadorKOs; ForceNetUpdate(); }
 	if (bLDown && !bLuchadorWasDown) { ++ChallengerKOs; ForceNetUpdate(); }
 	bChallengerWasDown = bCDown;
@@ -3934,30 +3935,60 @@ void ABRLuchaRing::TickFight(float ServerNow)
 	const FVector To = (C->GetActorLocation() - L->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	const float Dist = To.Size();
 	const float Toughness = FMath::Clamp(1.f + Wager / 100.f * ToughnessPer100, 1.f, 3.f);
+	const float Now = GetWorld()->GetTimeSeconds();
 	if (bCDown)
 	{
-		// Showboat while the challenger's down: back off and flex.
-		if (Dist < 260.f)
+		// Challenger's down: half the time he showboats, otherwise he picks them up and THROWS them (Gang Beasts!).
+		if (bLuchaFinishing || L->GetHandGrabTarget() == C)
 		{
-			L->AddMovementInput(-To.GetSafeNormal(), 0.6f);
+			L->BrawlerFinish(C);
+		}
+		else if (Dist < 260.f)
+		{
+			L->AddMovementInput(-To.GetSafeNormal(), 0.6f); // back off and flex
 		}
 		return;
 	}
+	bLuchaFinishing = FMath::FRand() < 0.5f; // decided fresh for the next knockdown
+	// Always facing his opponent.
+	if (Dist > 1.f)
+	{
+		L->SetActorRotation(FMath::RInterpTo(L->GetActorRotation(), FRotator(0.f, To.Rotation().Yaw, 0.f), Delta, 8.f));
+	}
 	if (!L->GetHandGrabTarget() && !L->GetGrabbedBy())
 	{
-		L->GetCharacterMovement()->MaxWalkSpeed = 360.f + 60.f * Toughness;
+		if (!L->IsDiving())
+		{
+			L->BotReach(0); // arms back in after a dive that missed
+		}
+		L->GetCharacterMovement()->MaxWalkSpeed = 470.f + 60.f * Toughness;
+		// RUSH: charge straight at you, and from a few metres out launch a flying dive punch or a drop kick.
+		if (Dist > 260.f && Dist < 520.f && Now >= NextLuchaFlyer)
+		{
+			NextLuchaFlyer = Now + FMath::FRandRange(2.5f, 4.5f) / FMath::Max(1.f, Toughness * 0.7f);
+			if (FMath::RandBool())
+			{
+				L->BotReach(3);
+				L->BotDive(); // fists-first superman
+			}
+			else
+			{
+				L->BotDropKick(); // feet-first
+			}
+			return;
+		}
 		if (Dist > 140.f)
 		{
 			L->AddMovementInput(To.GetSafeNormal(), 1.f); // charge!
 		}
 		else
 		{
-			// Circle around you a little, like a wrestler sizing you up.
-			const FVector Around = FVector::CrossProduct(To.GetSafeNormal(), FVector::UpVector) * FMath::Sin(GetWorld()->GetTimeSeconds() * 1.7f);
-			L->AddMovementInput(Around, 0.5f);
+			// Circle you a little, like a wrestler sizing you up (in, out, side to side).
+			const FVector Around = FVector::CrossProduct(To.GetSafeNormal(), FVector::UpVector) * FMath::Sin(Now * 1.7f);
+			L->AddMovementInput(Around + To.GetSafeNormal() * 0.3f * FMath::Sin(Now * 3.1f), 0.6f);
 		}
 	}
-	L->BrawlerAct(C, FMath::Clamp(0.45f + 0.15f * Toughness, 0.f, 1.f), Delta);
+	L->BrawlerAct(C, FMath::Clamp(0.75f + 0.1f * Toughness, 0.f, 1.f), Delta);
 }
 
 void ABRLuchaRing::Finish(int32 WinnerSide, const FString& Why)

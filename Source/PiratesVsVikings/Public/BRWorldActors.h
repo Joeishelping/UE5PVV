@@ -929,6 +929,8 @@ private:
 	TArray<FLuchaBet> Bets;
 	TWeakObjectPtr<class ABRCharacter> Challenger;
 	TWeakObjectPtr<class ABRCharacter> Luchador;
+	float NextLuchaFlyer = 0.f;
+	bool bLuchaFinishing = false;
 	bool bChallengerWasDown = false;
 	bool bLuchadorWasDown = false;
 	/** Invisible walls along the ropes while a fight is on (you bounce off them like WWE). */

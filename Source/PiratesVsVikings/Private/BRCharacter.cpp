@@ -987,6 +987,42 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 	{
 		return;
 	}
+	// Somebody's going after our coyote? The clients jump in and fight for them.
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		ABRCharacter* Threat = nullptr;
+		if (ABRCharacter* P = L->ProvokedBy.Get(); P && P != this && Now - L->ProvokeTime < 6.f && P->Leader.Get() != L)
+		{
+			Threat = P;
+		}
+		if (!Threat && L->GrabbedBy && L->GrabbedBy.Get() != this && L->GrabbedBy->Leader.Get() != L)
+		{
+			Threat = L->GrabbedBy.Get();
+		}
+		if (!Threat)
+		{
+			Threat = Cast<ABRCharacter>(L->GetCarrier()); // being hauled off: get them!
+		}
+		if (Threat && Threat->GetCondition() == EPVVCondition::Normal && !Threat->GetCurrentBoat()
+			&& FVector::Dist2D(Threat->GetActorLocation(), GetActorLocation()) < 1800.f)
+		{
+			AngryAt = Threat;
+			AngryUntil = Now + 3.f;
+			BrawlAggression = 0.8f;
+			const FVector ToThreat = (Threat->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			GetCharacterMovement()->MaxWalkSpeed = 620.f;
+			if (ToThreat.Size() > 130.f)
+			{
+				AddMovementInput(ToThreat.GetSafeNormal(), 1.f);
+			}
+			BrawlerAct(Threat, 0.8f, DeltaSeconds);
+			return;
+		}
+		if (AngryAt.IsValid() && Now >= AngryUntil)
+		{
+			AngryAt = nullptr; // threat's gone: back to following
+		}
+	}
 	const FVector ToLeader = (L->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	const float Dist = ToLeader.Size();
 	if (LeaderRide && Dist < 700.f)
@@ -4959,6 +4995,11 @@ void ABRCharacter::TickRope()
 
 // -------------------------------------------------------------------------------------------
 // Kick + headbutt
+
+void ABRCharacter::BotDive()
+{
+	Server_Dive_Implementation();
+}
 
 void ABRCharacter::BrawlerFinish(ABRCharacter* Foe)
 {
