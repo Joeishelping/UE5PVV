@@ -123,7 +123,7 @@ protected:
 	/** How far the wheel turns at full steer (degrees). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float SteeringWheelTurn = 120.f;
 	/** NPC trucks drive in two lanes this far either side of the road's middle (cm). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float LaneOffset = 170.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float LaneOffset = 320.f;
 	/** Seconds an NPC truck with nobody driving it sits there before it's towed away. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float TowAfterSeconds = 10.f;
 

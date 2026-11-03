@@ -82,8 +82,14 @@ public:
 	static constexpr float LineX = -5000.f;
 	static constexpr float FenceX = -3500.f;
 	static constexpr float WallX = 3500.f;
-	static constexpr float SafeX = 14000.f;
+	/** The far (Border Patrol) side runs further east than the town side: a long road to the safe zone. */
+	static constexpr float EastX = 26000.f;
+	static constexpr float SafeX = 23000.f;
 	static constexpr float RoadY = -1200.f;
+	/** Half width of the big two-lane road from the edge of town to the safe zone (the town street stays narrow). */
+	static constexpr float RoadHalfWidth = 700.f;
+	/** Where the town street ends and the wide road starts (NPC trucks start here). */
+	static constexpr float TownEdgeX = -6000.f;
 	static constexpr float RiverBedZ = -150.f;
 	static constexpr float DeepHalfWidth = 1100.f;
 

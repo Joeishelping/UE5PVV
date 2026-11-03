@@ -905,6 +905,7 @@ ABRCheckpointGate::ABRCheckpointGate()
 	ArmPivot->SetRelativeLocation(FVector(-80.f, -Half, 110.f));
 	UStaticMeshComponent* Arm = AddMesh(TEXT("Arm"), CubeMesh, FVector(0.f, Half, 0.f), FVector(20.f, Half * 2.f, 20.f), FLinearColor(0.9f, 0.1f, 0.1f), FRotator::ZeroRotator, false);
 	Arm->SetupAttachment(ArmPivot);
+	ArmMesh = Arm;
 
 	Barrier = CreateDefaultSubobject<UBoxComponent>(TEXT("Barrier"));
 	Barrier->SetupAttachment(Root);
@@ -916,6 +917,7 @@ void ABRCheckpointGate::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ABRCheckpointGate, bOpen);
+	DOREPLIFETIME(ABRCheckpointGate, bSmashed);
 }
 
 void ABRCheckpointGate::OpenFor(float Seconds)
@@ -930,17 +932,111 @@ void ABRCheckpointGate::OpenFor(float Seconds)
 void ABRCheckpointGate::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (HasAuthority() && bOpen && GetWorld()->GetTimeSeconds() > CloseAt)
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (HasAuthority() && bOpen && Now > CloseAt)
 	{
 		bOpen = false;
 	}
-	ArmAngle = FMath::FInterpTo(ArmAngle, bOpen ? 80.f : 0.f, DeltaSeconds, 4.f);
+	if (HasAuthority() && bSmashed && Now > RepairAt)
+	{
+		bSmashed = false; // fixed
+		OnRep_Smashed();
+	}
+	// Anything flooring it at the closed barrier smashes straight through.
+	if (HasAuthority() && !bOpen && !bSmashed)
+	{
+		for (TActorIterator<APVVBoat> It(GetWorld()); It; ++It)
+		{
+			const FVector Local = GetActorTransform().InverseTransformPosition(It->GetActorLocation());
+			const float Speed = It->GetVelocity().Size2D();
+			const float Toward = FVector::DotProduct(It->GetVelocity().GetSafeNormal2D(), -Local.GetSafeNormal2D());
+			if (FMath::Abs(Local.X) < 550.f && FMath::Abs(Local.Y) < ABRWall::GateHalfWidth + 100.f && Speed > 450.f && Toward > 0.3f)
+			{
+				Smash(*It);
+				break;
+			}
+		}
+	}
+	ArmAngle = FMath::FInterpTo(ArmAngle, (bOpen && !bSmashed) ? 80.f : 0.f, DeltaSeconds, 4.f);
 	ArmPivot->SetRelativeRotation(FRotator(0.f, 0.f, ArmAngle));
-	const int32 State = bOpen ? 1 : 0;
+	const int32 State = IsOpen() ? 1 : 0;
 	if (State != AppliedState)
 	{
 		AppliedState = State;
 		Barrier->SetCollisionProfileName(bOpen ? TEXT("NoCollision") : TEXT("BlockAll"));
+	}
+}
+
+void ABRCheckpointGate::Smash(AActor* Smasher)
+{
+	if (!HasAuthority() || bSmashed)
+	{
+		return;
+	}
+	bSmashed = true;
+	RepairAt = GetWorld()->GetTimeSeconds() + RepairSeconds;
+	OnRep_Smashed();
+	ForceNetUpdate();
+	ABRGameState::Sfx(this, EBRSfx::GateSmash, GetActorLocation());
+	ABRGameState::FX(this, EBRFX::Sparks, GetActorLocation() + FVector(0.f, 0.f, 110.f));
+	ABRGameState::FX(this, EBRFX::Dust, GetActorLocation() + FVector(0.f, 0.f, 20.f));
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		const APVVBoat* Ride = Cast<APVVBoat>(Smasher);
+		const APVVCharacter* Driver = Ride ? Ride->GetDriver() : nullptr;
+		const ABRCharacter* BRDriver = Cast<ABRCharacter>(Driver);
+		if (Driver && !(BRDriver && BRDriver->IsNPC()))
+		{
+			GM->Feed(FString::Printf(TEXT("%s SMASHED THROUGH the checkpoint!"), *Driver->GetPlayerDisplayName()));
+		}
+		else
+		{
+			GM->Feed(TEXT("The checkpoint barrier got SMASHED!"));
+		}
+	}
+}
+
+void ABRCheckpointGate::OnRep_Smashed()
+{
+	if (ArmMesh)
+	{
+		ArmMesh->SetHiddenInGame(bSmashed);
+	}
+	for (UStaticMeshComponent* Piece : Debris)
+	{
+		if (Piece)
+		{
+			Piece->DestroyComponent();
+		}
+	}
+	Debris.Reset();
+	if (!bSmashed || GetNetMode() == NM_DedicatedServer || !ArmMesh)
+	{
+		return;
+	}
+	// The arm snaps into chunks that go flying down the road (just for looks; they vanish when it's fixed).
+	const FVector ArmStart = ArmPivot->GetComponentLocation();
+	const FVector Along = GetActorRightVector();
+	const float GateHalf = ABRWall::GateHalfWidth;
+	for (int32 i = 0; i < 5; ++i)
+	{
+		UStaticMeshComponent* Piece = NewObject<UStaticMeshComponent>(this);
+		Piece->SetStaticMesh(ArmMesh->GetStaticMesh());
+		Piece->SetWorldLocation(ArmStart + Along * (GateHalf * 2.f) * ((i + 0.5f) / 5.f));
+		Piece->SetWorldRotation(GetActorRotation());
+		Piece->SetWorldScale3D(FVector(0.2f, GateHalf * 2.f / 100.f / 5.f, 0.2f));
+		Piece->SetCollisionProfileName(TEXT("PhysicsActor"));
+		Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		Piece->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
+		Piece->RegisterComponent();
+		for (int32 m = 0; m < ArmMesh->GetNumMaterials(); ++m)
+		{
+			Piece->SetMaterial(m, ArmMesh->GetMaterial(m));
+		}
+		Piece->SetSimulatePhysics(true);
+		Piece->AddImpulse(GetActorForwardVector() * FMath::FRandRange(400.f, 900.f) + FVector(FMath::FRandRange(-200.f, 200.f), FMath::FRandRange(-200.f, 200.f), FMath::FRandRange(300.f, 700.f)), NAME_None, true);
+		Piece->AddAngularImpulseInDegrees(FVector(FMath::FRandRange(-600.f, 600.f), FMath::FRandRange(-600.f, 600.f), FMath::FRandRange(-600.f, 600.f)), NAME_None, true);
+		Debris.Add(Piece);
 	}
 }
 
@@ -951,12 +1047,16 @@ bool ABRCheckpointGate::CanInteract_Implementation(APVVCharacter* Interactor) co
 
 FText ABRCheckpointGate::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
+	if (bSmashed)
+	{
+		return LOCTEXT("GateSmashed", "The barrier's SMASHED (fixed soon)");
+	}
 	return bOpen ? LOCTEXT("CloseGate", "Close the gate") : LOCTEXT("OpenGate", "Wave them through (open gate 12 s)");
 }
 
 void ABRCheckpointGate::OnInteract_Implementation(APVVCharacter* Interactor)
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || bSmashed)
 	{
 		return;
 	}

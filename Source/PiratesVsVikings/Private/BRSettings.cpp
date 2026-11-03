@@ -39,6 +39,7 @@ USoundBase* UBRSettings::GetSound(EBRSfx Sfx) const
 	case EBRSfx::Whistle:       Slot = &WhistleSound; break;
 	case EBRSfx::Landing:       Slot = &LandingSound; break;
 	case EBRSfx::Requisition:   Slot = &RequisitionSound; break;
+	case EBRSfx::GateSmash:     Slot = &GateSmashSound; break;
 	default: break;
 	}
 	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;

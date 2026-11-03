@@ -711,6 +711,11 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 	// Running the checkpoint: pedal to the metal, nothing stops us.
 	if (bRunningGate)
 	{
+		ABRCheckpointGate* RamGate = Cast<ABRCheckpointGate>(Gate.Get());
+		if (RamGate && !RamGate->IsOpen() && FVector::Dist2D(RamGate->GetActorLocation(), GetActorLocation()) < 650.f)
+		{
+			RamGate->Smash(this); // CRUNCH
+		}
 		if (Distance < 400.f)
 		{
 			++RouteIndex;
@@ -877,13 +882,10 @@ void ABRTruck::FloorIt()
 		bCheckpointDone = true;
 		RouteIndex = FMath::Min(CheckpointIndex + 1, Route.Num() - 1);
 	}
-	if (ABRCheckpointGate* CheckGate = Cast<ABRCheckpointGate>(Gate.Get()))
-	{
-		CheckGate->OpenFor(6.f); // SMASH
-	}
+	// (the barrier smashes when the truck reaches it - see DriveNPC)
 	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 	{
-		GM->Feed(TEXT("A truck SMASHED THROUGH the checkpoint! Chase it!"));
+		GM->Feed(TEXT("A truck is FLOORING IT at the checkpoint! Chase it!"));
 		GM->OnTruckForcedThrough();
 	}
 }

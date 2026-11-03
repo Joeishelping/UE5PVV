@@ -90,7 +90,7 @@ UENUM(BlueprintType)
 enum class EBRSfx : uint8
 {
 	Buy, Sell, CashPickup, Payday, ZipTie, JailDoor, Splash, ScanOK, ScanAlarm, TrapSnap, TripwireAlarm,
-	HatPop, Spotted, Bounty, RoundStart, RoundEnd, Countdown, SafeZone, Whistle, Landing, Requisition
+	HatPop, Spotted, Bounty, RoundStart, RoundEnd, Countdown, SafeZone, Whistle, Landing, Requisition, GateSmash
 };
 
 /** Simple world effects. */

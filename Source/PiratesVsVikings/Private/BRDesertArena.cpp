@@ -61,22 +61,28 @@ ABRDesertArena::ABRDesertArena()
 	const float BankX = RiverHalfWidth + 800.f;
 	const float FloorLen = HalfX - BankX;
 	AddBlock(TEXT("Sand_West"), FVector(-(BankX + FloorLen * 0.5f), 0.f, Ground - 200.f), FVector(FloorLen, HalfY * 2.f, 400.f), Sand);
-	AddBlock(TEXT("Sand_East"), FVector(BankX + FloorLen * 0.5f, 0.f, Ground - 200.f), FVector(FloorLen, HalfY * 2.f, 400.f), Sand);
+	const float EastLen = EastX - BankX;
+	AddBlock(TEXT("Sand_East"), FVector(BankX + EastLen * 0.5f, 0.f, Ground - 200.f), FVector(EastLen, HalfY * 2.f, 400.f), Sand);
 	// Banks: from the desert floor (+100) down to the river bed (-150) over 8 m.
 	AddBlock(TEXT("Sand_WestBank"), FVector(-1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), Sand, FRotator(-17.4f, 0.f, 0.f));
 	AddBlock(TEXT("Sand_EastBank"), FVector(1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), Sand, FRotator(17.4f, 0.f, 0.f));
 
 	// The road: town -> bridge -> checkpoint -> far side.
-	AddBlock(TEXT("Road_Strip"), FVector(0.f, RoadY, Ground + 2.f), FVector(HalfX * 2.f, 700.f, 4.f), FLinearColor(0.12f, 0.12f, 0.13f), FRotator::ZeroRotator, false);
-	AddBlock(TEXT("Bridge_Deck"), FVector(0.f, RoadY, Ground - 50.f), FVector(BankX * 2.f + 200.f, 800.f, 100.f), FLinearColor(0.4f, 0.4f, 0.42f));
-	AddBlock(TEXT("Bridge_RailN"), FVector(0.f, RoadY + 410.f, Ground + 50.f), FVector(BankX * 2.f, 20.f, 100.f), FLinearColor(0.3f, 0.3f, 0.32f));
-	AddBlock(TEXT("Bridge_RailS"), FVector(0.f, RoadY - 410.f, Ground + 50.f), FVector(BankX * 2.f, 20.f, 100.f), FLinearColor(0.3f, 0.3f, 0.32f));
+	// Narrow street through town, then a wide two-lane road all the way to the safe zone.
+	const float TownLen = TownEdgeX + HalfX;
+	AddBlock(TEXT("Road_Town"), FVector(-HalfX + TownLen * 0.5f, RoadY, Ground + 2.f), FVector(TownLen, 700.f, 4.f), FLinearColor(0.12f, 0.12f, 0.13f), FRotator::ZeroRotator, false);
+	const float RoadLen = EastX - TownEdgeX;
+	AddBlock(TEXT("Road_Strip"), FVector(TownEdgeX + RoadLen * 0.5f, RoadY, Ground + 2.f), FVector(RoadLen, RoadHalfWidth * 2.f, 4.f), FLinearColor(0.12f, 0.12f, 0.13f), FRotator::ZeroRotator, false);
+	AddBlock(TEXT("Paint_CenterLine"), FVector(TownEdgeX + RoadLen * 0.5f, RoadY, Ground + 5.f), FVector(RoadLen, 20.f, 2.f), FLinearColor(0.9f, 0.8f, 0.2f), FRotator::ZeroRotator, false);
+	AddBlock(TEXT("Bridge_Deck"), FVector(0.f, RoadY, Ground - 50.f), FVector(BankX * 2.f + 200.f, RoadHalfWidth * 2.f + 100.f, 100.f), FLinearColor(0.4f, 0.4f, 0.42f));
+	AddBlock(TEXT("Bridge_RailN"), FVector(0.f, RoadY + RoadHalfWidth + 60.f, Ground + 50.f), FVector(BankX * 2.f, 20.f, 100.f), FLinearColor(0.3f, 0.3f, 0.32f));
+	AddBlock(TEXT("Bridge_RailS"), FVector(0.f, RoadY - RoadHalfWidth - 60.f, Ground + 50.f), FVector(BankX * 2.f, 20.f, 100.f), FLinearColor(0.3f, 0.3f, 0.32f));
 
 	// Map edges.
-	AddBlock(TEXT("Edge_N"), FVector(0.f, HalfY + 100.f, 300.f), FVector(HalfX * 2.f + 400.f, 200.f, 1000.f), Adobe);
-	AddBlock(TEXT("Edge_S"), FVector(0.f, -HalfY - 100.f, 300.f), FVector(HalfX * 2.f + 400.f, 200.f, 1000.f), Adobe);
+	AddBlock(TEXT("Edge_N"), FVector((EastX - HalfX) * 0.5f, HalfY + 100.f, 300.f), FVector(HalfX + EastX + 400.f, 200.f, 1000.f), Adobe);
+	AddBlock(TEXT("Edge_S"), FVector((EastX - HalfX) * 0.5f, -HalfY - 100.f, 300.f), FVector(HalfX + EastX + 400.f, 200.f, 1000.f), Adobe);
 	AddBlock(TEXT("Edge_W"), FVector(-HalfX - 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), Adobe);
-	AddBlock(TEXT("Edge_E"), FVector(HalfX + 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), Adobe);
+	AddBlock(TEXT("Edge_E"), FVector(EastX + 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), Adobe);
 
 	// Town.
 	AddHut(TEXT("ToolShop"), FVector(-11500.f, -3000.f, Ground), FVector(1400.f, 1000.f, 400.f), Adobe);
@@ -107,7 +113,7 @@ ABRDesertArena::ABRDesertArena()
 	AddSign(TEXT("Sign_HQ"), TEXT("WARDEN HQ"), FVector(7880.f, 4000.f, Ground + 480.f), 180.f, 100.f, FColor(255, 140, 40));
 
 	// Safe zone.
-	AddBlock(TEXT("Safe_Stripe"), FVector(SafeX + (HalfX - SafeX) * 0.5f, 0.f, Ground + 2.f), FVector(HalfX - SafeX, HalfY * 2.f, 4.f), FLinearColor(0.1f, 0.8f, 0.2f), FRotator::ZeroRotator, false);
+	AddBlock(TEXT("Safe_Stripe"), FVector(SafeX + (EastX - SafeX) * 0.5f, 0.f, Ground + 2.f), FVector(EastX - SafeX, HalfY * 2.f, 4.f), FLinearColor(0.1f, 0.8f, 0.2f), FRotator::ZeroRotator, false);
 	AddSign(TEXT("Sign_Safe"), TEXT("SAFE ZONE"), FVector(SafeX - 50.f, 0.f, Ground + 400.f), 180.f, 220.f, FColor(80, 255, 120));
 
 	// Lighting (removed at BeginPlay if the level has its own). Day/night + weather are driven by the GameState.
@@ -333,7 +339,7 @@ bool ABRDesertArena::IsInRiver(const FVector& WorldLocation) const
 bool ABRDesertArena::IsDeepWater(const FVector& WorldLocation) const
 {
 	const FVector Local = WorldLocation - GetActorLocation();
-	const bool bOnBridge = FMath::Abs(Local.Y - RoadY) < 420.f && Local.Z > Ground - 60.f;
+	const bool bOnBridge = FMath::Abs(Local.Y - RoadY) < RoadHalfWidth + 70.f && Local.Z > Ground - 60.f;
 	return !bOnBridge && FMath::Abs(Local.X) < DeepHalfWidth && FMath::Abs(Local.Y) < HalfY && Local.Z < 15.f;
 }
 
@@ -342,19 +348,21 @@ void ABRDesertArena::GetNPCRoute(TArray<FVector>& OutRoute, int32& OutCheckpoint
 	const FVector O = GetActorLocation();
 	const float Z = Ground + 90.f;
 	OutRoute = {
-		O + FVector(-6000.f, RoadY, Z),
+		O + FVector(TownEdgeX + 1500.f, RoadY, Z),
 		O + FVector(0.f, RoadY, Z),
 		O + FVector(WallX - 700.f, RoadY, Z),	// wait here for the checkpoint
 		O + FVector(WallX + 900.f, RoadY, Z),
 		O + FVector(11000.f, RoadY, Z),
-		O + FVector(HalfX - 600.f, RoadY, Z)
+		O + FVector(17000.f, RoadY, Z),
+		O + FVector(EastX - 600.f, RoadY, Z)
 	};
 	OutCheckpointIndex = 2;
 }
 
 FTransform ABRDesertArena::GetNPCSpawn() const
 {
-	return FTransform(FRotator::ZeroRotator, GetActorLocation() + FVector(-HalfX + 900.f, RoadY, Ground + 90.f));
+	// Trucks pull onto the wide road at the edge of town (the narrow town street jammed them up).
+	return FTransform(FRotator::ZeroRotator, GetActorLocation() + FVector(TownEdgeX + 300.f, RoadY, Ground + 90.f));
 }
 
 void ABRDesertArena::GetDogHomes(TArray<FVector>& OutHomes) const
@@ -363,7 +371,7 @@ void ABRDesertArena::GetDogHomes(TArray<FVector>& OutHomes) const
 	OutHomes = {
 		O + FVector(2700.f, -5000.f, Ground + 60.f),
 		O + FVector(2700.f, 4000.f, Ground + 60.f),
-		O + FVector(5500.f, -1200.f, Ground + 60.f),
+		O + FVector(5500.f, -2700.f, Ground + 60.f),
 		O + FVector(-2600.f, 1500.f, Ground + 60.f)
 	};
 }
@@ -450,7 +458,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	World->SpawnActor<ABRLineBarrier>(ABRLineBarrier::StaticClass(), At(LineX, 0.f, Ground), Params);
 	for (float Y = -HalfY + 600.f; Y <= HalfY - 600.f; Y += 400.f)	// gaps at both far ends (risky routes)
 	{
-		if (FMath::Abs(Y - RoadY) < 500.f)
+		if (FMath::Abs(Y - RoadY) < RoadHalfWidth + 150.f)
 		{
 			continue; // the road goes through
 		}
@@ -488,7 +496,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	// --- Stuff to grab, swing and throw (Z)
 	{
 		const FVector2D PropSpots[] = { {-10900.f, -560.f}, {-10650.f, -480.f}, {-9700.f, 300.f}, {-10300.f, 1150.f}, {-11050.f, 2500.f},
-			{-12100.f, -1900.f}, {-9100.f, 1700.f}, {-8300.f, -2300.f}, {-6000.f, -1700.f}, {5600.f, -2200.f}, {6400.f, 2600.f} };
+			{-12100.f, -1900.f}, {-9100.f, 1700.f}, {-8300.f, -2300.f}, {-6000.f, -2600.f}, {5600.f, -2500.f}, {6400.f, 2600.f} };
 		int32 PropIndex = 0;
 		for (const FVector2D& Spot : PropSpots)
 		{
@@ -520,12 +528,12 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 			S->FinishSpawning(T);
 		}
 	};
-	Supply(7800.f, -800.f, EBRWardenGear::ExtraTraps, EBRItem::None, 600, 0.f);
-	Supply(7800.f, -400.f, EBRWardenGear::DroneRecharge, EBRItem::None, 300, 0.f);
-	Supply(7800.f, 0.f, EBRWardenGear::HardHat, EBRItem::None, 400, 0.f);
-	Supply(7800.f, 400.f, EBRWardenGear::PatrolDog, EBRItem::None, 1500, 30.f);
-	Supply(7800.f, 800.f, EBRWardenGear::None, EBRItem::Taco, 20, 0.f);
-	Supply(7800.f, 1150.f, EBRWardenGear::None, EBRItem::Lasso, 250, 0.f);
+	Supply(7800.f, -150.f, EBRWardenGear::ExtraTraps, EBRItem::None, 600, 0.f);
+	Supply(7800.f, 250.f, EBRWardenGear::DroneRecharge, EBRItem::None, 300, 0.f);
+	Supply(7800.f, 650.f, EBRWardenGear::HardHat, EBRItem::None, 400, 0.f);
+	Supply(7800.f, 1050.f, EBRWardenGear::PatrolDog, EBRItem::None, 1500, 30.f);
+	Supply(7800.f, 1450.f, EBRWardenGear::None, EBRItem::Taco, 20, 0.f);
+	Supply(7800.f, 1800.f, EBRWardenGear::None, EBRItem::Lasso, 250, 0.f);
 
 	// --- Hiding spots (dumpsters, porta-potties, hay bales) on both sides
 	auto Hide = [&](float X, float Y, float Yaw, EBRHideStyle HideStyle)

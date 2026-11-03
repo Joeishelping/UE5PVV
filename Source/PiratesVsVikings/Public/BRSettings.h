@@ -95,6 +95,8 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> LandingSound;
 	/** Border Patrol buying gear with the budget (stamp / "approved"). */
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> RequisitionSound;
+	/** A vehicle smashes through the checkpoint barrier (crunch / wood splintering). */
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> GateSmashSound;
 
 	USoundBase* GetSound(EBRSfx Sfx) const;
 

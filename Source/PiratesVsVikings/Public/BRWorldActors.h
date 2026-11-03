@@ -154,7 +154,7 @@ public:
 	static constexpr float HalfLength = 8100.f;
 	/** The road passes through a gate in the wall here (relative Y). */
 	static constexpr float GateY = -1200.f;
-	static constexpr float GateHalfWidth = 350.f;
+	static constexpr float GateHalfWidth = 700.f;
 };
 
 // ===========================================================================================
@@ -248,9 +248,14 @@ public:
 	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
-	bool IsOpen() const { return bOpen; }
+	bool IsOpen() const { return bOpen || bSmashed; }
+	bool IsSmashed() const { return bSmashed; }
 	/** Server. */
 	void OpenFor(float Seconds);
+	/** Server: a vehicle floored it through the barrier - the arm snaps off and flies. Repaired after a while. */
+	void Smash(AActor* Smasher);
+	/** Seconds before Border Patrol fixes a smashed barrier. */
+	UPROPERTY(EditAnywhere, Category = "BR|Gate") float RepairSeconds = 30.f;
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UBoxComponent> Barrier;
@@ -258,6 +263,11 @@ protected:
 
 private:
 	UPROPERTY(Replicated) bool bOpen = false;
+	UPROPERTY(ReplicatedUsing = OnRep_Smashed) bool bSmashed = false;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> ArmMesh;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Debris;
+	UFUNCTION() void OnRep_Smashed();
+	float RepairAt = 0.f;
 	float CloseAt = 0.f;
 	float ArmAngle = 0.f;
 	int32 AppliedState = -1;

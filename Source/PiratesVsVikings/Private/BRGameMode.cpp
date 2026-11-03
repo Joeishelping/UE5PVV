@@ -655,6 +655,14 @@ void ABRGameMode::SpawnNPCTruck()
 		return;
 	}
 
+	// The spawn spot is still busy (traffic backed up): try again next time instead of spawning into a pile-up.
+	for (TActorIterator<APVVBoat> It(GetWorld()); It; ++It)
+	{
+		if (FVector::Dist2D(It->GetActorLocation(), Spawn.GetLocation()) < 1300.f)
+		{
+			return;
+		}
+	}
 	UClass* TruckClass = NPCTruckClass ? NPCTruckClass.Get() : ABRTruck::StaticClass();
 	ABRTruck* Truck = GetWorld()->SpawnActorDeferred<ABRTruck>(TruckClass, Spawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!Truck)

@@ -330,6 +330,22 @@ Steam invites only work in a real packaged/standalone game, not in these test wi
 - **Driver pulled out?** After a second someone else aboard slides over and takes the wheel. Clean people drive on through the checkpoint; dirty ones floor it or jump out and run.
 - An NPC truck is only towed away once **nobody is left in it**, and anyone who already got out (running, cuffed, being carried) stays in the world.
 
+## Part 13: Kick + headbutt animations
+
+They're already inside **Art/Characters/SK_PVV_Animations.glb** (it has Kick and Headbutt).
+1. Copy the new **SK_PVV_Animations.glb** into the same Content folder you imported it to before, and drag it into the Content Browser over the old one (or right-click the old animations -> **Reimport**). Pick your character skeleton if it asks.
+2. You'll get new animation assets named **Kick** and **Headbutt** (and **Emote_Smoke**).
+3. Open **BP_Runner** (and **BP_Warden**, and your NPC Blueprint if you have one) -> Class Defaults -> **BR | Animations**:
+   - **Kick Anim** = Kick
+   - **Headbutt Anim** = Headbutt
+4. Compile + Save.
+
+## Part 14: The bigger road + smashing the gate
+
+- The test map's road is now **two lanes wide** (yellow line in the middle) from the edge of town all the way to the safe zone, and the far side is **much longer** (the safe zone moved way further east).
+- NPC trucks now start at the edge of town (the narrow town street was where they jammed) and won't spawn on top of each other.
+- **Smash the gate:** drive at the closed checkpoint barrier fast in any vehicle and it SNAPS - pieces fly, everyone hears about it. Border Patrol fixes it after 30 seconds (Gate Smash sound slot: Project Settings -> Border Run -> Sounds -> **Gate Smash Sound**).
+
 ## If something's wrong
 | Problem | Fix |
 |---|---|
