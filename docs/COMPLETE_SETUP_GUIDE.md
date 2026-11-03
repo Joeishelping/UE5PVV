@@ -192,7 +192,8 @@ Empty slots use simple built-in puffs.
 | WASD / Shift / Space / C | move / sprint / jump / crouch |
 | **Left click / Right click** | your **left / right hand**. **Tap = punch** with that hand. **Hold = reach out and grab** whoever it touches; let go to drop them. Hold one hand on someone and tap the other to punch them. |
 | **Space while grabbed** | mash it to wriggle free |
-| **Left Ctrl, Left Alt or mouse thumb button** | **dive / tackle** |
+| **Left Ctrl or mouse thumb button** | **dive / tackle** |
+| **hold Left Alt** | **BLOCK** (hits from the front do ~15% damage; too many hits = guard break; grabs and hits from behind still get you) |
 | Z | grab with both hands (people) or pick up things; Z again to throw; on a teammate: climb on their shoulders |
 | E | interact (hold for jobs, zip-ties, ladders) |
 | Mouse wheel / F / G | pick an item / use it / drop it |
@@ -371,6 +372,21 @@ Everything here is built on the test map automatically.
 
 ---
 
+## Part 15b: Lucha ring, blocking, day/night + weather
+
+- **Lucha ring:** the ropes are solid during a fight, so you bounce off them and stay in the ring. Hits throw you far less in there. The luchador now actually moves: he charges, circles, blocks and goes for grabs and kicks when you block.
+- **Block:** hold **Left Alt**. You move slowly and can't punch while blocking. Every NPC fighter blocks too.
+- **Mariachi** wear all black with sombreros. The black only shows if your shirt and pants materials have the `ShirtColor` / `PantsColor` parameters (Part 3e).
+- **Day and night really happen now.** The game uses your level's own sun, sky light and fog if it has them (before, it switched day/night off when your level had a sun). Night gets dark and blue, and street lamps along the big road switch on.
+- **Rain:** grey and darker, rain streaks around you, lightning flashes and thunder.
+- **Sandstorm:** thick orange fog and blowing sand.
+- Optional, to make weather look and sound better (Project Settings → Border Run):
+  - **Effects → Rain Effect / Sandstorm Effect**: any Niagara rain or dust system (free ones on Fab). They replace the simple built-in streaks.
+  - **Sounds → Rain Loop Sound, Wind Loop Sound** (tick *Looping* on the sound asset), and **Thunder Sound**.
+- If night is still bright: in your level, delete any extra **Directional Light**s (keep one), and remove any **Post Process Volume** with *Infinite Extent* that forces exposure.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
@@ -392,9 +408,9 @@ Tick these off. Anything you skip just stays silent or uses a simple placeholder
 **BP_BRGameMode (Part 4):** character classes + GameMode Override in World Settings.
 
 **Project Settings → Border Run (all optional):**
-- [ ] **Sounds**: every slot, including the new Gate Smash, Cantina Music, Bar Fight, Drink
+- [ ] **Sounds**: every slot, including the new Gate Smash, Cantina Music, Bar Fight, Drink, **Rain Loop, Wind Loop, Thunder**
 - [ ] **Body Sounds**: footsteps, thumps, grunts, yells, whooshes
-- [ ] **Effects**: Niagara effects (dust, splash, smoke, punch hit, cigarette smoke, sparks)
+- [ ] **Effects**: Niagara effects (dust, splash, smoke, punch hit, cigarette smoke, sparks, **rain, sandstorm**)
 - [ ] **Test Map Look**: the World Texture material + textures (Part 9)
 
 **Level:** an **Empty Level** saved as L_TestMap, GameMode Override = BP_BRGameMode, and set as the default map (Project Settings → Maps & Modes).

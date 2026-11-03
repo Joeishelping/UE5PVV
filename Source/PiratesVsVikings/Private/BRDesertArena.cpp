@@ -9,6 +9,14 @@
 #include "PVVDetentionZone.h"
 #include "PVVPlayerStart.h"
 #include "Components/AudioComponent.h"
+#include "Components/PostProcessComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Components/BoxComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -133,6 +141,18 @@ ABRDesertArena::ABRDesertArena()
 				AddBlock(*FString::Printf(TEXT("Lamp_Post%d"), LampIndex), FVector(X, Y, Ground + 250.f), FVector(18.f, 18.f, 500.f), Iron);
 				AddBlock(*FString::Printf(TEXT("Lamp_Arm%d"), LampIndex), FVector(X, Y - Side * 70.f, Ground + 495.f), FVector(12.f, 150.f, 10.f), Iron, FRotator::ZeroRotator, false);
 				AddBlock(*FString::Printf(TEXT("Lamp_Light%d"), LampIndex), FVector(X, Y - Side * 135.f, Ground + 480.f), FVector(40.f, 40.f, 20.f), Glow, FRotator::ZeroRotator, false);
+				if (LampIndex % 2 == 0) // every other lamp really lights up the road at night
+				{
+					UPointLightComponent* Bulb = CreateDefaultSubobject<UPointLightComponent>(*FString::Printf(TEXT("Lamp_Bulb%d"), LampIndex));
+					Bulb->SetupAttachment(Root);
+					Bulb->SetRelativeLocation(FVector(X, Y - Side * 135.f, Ground + 440.f));
+					Bulb->SetIntensity(0.f);
+					Bulb->SetAttenuationRadius(1600.f);
+					Bulb->SetLightColor(FLinearColor(1.f, 0.78f, 0.45f));
+					Bulb->SetCastShadows(false);
+					Bulb->SetMobility(EComponentMobility::Movable);
+					StreetLights.Add(Bulb);
+				}
 				++LampIndex;
 			}
 		}
@@ -195,6 +215,35 @@ ABRDesertArena::ABRDesertArena()
 	Atmosphere->SetupAttachment(Root);
 	Fog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("Fog"));
 	Fog->SetupAttachment(Root);
+
+	// Night + weather colour grading (unbound: affects the whole map).
+	Grade = CreateDefaultSubobject<UPostProcessComponent>(TEXT("Grade"));
+	Grade->SetupAttachment(Root);
+	Grade->bUnbound = true;
+	Grade->Priority = 5.f;
+	// Rain / sand particles (built-in fallback). Absolute positions, follow the local camera.
+	RainDrops = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("RainDrops"));
+	RainDrops->SetupAttachment(Root);
+	RainDrops->SetUsingAbsoluteLocation(true);
+	RainDrops->SetUsingAbsoluteRotation(true);
+	RainDrops->SetStaticMesh(CubeMesh);
+	RainDrops->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RainDrops->SetCastShadow(false);
+	DustBits = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("DustBits"));
+	DustBits->SetupAttachment(Root);
+	DustBits->SetUsingAbsoluteLocation(true);
+	DustBits->SetUsingAbsoluteRotation(true);
+	DustBits->SetStaticMesh(CubeMesh);
+	DustBits->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DustBits->SetCastShadow(false);
+	RainAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("RainAudio"));
+	RainAudio->SetupAttachment(Root);
+	RainAudio->bAutoActivate = false;
+	RainAudio->bAllowSpatialization = false;
+	WindAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("WindAudio"));
+	WindAudio->SetupAttachment(Root);
+	WindAudio->bAutoActivate = false;
+	WindAudio->bAllowSpatialization = false;
 
 	// Background music: every song in Content/Music/Ambient, played on each player's machine.
 	AmbientMusic = CreateDefaultSubobject<UAudioComponent>(TEXT("AmbientMusic"));
@@ -297,25 +346,66 @@ void ABRDesertArena::BeginPlay()
 		}
 	}
 
-	if (TActorIterator<ADirectionalLight>(GetWorld()))
+	// The level already has a sun? Use THAT one for day/night (so night really gets dark) instead of switching day/night off.
+	if (TActorIterator<ADirectionalLight> LevelSun(GetWorld()); LevelSun)
 	{
-		Sun->DestroyComponent();
-		Moon->DestroyComponent();
-		Sun = nullptr;
-		Moon = nullptr;
+		if (UDirectionalLightComponent* Theirs = Cast<UDirectionalLightComponent>(LevelSun->GetLightComponent()))
+		{
+			Sun->DestroyComponent();
+			Sun = Theirs;
+			Sun->SetMobility(EComponentMobility::Movable);
+			Sun->SetAtmosphereSunLight(true);
+		}
+		// Any other directional lights in the level would keep it bright at night.
+		for (TActorIterator<ADirectionalLight> Other(GetWorld()); Other; ++Other)
+		{
+			if (*Other != *LevelSun && Other->GetLightComponent())
+			{
+				Other->GetLightComponent()->SetMobility(EComponentMobility::Movable);
+				Other->GetLightComponent()->SetIntensity(0.f);
+			}
+		}
 	}
-	if (TActorIterator<ASkyLight>(GetWorld()))
+	if (TActorIterator<ASkyLight> LevelSky(GetWorld()); LevelSky)
 	{
 		SkyLight->DestroyComponent();
+		SkyLight = LevelSky->GetLightComponent();
+		if (SkyLight)
+		{
+			SkyLight->SetMobility(EComponentMobility::Movable);
+			SkyLight->bRealTimeCapture = true; // follows the sun (dark sky at night)
+		}
 	}
 	if (TActorIterator<ASkyAtmosphere>(GetWorld()))
 	{
 		Atmosphere->DestroyComponent();
 	}
-	if (TActorIterator<AExponentialHeightFog>(GetWorld()))
+	if (TActorIterator<AExponentialHeightFog> LevelFog(GetWorld()); LevelFog)
 	{
 		Fog->DestroyComponent();
-		Fog = nullptr;
+		Fog = LevelFog->GetComponent(); // drive the level's own fog for sandstorms / rain
+	}
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		const UBRSettings* FXSettings = GetDefault<UBRSettings>();
+		if (UNiagaraSystem* Rain = FXSettings->RainEffect.LoadSynchronous())
+		{
+			RainFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, Rain, GetActorLocation(), FRotator::ZeroRotator, FVector(1.f), false, false);
+		}
+		if (UNiagaraSystem* Sand = FXSettings->SandstormEffect.LoadSynchronous())
+		{
+			SandFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, Sand, GetActorLocation(), FRotator::ZeroRotator, FVector(1.f), false, false);
+		}
+		RainAudio->SetSound(FXSettings->RainLoopSound.LoadSynchronous());
+		WindAudio->SetSound(FXSettings->WindLoopSound.LoadSynchronous());
+		if (UMaterialInstanceDynamic* RainMID = RainDrops->CreateDynamicMaterialInstance(0))
+		{
+			RainMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.65f, 0.75f, 0.9f));
+		}
+		if (UMaterialInstanceDynamic* DustMID = DustBits->CreateDynamicMaterialInstance(0))
+		{
+			DustMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.75f, 0.58f, 0.36f));
+		}
 	}
 
 	if (GetNetMode() != NM_DedicatedServer)
@@ -389,6 +479,174 @@ void ABRDesertArena::Tick(float DeltaSeconds)
 		const float TargetDensity = GS->Weather == EBRWeather::Clear ? 0.003f : (GS->Weather == EBRWeather::Rain ? 0.03f : 0.09f);
 		FogDensity = FMath::FInterpTo(FogDensity, TargetDensity, DeltaSeconds, 0.5f);
 		Fog->SetFogDensity(FogDensity);
+	}
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		TickSkyAndWeather(DeltaSeconds, GS);
+	}
+}
+
+void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* GS)
+{
+	const float Angle = (DisplayedTime - 6.f) / 24.f * 360.f;
+	const float Elevation = FMath::Sin(FMath::DegreesToRadians(Angle));
+	const float Night = FMath::Clamp((0.12f - Elevation) / 0.32f, 0.f, 1.f); // 0 = day, 1 = full night
+	RainAmount = FMath::FInterpConstantTo(RainAmount, GS->Weather == EBRWeather::Rain ? 1.f : 0.f, DeltaSeconds, 0.25f);
+	SandAmount = FMath::FInterpConstantTo(SandAmount, GS->Weather == EBRWeather::Sandstorm ? 1.f : 0.f, DeltaSeconds, 0.25f);
+
+	// Night really gets dark (auto-exposure would brighten it back up otherwise), and blue. Sandstorms go orange.
+	if (Grade)
+	{
+		FPostProcessSettings& S = Grade->Settings;
+		S.bOverride_AutoExposureBias = true;
+		S.AutoExposureBias = -2.6f * Night - 0.5f * RainAmount - 0.3f * SandAmount;
+		S.bOverride_ColorSaturation = true;
+		const float Sat = 1.f - 0.35f * Night - 0.3f * RainAmount;
+		S.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
+		S.bOverride_SceneColorTint = true;
+		FLinearColor Tint = FMath::Lerp(FLinearColor::White, FLinearColor(0.62f, 0.72f, 1.f), Night);
+		Tint = FMath::Lerp(Tint, Tint * FLinearColor(1.f, 0.82f, 0.58f), SandAmount);
+		Tint = FMath::Lerp(Tint, Tint * FLinearColor(0.85f, 0.9f, 1.f), RainAmount);
+		S.SceneColorTint = Tint;
+		S.bOverride_VignetteIntensity = true;
+		S.VignetteIntensity = 0.4f + 0.4f * Night + 0.3f * SandAmount;
+	}
+	if (Fog)
+	{
+		const FLinearColor DayFog(0.75f, 0.82f, 0.95f), NightFog(0.03f, 0.04f, 0.08f), SandFog(0.85f, 0.55f, 0.25f);
+		FLinearColor FogColor = FMath::Lerp(DayFog, NightFog, Night);
+		FogColor = FMath::Lerp(FogColor, SandFog * (1.f - 0.8f * Night), SandAmount);
+		Fog->SetFogInscatteringColor(FogColor);
+	}
+	// Street lamps on at dusk.
+	const bool bWantLights = Night > 0.4f || SandAmount > 0.6f;
+	if (bWantLights != bLightsOn)
+	{
+		bLightsOn = bWantLights;
+		for (UPointLightComponent* Bulb : StreetLights)
+		{
+			Bulb->SetIntensity(bLightsOn ? 6000.f : 0.f);
+		}
+	}
+	// Lightning in the rain: a white flash, thunder a moment later.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (RainAmount > 0.7f && Now >= NextLightning)
+	{
+		NextLightning = Now + FMath::FRandRange(7.f, 22.f);
+		LightningFlash = 1.f;
+		ThunderAt = Now + FMath::FRandRange(0.4f, 2.f);
+	}
+	if (ThunderAt > 0.f && Now >= ThunderAt)
+	{
+		ThunderAt = -1.f;
+		if (USoundBase* Thunder = GetDefault<UBRSettings>()->ThunderSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, Thunder, FMath::FRandRange(0.6f, 1.f));
+		}
+	}
+	LightningFlash = FMath::Max(0.f, LightningFlash - DeltaSeconds * 4.f);
+	if (Moon)
+	{
+		Moon->SetIntensity(0.4f * FMath::Clamp(-Elevation * 2.f, 0.f, 1.f) + 12.f * LightningFlash * (FMath::Fmod(Now * 23.f, 1.f) > 0.3f ? 1.f : 0.3f));
+	}
+	// Weather sounds.
+	if (RainAudio && RainAudio->GetSound())
+	{
+		if (RainAmount > 0.01f && !RainAudio->IsPlaying()) RainAudio->Play();
+		RainAudio->SetVolumeMultiplier(RainAmount);
+	}
+	if (WindAudio && WindAudio->GetSound())
+	{
+		if (SandAmount > 0.01f && !WindAudio->IsPlaying()) WindAudio->Play();
+		WindAudio->SetVolumeMultiplier(SandAmount);
+	}
+	TickParticles(DeltaSeconds);
+}
+
+void ABRDesertArena::TickParticles(float DeltaSeconds)
+{
+	const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!Cam)
+	{
+		return;
+	}
+	const FVector Eye = Cam->GetCameraLocation();
+	// Your own Niagara effects (Project Settings -> Border Run -> Effects) follow the camera.
+	if (RainFX)
+	{
+		RainFX->SetWorldLocation(Eye + FVector(0.f, 0.f, 600.f));
+		if (RainAmount > 0.05f && !RainFX->IsActive()) RainFX->Activate();
+		if (RainAmount <= 0.05f && RainFX->IsActive()) RainFX->Deactivate();
+	}
+	if (SandFX)
+	{
+		SandFX->SetWorldLocation(Eye);
+		if (SandAmount > 0.05f && !SandFX->IsActive()) SandFX->Activate();
+		if (SandAmount <= 0.05f && SandFX->IsActive()) SandFX->Deactivate();
+	}
+	// Built-in: falling rain streaks.
+	if (!RainFX && RainDrops)
+	{
+		const int32 Want = FMath::RoundToInt(RainAmount * 450.f);
+		while (DropPos.Num() < Want)
+		{
+			DropPos.Add(Eye + FVector(FMath::FRandRange(-1800.f, 1800.f), FMath::FRandRange(-1800.f, 1800.f), FMath::FRandRange(-300.f, 1200.f)));
+			RainDrops->AddInstance(FTransform(DropPos.Last()), true);
+		}
+		while (DropPos.Num() > Want)
+		{
+			DropPos.Pop();
+			RainDrops->RemoveInstance(RainDrops->GetInstanceCount() - 1);
+		}
+		TArray<FTransform> Moved;
+		Moved.Reserve(DropPos.Num());
+		for (FVector& P : DropPos)
+		{
+			P += FVector(120.f, 60.f, -1900.f) * DeltaSeconds;
+			if (P.Z < Eye.Z - 500.f || FVector::Dist2D(P, Eye) > 2200.f)
+			{
+				P = Eye + FVector(FMath::FRandRange(-1800.f, 1800.f), FMath::FRandRange(-1800.f, 1800.f), FMath::FRandRange(600.f, 1300.f));
+			}
+			Moved.Add(FTransform(FRotator(-4.f, 0.f, 0.f), P, FVector(0.012f, 0.012f, 0.55f)));
+		}
+		if (Moved.Num() > 0)
+		{
+			RainDrops->BatchUpdateInstancesTransforms(0, Moved, true, true, true);
+		}
+	}
+	// Built-in: sand whipping sideways.
+	if (!SandFX && DustBits)
+	{
+		const int32 Want = FMath::RoundToInt(SandAmount * 350.f);
+		while (DustPos.Num() < Want)
+		{
+			DustPos.Add(Eye + FVector(FMath::FRandRange(-1600.f, 1600.f), FMath::FRandRange(-1600.f, 1600.f), FMath::FRandRange(-250.f, 400.f)));
+			DustBits->AddInstance(FTransform(DustPos.Last()), true);
+		}
+		while (DustPos.Num() > Want)
+		{
+			DustPos.Pop();
+			DustBits->RemoveInstance(DustBits->GetInstanceCount() - 1);
+		}
+		TArray<FTransform> Moved;
+		Moved.Reserve(DustPos.Num());
+		const float T = GetWorld()->GetTimeSeconds();
+		int32 i = 0;
+		for (FVector& P : DustPos)
+		{
+			P += FVector(1500.f, 350.f * FMath::Sin(T * 2.f + i), 60.f * FMath::Sin(T * 3.f + i * 0.7f)) * DeltaSeconds;
+			if (FVector::Dist2D(P, Eye) > 1900.f)
+			{
+				P = Eye + FVector(-1600.f, FMath::FRandRange(-1600.f, 1600.f), FMath::FRandRange(-250.f, 400.f));
+			}
+			const float Size = 0.02f + 0.03f * ((i * 37) % 10) / 10.f;
+			Moved.Add(FTransform(FRotator(T * 90.f + i, i * 13.f, 0.f), P, FVector(Size * 2.f, Size, Size)));
+			++i;
+		}
+		if (Moved.Num() > 0)
+		{
+			DustBits->BatchUpdateInstancesTransforms(0, Moved, true, true, true);
+		}
 	}
 }
 

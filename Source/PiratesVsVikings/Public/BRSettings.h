@@ -103,6 +103,10 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> BarFightSound;
 	/** Cantina: buying a drink (glug glug, "salud!"). */
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> DrinkSound;
+	/** Weather: rain loop (set it to Looping), howling wind loop for sandstorms, thunder. */
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> RainLoopSound;
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> WindLoopSound;
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> ThunderSound;
 
 	USoundBase* GetSound(EBRSfx Sfx) const;
 
@@ -134,6 +138,10 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> CigaretteSmokeEffect;
 	/** Cannon fuse sparks. */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SparksEffect;
+	/** Rain (follows your camera; empty = simple built-in streaks). */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> RainEffect;
+	/** Sandstorm (follows your camera; empty = simple built-in blowing sand). */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SandstormEffect;
 
 	UNiagaraSystem* GetEffect(EBRFX Kind) const;
 

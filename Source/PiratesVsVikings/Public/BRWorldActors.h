@@ -876,6 +876,9 @@ private:
 	TWeakObjectPtr<class ABRCharacter> Luchador;
 	bool bChallengerWasDown = false;
 	bool bLuchadorWasDown = false;
+	/** Invisible walls along the ropes while a fight is on (you bounce off them like WWE). */
+	UPROPERTY() TArray<TObjectPtr<UBoxComponent>> RopeWalls;
+	int32 RopesLive = -1;
 	float NextSwing = 0.f;
 	FVector Corner(int32 Which) const;
 	void TickFight(float ServerNow);

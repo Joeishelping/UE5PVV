@@ -186,6 +186,8 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bLastClimbLeft);
 	DOREPLIFETIME(ABRCharacter, ClimbNormal);
 	DOREPLIFETIME(ABRCharacter, bPeaceful);
+	DOREPLIFETIME(ABRCharacter, bBlocking);
+	DOREPLIFETIME_CONDITION(ABRCharacter, GuardMeter, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, TipsyUntil);
 	DOREPLIFETIME_CONDITION(ABRCharacter, bChugging, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, ChugMine, COND_OwnerOnly);
@@ -731,7 +733,7 @@ bool ABRCharacter::IsDriving() const
 
 bool ABRCharacter::WantsStiffArms() const
 {
-	return bAiming || (IsDriving() && (DriveAnim || SeatedAnim));
+	return bAiming || bBlocking || (IsDriving() && (DriveAnim || SeatedAnim));
 }
 
 void ABRCharacter::StartWandering(const FVector& Home, float Radius)
@@ -1035,6 +1037,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	{
 		Multiplier *= 1.12f; // Cowboy Hat: rodeo legs
 	}
+	if (bBlocking)
+	{
+		Multiplier *= 0.45f; // shuffle with your guard up
+	}
 	if (bInBox)
 	{
 		Multiplier *= 0.5f; // shuffling along in a box
@@ -1073,6 +1079,7 @@ void ABRCharacter::EnsureDefaultInput()
 	DropAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	GrabAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	DiveAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	BlockAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	HeadbuttAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	EmoteAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	CashAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
@@ -1100,7 +1107,8 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, DropAction, EKeys::G);
 	PVVInput::Map(IMC, GrabAction, EKeys::Z);
 	PVVInput::Map(IMC, GrabAction, EKeys::Gamepad_FaceButton_Right);
-	PVVInput::Map(IMC, DiveAction, EKeys::LeftAlt);
+	PVVInput::Map(IMC, BlockAction, EKeys::LeftAlt);
+	PVVInput::Map(IMC, BlockAction, EKeys::Gamepad_LeftTrigger);
 	PVVInput::Map(IMC, DiveAction, EKeys::LeftControl);
 	PVVInput::Map(IMC, DiveAction, EKeys::ThumbMouseButton);
 	PVVInput::Map(IMC, DiveAction, EKeys::Gamepad_LeftThumbstick);
@@ -1138,6 +1146,11 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (DropAction) Input->BindAction(DropAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drop);
 	if (GrabAction) Input->BindAction(GrabAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Grab);
 	if (DiveAction) Input->BindAction(DiveAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Dive);
+	if (BlockAction)
+	{
+		Input->BindAction(BlockAction, ETriggerEvent::Started, this, &ABRCharacter::Input_BlockStart);
+		Input->BindAction(BlockAction, ETriggerEvent::Completed, this, &ABRCharacter::Input_BlockStop);
+	}
 	if (DroneAction) Input->BindAction(DroneAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Drone);
 	if (WeaponModeAction) Input->BindAction(WeaponModeAction, ETriggerEvent::Started, this, &ABRCharacter::Input_WeaponMode);
 	if (ScanAction) Input->BindAction(ScanAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Scan);
@@ -2446,6 +2459,16 @@ void ABRCharacter::Tick(float DeltaSeconds)
 			KOStars->SetWorldLocationAndRotation(Head + FVector(0.f, 0.f, 45.f), FRotator(0.f, GetWorld()->GetTimeSeconds() * 360.f, 0.f));
 		}
 	}
+	// Guard: comes back over time; NPC blocks end on their own; can't keep blocking while knocked down etc.
+	if (HasAuthority())
+	{
+		GuardMeter = FMath::Min(1.f, GuardMeter + DeltaSeconds * (bBlocking ? 0.05f : 0.3f));
+		if (bBlocking && ((bIsNPC && GetWorld()->GetTimeSeconds() >= BlockReleaseAt) || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat()))
+		{
+			bBlocking = false;
+			UpdateMovementSpeed();
+		}
+	}
 	// Knocked down or cuffed: the knife goes clattering away.
 	if (HasAuthority() && bIsNPC && HeldItem == EBRItem::Knife && GetCondition() != EPVVCondition::Normal)
 	{
@@ -3108,8 +3131,73 @@ void ABRCharacter::Input_RightHandStop()
 	}
 }
 
+void ABRCharacter::Input_BlockStart() { Server_SetBlock(true); }
+void ABRCharacter::Input_BlockStop() { Server_SetBlock(false); }
+
+void ABRCharacter::Server_SetBlock_Implementation(bool bOn)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	const bool bCan = GetCondition() == EPVVCondition::Normal && !GetCarrier() && !GetCurrentBoat() && !GetCarriedCharacter() && !bClimbing && Now >= GuardBrokenUntil;
+	const bool bWant = bOn && bCan;
+	if (bWant != bBlocking)
+	{
+		bBlocking = bWant;
+		if (bBlocking)
+		{
+			StopEmote();
+			ReleaseHandGrab();
+		}
+		UpdateMovementSpeed();
+		ForceNetUpdate();
+	}
+}
+
+void ABRCharacter::BotBlock(float Seconds)
+{
+	if (HasAuthority() && GetWorld()->GetTimeSeconds() >= GuardBrokenUntil)
+	{
+		Server_SetBlock_Implementation(true);
+		BlockReleaseAt = GetWorld()->GetTimeSeconds() + Seconds;
+	}
+}
+
+float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse)
+{
+	if (!bBlocking || !Attacker || GetCondition() != EPVVCondition::Normal)
+	{
+		return Damage;
+	}
+	// Only hits from the front are blocked (get hit from behind and you eat it).
+	const FVector ToAttacker = (Attacker->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+	if (FVector::DotProduct(ToAttacker, GetActorForwardVector().GetSafeNormal2D()) < 0.15f)
+	{
+		return Damage;
+	}
+	GuardMeter -= FMath::Clamp(Damage / 60.f, 0.12f, 0.45f);
+	ABRGameState::FX(this, EBRFX::Sparks, GetActorLocation() + GetActorForwardVector() * 40.f + FVector(0.f, 0.f, 50.f));
+	if (GuardMeter <= 0.f)
+	{
+		// GUARD BREAK: arms knocked aside, stunned for a moment.
+		GuardMeter = 0.f;
+		bBlocking = false;
+		GuardBrokenUntil = GetWorld()->GetTimeSeconds() + 2.5f;
+		UpdateMovementSpeed();
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("GUARD BREAK!"));
+		Notify(LOCTEXT("GuardBreak", "GUARD BROKEN! You can't block for a moment."));
+		ForceNetUpdate();
+		return Damage * 1.3f;
+	}
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("BLOCKED"));
+	Impulse *= 0.2f;
+	return Damage * 0.15f;
+}
+
 void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 {
+	if (bBlocking)
+	{
+		return; // guard's up
+	}
 	StopEmote();
 	Multicast_PunchHand(bLeft);
 	BotAttack(); // same punch as before, just with the hand you chose
@@ -3187,6 +3275,7 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 	if (bNew)
 	{
 		Best->GrabbedBy = this;
+		Best->bBlocking = false; // grabs beat blocks
 		Best->GrabStruggle = 0.f;
 		Best->CancelHold();
 		Best->UpdateMovementSpeed();
@@ -3648,6 +3737,34 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 		return; // they're down: let them get up (the crowd loves it)
 	}
 	SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw, 0.f));
+	if (bBlocking)
+	{
+		return; // guard's up for a moment
+	}
+	// Up close and they're swinging (or they're blocking us): put the guard up now and then.
+	const ABRCharacter* BRFoe = Foe;
+	if (Dist < 230.f && HandGrabTarget.Get() != Foe && FMath::FRand() < 0.14f * (0.5f + Aggression) * (BRFoe->IsBlocking() ? 0.3f : 1.f))
+	{
+		BotBlock(FMath::FRandRange(0.5f, 1.2f));
+		return;
+	}
+	// They're blocking: grab them or kick them (blocks only stop hits from the front).
+	if (BRFoe->IsBlocking() && Dist < 175.f && FMath::FRand() < 0.5f)
+	{
+		if (FMath::FRand() < 0.5f)
+		{
+			ArmsReaching = 3;
+			if (!TryHandGrab(3))
+			{
+				ArmsReaching = 0;
+			}
+		}
+		else
+		{
+			DoKick();
+		}
+		return;
+	}
 	// Got them in your hands: beat on them, then THROW them.
 	if (HandGrabTarget.Get() == Foe)
 	{
@@ -4038,7 +4155,7 @@ void ABRCharacter::TickClimb(float DeltaSeconds)
 void ABRCharacter::TickHands(float DeltaSeconds)
 {
 	USkeletalMeshComponent* Body = GetMesh();
-	if (!Body || bPeaceful || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon || bOnShoulders
+	if (!Body || bPeaceful || bBlocking || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon || bOnShoulders
 		|| Body->GetBoneIndex(TEXT("hand_l")) == INDEX_NONE || DeltaSeconds <= 0.f)
 	{
 		bHandsTracked = false;
@@ -4560,6 +4677,9 @@ void ABRCharacter::MakeLuchador(const FString& RingName, float Toughness)
 	}
 	LuchaName = RingName;
 	bNoFightBack = true; // the ring runs the fight
+	// No AI controller: movement has to run anyway, or he just stands there.
+	GetCharacterMovement()->bRunPhysicsWithNoController = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false; // he faces you while he circles
 	SetCombatStats(100.f * Toughness, 25.f * (0.8f + 0.25f * Toughness));
 	BaseAttackDamage = -1.f; // re-read the new damage next time it holds something
 	SetHat(EBRHat::LuchaMask);

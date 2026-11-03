@@ -477,6 +477,8 @@ void APVVCharacter::ReceiveMeleeHit(APVVCharacter* Attacker, float Damage, const
 		return;
 	}
 
+	FVector Push = Impulse;
+	Damage = ModifyIncomingHit(Attacker, Damage, Push);
 	Multicast_HitReceived(Attacker);
 	CancelHold();
 
@@ -486,14 +488,14 @@ void APVVCharacter::ReceiveMeleeHit(APVVCharacter* Attacker, float Damage, const
 		LastDamageTime = GetWorld()->GetTimeSeconds();
 		if (Balance <= 0.f)
 		{
-			ApplyKnockdown(Attacker, Impulse);
+			ApplyKnockdown(Attacker, Push);
 			return;
 		}
 	}
 
 	if (!CurrentBoat)
 	{
-		LaunchCharacter(Impulse, false, false); // adds to how you're moving, so hits stack up instead of freezing you
+		LaunchCharacter(Push * KnockbackScale, false, false); // adds to how you're moving, so hits stack up instead of freezing you
 	}
 }
 
@@ -521,9 +523,9 @@ void APVVCharacter::ApplyKnockdown(AActor* Cause, const FVector& Impulse)
 	CancelHold();
 
 	Balance = 0.f;
-	LastHitImpulse = Impulse;
+	LastHitImpulse = Impulse * KnockbackScale;
 	SetState(EPVVCondition::KnockedDown);
-	LaunchCharacter(Impulse, true, true);
+	LaunchCharacter(Impulse * KnockbackScale, true, true);
 
 	FTimerDelegate RecoverDelegate = FTimerDelegate::CreateUObject(this, &APVVCharacter::Recover, 0.5f);
 	GetWorldTimerManager().SetTimer(KnockdownTimer, RecoverDelegate, KnockdownDuration, false);

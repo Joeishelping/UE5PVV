@@ -153,6 +153,18 @@ public:
 	void CalmDown() { AngryAt = nullptr; AngryUntil = -1.f; FleeUntil = -1.f; MugTarget = nullptr; }
 	void SetKnockdownSeconds(float Seconds) { KnockdownDuration = Seconds; }
 
+	// --- Blocking (hold Left Alt): hits from the front do a fraction of the damage and barely push you.
+	UPROPERTY(Replicated) bool bBlocking = false;
+	/** 1 = full guard. Each blocked hit chips it; at 0 the guard breaks (stunned, can't block for a moment). */
+	UPROPERTY(Replicated) float GuardMeter = 1.f;
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsBlocking() const { return bBlocking; }
+	UFUNCTION(Server, Reliable) void Server_SetBlock(bool bOn);
+	/** Server: NPC brawlers put their guard up for a moment. */
+	void BotBlock(float Seconds);
+	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) override;
+	float GuardBrokenUntil = -1.f;
+	float BlockReleaseAt = -1.f;
+
 	// --- Cantina ---------------------------------------------------------------------------
 	/** Server: a drink. Wobblier but harder to knock down for this many seconds. */
 	void MakeTipsy(float Seconds);
@@ -321,6 +333,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> GrabAction;
 	/** Left Alt: dive / tackle. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> DiveAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> BlockAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> EmoteAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> CashAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> HeadbuttAction;
@@ -642,6 +655,8 @@ private:
 	bool TryClimb();
 	void Input_Grab();
 	void Input_Dive();
+	void Input_BlockStart();
+	void Input_BlockStop();
 	void Input_EmoteStart();
 	void Input_EmoteStop();
 	void Input_DropCash();

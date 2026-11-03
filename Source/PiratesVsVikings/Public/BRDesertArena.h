@@ -20,6 +20,10 @@ class UExponentialHeightFogComponent;
 class USkyAtmosphereComponent;
 class USkyLightComponent;
 class UTextRenderComponent;
+class UPostProcessComponent;
+class UPointLightComponent;
+class UInstancedStaticMeshComponent;
+class UNiagaraComponent;
 
 /**
  * Self-building desert greybox for Border Run (X runs west -> east):
@@ -112,6 +116,16 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UAudioComponent> AmbientMusic;
 	UPROPERTY() TArray<TObjectPtr<USoundBase>> AmbientTracks;
 	UPROPERTY(EditAnywhere, Category = "BR|Music") float AmbientVolume = 0.45f;
+	/** Night look (darker, bluer) + weather tint. */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UPostProcessComponent> Grade;
+	UPROPERTY() TArray<TObjectPtr<UPointLightComponent>> StreetLights;
+	/** Built-in rain streaks and blowing sand (follow your camera). Replaced by your Niagara effects if you set them. */
+	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> RainDrops;
+	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> DustBits;
+	UPROPERTY() TObjectPtr<UNiagaraComponent> RainFX;
+	UPROPERTY() TObjectPtr<UNiagaraComponent> SandFX;
+	UPROPERTY() TObjectPtr<UAudioComponent> RainAudio;
+	UPROPERTY() TObjectPtr<UAudioComponent> WindAudio;
 
 private:
 	bool bGameplaySpawned = false;
@@ -120,6 +134,16 @@ private:
 
 	UFUNCTION() void PlayNextAmbient();
 	float FogDensity = 0.002f;
+	float RainAmount = 0.f;
+	float SandAmount = 0.f;
+	float LightningFlash = 0.f;
+	float NextLightning = 10.f;
+	float ThunderAt = -1.f;
+	bool bLightsOn = false;
+	TArray<FVector> DropPos;
+	TArray<FVector> DustPos;
+	void TickSkyAndWeather(float DeltaSeconds, const class ABRGameState* GS);
+	void TickParticles(float DeltaSeconds);
 
 	UStaticMeshComponent* AddBlock(const TCHAR* Name, const FVector& Center, const FVector& SizeCm, const FLinearColor& Color, const FRotator& Rotation = FRotator::ZeroRotator, bool bCollide = true);
 	UTextRenderComponent* AddSign(const TCHAR* Name, const FString& Text, const FVector& Location, float Yaw, float Size, const FColor& Color);

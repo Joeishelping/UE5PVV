@@ -3404,6 +3404,21 @@ ABRLuchaRing::ABRLuchaRing()
 		AddMesh(*FString::Printf(TEXT("RopeE%d"), Level), CylinderMesh, FVector(In, 0.f, Z), FVector(4.f, 4.f, RingSize - 30.f), Rope, FRotator(0.f, 0.f, 90.f), false);
 		AddMesh(*FString::Printf(TEXT("RopeW%d"), Level), CylinderMesh, FVector(-In, 0.f, Z), FVector(4.f, 4.f, RingSize - 30.f), Rope, FRotator(0.f, 0.f, 90.f), false);
 	}
+	for (int32 Side = 0; Side < 4; ++Side)
+	{
+		UBoxComponent* Wall = CreateDefaultSubobject<UBoxComponent>(*FString::Printf(TEXT("RopeWall%d"), Side));
+		Wall->SetupAttachment(Root);
+		const bool bX = Side < 2;
+		const float Sign = (Side % 2) ? 1.f : -1.f;
+		Wall->SetRelativeLocation(bX ? FVector(Sign * (Half - 5.f), 0.f, DeckHeight + 130.f) : FVector(0.f, Sign * (Half - 5.f), DeckHeight + 130.f));
+		Wall->SetBoxExtent(bX ? FVector(12.f, Half, 130.f) : FVector(Half, 12.f, 130.f));
+		Wall->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Wall->SetCollisionObjectType(ECC_WorldDynamic);
+		Wall->SetCollisionResponseToAllChannels(ECR_Ignore);
+		Wall->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		Wall->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+		RopeWalls.Add(Wall);
+	}
 	Board = AddLabel(TEXT("Board"), FVector(0.f, 0.f, 430.f), 34.f, FColor(255, 210, 60));
 	BoardBack = AddLabel(TEXT("BoardBack"), FVector(0.f, 0.f, 430.f), 34.f, FColor(255, 210, 60));
 	BoardBack->SetRelativeRotation(FRotator(0.f, 180.f, 0.f));
@@ -3543,6 +3558,16 @@ void ABRLuchaRing::Tick(float DeltaSeconds)
 	{
 		UpdateBoard(ServerNow);
 	}
+	// The ropes keep the fight in the ring (only while a fight's on, so you can still walk up the steps).
+	const int32 WantRopes = (State == 1 || State == 2) ? 1 : 0;
+	if (WantRopes != RopesLive)
+	{
+		RopesLive = WantRopes;
+		for (UBoxComponent* Wall : RopeWalls)
+		{
+			Wall->SetCollisionEnabled(WantRopes ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+		}
+	}
 	if (!HasAuthority())
 	{
 		return;
@@ -3603,6 +3628,21 @@ void ABRLuchaRing::TickFight(float ServerNow)
 		return;
 	}
 
+	// Hits throw you a lot less far in here: you fall inside the ring, not over the ropes.
+	C->KnockbackScale = 0.4f;
+	L->KnockbackScale = 0.4f;
+	// Bounced off the ropes? Keep both fighters on the canvas.
+	for (ABRCharacter* F : { C, L })
+	{
+		const FVector Loc = GetActorTransform().InverseTransformPositionNoScale(F->GetActorLocation());
+		const float In = RingSize * 0.5f - 45.f;
+		if ((FMath::Abs(Loc.X) > In + 60.f || FMath::Abs(Loc.Y) > In + 60.f) && FMath::Abs(Loc.X) < In + 400.f && FMath::Abs(Loc.Y) < In + 400.f && !F->GetCarrier())
+		{
+			const FVector Back(FMath::Clamp(Loc.X, -In, In), FMath::Clamp(Loc.Y, -In, In), FMath::Max(Loc.Z, DeckHeight + 100.f));
+			F->TeleportTo(GetActorTransform().TransformPositionNoScale(Back), F->GetActorRotation(), false, true);
+			F->LaunchCharacter((GetActorLocation() - F->GetActorLocation()).GetSafeNormal2D() * 450.f + FVector(0.f, 0.f, 150.f), true, true); // BOING off the ropes
+		}
+	}
 	// Knockdown counting.
 	const bool bCDown = C->GetCondition() == EPVVCondition::KnockedDown;
 	const bool bLDown = L->GetCondition() == EPVVCondition::KnockedDown;
@@ -3671,6 +3711,13 @@ void ABRLuchaRing::TickFight(float ServerNow)
 
 void ABRLuchaRing::Finish(int32 WinnerSide, const FString& Why)
 {
+	for (ABRCharacter* F : { Challenger.Get(), Luchador.Get() })
+	{
+		if (F)
+		{
+			F->KnockbackScale = 1.f;
+		}
+	}
 	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
 	const ABRGameState* GS = BRGame(this);
 	ABRCharacter* C = Challenger.Get();
@@ -3928,6 +3975,12 @@ void ABRMariachiBand::BeginPlay()
 				Player->SetHat(EBRHat::Sombrero);
 				Player->SetNPCHeldItem(EBRItem::Trumpet);
 				Player->bPeaceful = true;	// flailing arms never knock bandmates over
+				// Classic mariachi: all black (charro suit) + sombrero.
+				FBRLook Charro = Player->GetLook();
+				Charro.ShirtColor = 0.7625f; // the black swatch on the clothes slider
+				Charro.PantsColor = 0.7625f;
+				Player->SetNPCPoncho(false);
+				Player->SetLook(Charro);
 				Player->bNoFightBack = true;
 				Player->ForceDance(100000.f);
 				Musicians.Add(Player);
