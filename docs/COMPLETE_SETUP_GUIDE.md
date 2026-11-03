@@ -35,7 +35,7 @@ This one guide replaces all the older ones. It covers everything you have to set
    - every `SK_Face_*.glb` (8 beards and mustaches)
    - `SK_Hat_Sombrero.glb`, `SK_Hat_HardHat.glb`, `SK_Hat_CannonHelmet.glb`, `SK_Hat_LuchaMask.glb`
    - `SK_Outfit_Poncho.glb`
-   - from `Art/Characters/Outfits`: `SK_Outfit_CowboyHat.glb` and `SK_Outfit_PatrolCap.glb`, if you haven't imported them already
+   - `SK_Hat_CowboyHat.glb` and `SK_Hat_PatrolCap.glb`
 3. In the import window:
    - **Skeleton** = your body's skeleton. This is the important part; without it the hats float.
    - **Import Morph Targets** ✓
@@ -80,9 +80,9 @@ Open **BP_Runner**. Do everything below, **Compile** and **Save**, then do the s
 
 | Left box | Right box |
 |---|---|
-| Cowboy Hat | SK_Outfit_CowboyHat |
+| Cowboy Hat | SK_Hat_CowboyHat |
 | Sombrero | SK_Hat_Sombrero |
-| Patrol Cap | SK_Outfit_PatrolCap |
+| Patrol Cap | SK_Hat_PatrolCap |
 | Hard Hat | SK_Hat_HardHat |
 | Cannonball Helmet | SK_Hat_CannonHelmet |
 | Lucha Mask | SK_Hat_LuchaMask |
