@@ -251,7 +251,7 @@ void ABRCharacter::DragHeldBody(float DeltaSeconds)
 			return;
 		}
 		FBodyInstance* BI = Their->GetBodyInstance(Bone);
-		if (!BI || !BI->IsInstanceSimulatingPhysics())
+		if (!BI || !Their->IsSimulatingPhysics(Bone))
 		{
 			return;
 		}
