@@ -185,6 +185,10 @@ public:
 	float LastDazeTime = -100.f;
 	bool bDazedSpeedApplied = false;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
+	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */
+	bool IsThreatTo(const ABRCharacter* Who) const;
+	float LastAggressionTime = -100.f;
+	TWeakObjectPtr<ABRCharacter> LastAggressionTarget;
 	float GuardBrokenUntil = -1.f;
 	float BlockReleaseAt = -1.f;
 

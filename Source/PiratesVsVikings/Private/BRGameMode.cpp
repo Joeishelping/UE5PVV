@@ -554,6 +554,17 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 
 void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter)
 {
+	// Self-defense: they were attacking you (punching, grabbing, knife, coming at you) = justified, no scandal.
+	const ABRCharacter* BRVictim = Cast<ABRCharacter>(Victim);
+	const bool bSelfDefense = BRVictim && BRVictim->IsThreatTo(Cast<ABRCharacter>(Shooter));
+	if (const ABRCharacter* NPC = BRVictim; NPC && NPC->IsNPC() && bSelfDefense)
+	{
+		Announce(FText::Format(LOCTEXT("NPCSelfDefense", "{0} shot an attacker in self-defense."), FText::FromString(NameOf(Shooter))));
+		Victim->ApplyKnockdown(Shooter, FVector(0.f, 0.f, 200.f));
+		FTimerHandle Gone;
+		GetWorldTimerManager().SetTimer(Gone, FTimerDelegate::CreateWeakLambda(Victim, [Victim]() { Victim->Destroy(); }), 10.f, false);
+		return;
+	}
 	if (const ABRCharacter* NPC = Cast<ABRCharacter>(Victim); NPC && NPC->IsNPC())
 	{
 		ChangeApproval(-ScandalPenalty);
@@ -569,7 +580,7 @@ void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter
 		return;
 	}
 
-	const bool bJustified = PS->bHasCrossedLine || PS->bIsAggressor;
+	const bool bJustified = PS->bHasCrossedLine || PS->bIsAggressor || bSelfDefense;
 	if (bJustified)
 	{
 		Announce(FText::Format(LOCTEXT("Shot", "{0} shot {1}."), FText::FromString(NameOf(Shooter)), FText::FromString(NameOf(Victim))));

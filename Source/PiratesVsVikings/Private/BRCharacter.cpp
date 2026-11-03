@@ -2391,6 +2391,12 @@ void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 	if (HasAuthority())
 	{
 		BlowDisguise();
+		// Remember who started it (self-defense: shooting someone who's attacking you isn't a scandal).
+		if (ABRCharacter* Hitter = Cast<ABRCharacter>(Attacker); Hitter && Hitter != this)
+		{
+			Hitter->LastAggressionTime = GetWorld()->GetTimeSeconds();
+			Hitter->LastAggressionTarget = this;
+		}
 		// Hit an NPC and they fight you back (Gang Beasts style). Starting fights is trouble.
 		ABRCharacter* BRAttacker = Cast<ABRCharacter>(Attacker);
 		if (bIsNPC && !bNoFightBack && !bPeaceful && BRAttacker && !BRAttacker->IsNPC() && BRAttacker != this && GetCondition() == EPVVCondition::Normal)
@@ -3334,6 +3340,19 @@ void ABRCharacter::BotBlock(float Seconds)
 		Server_SetBlock_Implementation(true);
 		BlockReleaseAt = GetWorld()->GetTimeSeconds() + Seconds;
 	}
+}
+
+bool ABRCharacter::IsThreatTo(const ABRCharacter* Who) const
+{
+	if (!Who || GetCondition() != EPVVCondition::Normal)
+	{
+		return false;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	return (LastAggressionTarget.Get() == Who && Now - LastAggressionTime < 12.f)	// hit you in the last 12 s
+		|| (IsBrawling() && GetBrawlTarget() == Who)							// NPC coming at you
+		|| Who->GrabbedBy.Get() == this											// has you in their hands
+		|| (HeldItem == EBRItem::Knife && FVector::Dist(GetActorLocation(), Who->GetActorLocation()) < 1500.f); // knife out
 }
 
 bool ABRCharacter::IsDazed() const
