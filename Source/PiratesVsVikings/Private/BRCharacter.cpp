@@ -1608,7 +1608,7 @@ void ABRCharacter::PlayTrumpet()
 	{
 		GS->Multicast_NoisePing(GetActorLocation());
 	}
-	Multicast_Trumpet();
+	Multicast_Trumpet(TrumpetSoloSeconds);
 	Notify(Dancers > 0
 		? FText::Format(LOCTEXT("TrumpetHit", "AY AY AY! {0} Border Patrol dancing - RUN!"), Dancers)
 		: LOCTEXT("TrumpetMiss", "Beautiful solo. Nobody was close enough to dance."));
@@ -1619,14 +1619,17 @@ void ABRCharacter::Multicast_TrumpetPose_Implementation()
 	PlayOneShot(TrumpetAnim);
 }
 
-void ABRCharacter::Multicast_Trumpet_Implementation()
+void ABRCharacter::Multicast_Trumpet_Implementation(float HoldSeconds)
 {
 	PlayOneShot(TrumpetAnim);
 	if (TrumpetSound && GetNetMode() != NM_DedicatedServer)
 	{
+		// Keep the tune going while you keep playing; it fades out once you stop (see TickTrumpetAudio).
+		TrumpetPlayUntil = GetWorld()->GetTimeSeconds() + FMath::Max(0.3f, HoldSeconds);
 		// One tune at a time per trumpet: never start it again on top of itself.
 		if (TrumpetAudio && TrumpetAudio->IsPlaying())
 		{
+			TrumpetAudio->AdjustVolume(0.1f, 1.f); // cancel a fade-out that had started
 			return;
 		}
 		if (!TrumpetAudio)
@@ -1637,8 +1640,24 @@ void ABRCharacter::Multicast_Trumpet_Implementation()
 		else
 		{
 			TrumpetAudio->SetSound(TrumpetSound);
+			TrumpetAudio->SetVolumeMultiplier(1.f);
 			TrumpetAudio->Play();
 		}
+	}
+}
+
+void ABRCharacter::TickTrumpetAudio()
+{
+	if (!TrumpetAudio || !TrumpetAudio->IsPlaying() || TrumpetPlayUntil < 0.f)
+	{
+		return;
+	}
+	// Stopped playing, got knocked down, got in a car or hid: the trumpet goes quiet.
+	const bool bInterrupted = GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || bInCannon || bHiddenInSpot;
+	if (bInterrupted || GetWorld()->GetTimeSeconds() > TrumpetPlayUntil)
+	{
+		TrumpetPlayUntil = -1.f;
+		TrumpetAudio->FadeOut(bInterrupted ? 0.15f : 0.6f, 0.f);
 	}
 }
 void ABRCharacter::Input_Drone()
@@ -2834,6 +2853,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	TickEmoteWheel();
 	TickHeadTag();
 	TickBlink();
+	TickTrumpetAudio();
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
 	{
 		const bool bKO = GetCondition() == EPVVCondition::KnockedDown;

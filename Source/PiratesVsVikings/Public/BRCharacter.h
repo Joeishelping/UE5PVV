@@ -128,7 +128,7 @@ public:
 	/** Server (NPCs): hold this item in your hand (band musicians hold trumpets). */
 	void SetNPCHeldItem(EBRItem Item) { HeldItem = Item; OnRep_HeldItem(); }
 	/** Server: a band musician / performer plays a note (trumpet animation). */
-	void PlayBandNote() { Multicast_Trumpet(); }
+	void PlayBandNote() { Multicast_Trumpet(TrumpetNoteHold); }
 	/** Same, but only the animation (the band plays the sound itself). */
 	void PlayBandNoteSilent() { Multicast_TrumpetPose(); }
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_TrumpetPose();
@@ -523,6 +523,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float TrumpetCooldown = 25.f;
 	/** Your mariachi music (drag a sound in). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") TObjectPtr<USoundBase> TrumpetSound;
+	/** Trumpet blast (G): the tune plays this long, then fades out. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float TrumpetSoloSeconds = 4.f;
+	/** Playing in the band: the tune keeps going this long after your last note, then fades out. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Mariachi") float TrumpetNoteHold = 1.5f;
 	/** How far away footsteps can be heard (cm). NPC steps are quieter than players'. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Sound") float FootstepRange = 1200.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Sound") float FootstepVolume = 0.6f;
@@ -894,6 +898,9 @@ private:
 	float FootFloor[2] = { 1000.f, 1000.f };
 	/** The trumpet tune that's playing (a new one never starts on top of it). */
 	UPROPERTY() TObjectPtr<class UAudioComponent> TrumpetAudio;
+	/** The tune fades out this long after your last note / blast (keeps going while you keep playing). */
+	float TrumpetPlayUntil = -1.f;
+	void TickTrumpetAudio();
 	float PelvisFallSpeed = 0.f;
 	float LastThumpTime = -100.f;
 	float LastGruntTime = -100.f;
@@ -1019,7 +1026,7 @@ private:
 	UFUNCTION(Server, Reliable) void Server_PlayTrumpet();
 	UFUNCTION(Server, Reliable) void Server_UseItem(int32 Slot);
 	UFUNCTION(Server, Reliable) void Server_DropItem(int32 Slot);
-	UFUNCTION(NetMulticast, Unreliable) void Multicast_Trumpet();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Trumpet(float HoldSeconds);
 	void Input_Drone();
 	void Input_WeaponMode();
 	void Input_Scan();
