@@ -56,6 +56,15 @@ private:
 	float WakeUpAt = 0.f;
 	FVector PatrolPoint = FVector::ZeroVector;
 	float PatrolUntil = 0.f;
+	// Smarter bots.
+	float HideUntil = -1.f;
+	float NextTase = 0.f;
+	float NextScan = 0.f;
+	float RouteOffsetY = 0.f;
+	bool bRouteChosen = false;
+	FVector InvestigatePoint = FVector::ZeroVector;
+	float InvestigateUntil = -1.f;
+	TWeakObjectPtr<ABRCharacter> MeleeFoeRunner;
 	FVector MoveDir = FVector::ZeroVector;
 	bool bWantSprint = false;
 };

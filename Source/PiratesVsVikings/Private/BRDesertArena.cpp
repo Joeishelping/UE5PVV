@@ -256,6 +256,15 @@ ABRDesertArena::ABRDesertArena()
 	Footprints->SetStaticMesh(CubeMesh);
 	Footprints->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Footprints->SetCastShadow(false);
+	CricketsAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("AmbienceCrickets"));
+	TownAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("AmbienceTown"));
+	DesertAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("AmbienceDesert"));
+	for (UAudioComponent* Amb : { CricketsAudio.Get(), TownAudio.Get(), DesertAudio.Get() })
+	{
+		Amb->SetupAttachment(Root);
+		Amb->bAutoActivate = false;
+		Amb->bAllowSpatialization = false;
+	}
 	RainAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("RainAudio"));
 	RainAudio->SetupAttachment(Root);
 	RainAudio->bAutoActivate = false;
@@ -433,6 +442,9 @@ void ABRDesertArena::BeginPlay()
 			SandFX = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, SandSystem, GetActorLocation(), FRotator::ZeroRotator, FVector(1.f), false, false);
 		}
 		RainAudio->SetSound(FXSettings->RainLoopSound.LoadSynchronous());
+		CricketsAudio->SetSound(FXSettings->NightCricketsLoop.LoadSynchronous());
+		TownAudio->SetSound(FXSettings->TownChatterLoop.LoadSynchronous());
+		DesertAudio->SetSound(FXSettings->DesertWindLoop.LoadSynchronous());
 		WindAudio->SetSound(FXSettings->WindLoopSound.LoadSynchronous());
 		if (UMaterialInstanceDynamic* RainMID = RainDrops->CreateDynamicMaterialInstance(0))
 		{
@@ -631,6 +643,51 @@ void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* G
 	}
 	TickParticles(DeltaSeconds);
 	TickFootprints();
+	TickAmbience();
+}
+
+void ABRDesertArena::TickAmbience()
+{
+	const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!Cam)
+	{
+		return;
+	}
+	const FVector Local = Cam->GetCameraLocation() - GetActorLocation();
+	const float Angle = (DisplayedTime - 6.f) / 24.f * 360.f;
+	const float Night = FMath::Clamp((0.12f - FMath::Sin(FMath::DegreesToRadians(Angle))) / 0.32f, 0.f, 1.f);
+	const float InTown = 1.f - FMath::Clamp((FVector::Dist2D(Local, FVector(-10500.f, 0.f, 0.f)) - 4000.f) / 3000.f, 0.f, 1.f);
+	const float Music = FPVVPlayerOptions::MusicVolume;
+	auto Loop = [](UAudioComponent* A, float Volume)
+	{
+		if (!A || !A->GetSound())
+		{
+			return;
+		}
+		if (Volume > 0.02f && !A->IsPlaying())
+		{
+			A->Play();
+		}
+		A->SetVolumeMultiplier(FMath::Max(Volume, 0.001f));
+	};
+	Loop(CricketsAudio, Night * (1.f - RainAmount) * 0.7f * Music);
+	Loop(TownAudio, InTown * (1.f - 0.6f * Night) * (1.f - 0.5f * RainAmount) * 0.6f * Music);
+	Loop(DesertAudio, (1.f - InTown) * (1.f - SandAmount) * 0.4f * Music);
+	// A dog barking somewhere far off at night.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Night > 0.5f && Now >= NextBark)
+	{
+		NextBark = Now + FMath::FRandRange(15.f, 45.f);
+		const TArray<TSoftObjectPtr<USoundBase>>& Barks = GetDefault<UBRSettings>()->DistantDogBarks;
+		if (Barks.Num() > 0)
+		{
+			if (USoundBase* Bark = Barks[FMath::RandRange(0, Barks.Num() - 1)].LoadSynchronous())
+			{
+				const FVector Far = Cam->GetCameraLocation() + FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f).Vector() * FMath::FRandRange(2500.f, 5000.f);
+				UGameplayStatics::PlaySoundAtLocation(this, Bark, Far, FMath::FRandRange(0.5f, 0.9f));
+			}
+		}
+	}
 }
 
 void ABRDesertArena::TickFootprints()
@@ -1060,6 +1117,25 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 
 	// --- La Cantina del Diablo (bar fights, drinks, drinking contest, bouncer). Door faces the road.
 	World->SpawnActor<ABRCantina>(ABRCantina::StaticClass(), At(-8000.f, -6300.f, Ground, 90.f), Params);
+
+	// --- Smuggling job board in town
+	World->SpawnActor<ABRMissionBoard>(ABRMissionBoard::StaticClass(), At(-9800.f, 1900.f, Ground, 0.f), Params);
+
+	// --- Planks lying around town (grab with Z and swing)
+	{
+		const FVector2D PlankSpots[] = { {-12400.f, 900.f}, {-9600.f, -1950.f}, {-13000.f, -3800.f}, {-7200.f, 2300.f}, {-11500.f, 4300.f}, {-6200.f, -4000.f} };
+		for (const FVector2D& P : PlankSpots)
+		{
+			const FTransform T = FTransform(FRotator(0.f, FMath::FRandRange(0.f, 180.f), 0.f), GetActorLocation() + FVector(P.X, P.Y, Ground + 30.f), FVector(1.3f, 0.18f, 0.05f));
+			if (ABRPhysicsProp* Plank = World->SpawnActorDeferred<ABRPhysicsProp>(ABRPhysicsProp::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn))
+			{
+				Plank->MassKg = 4.f;
+				Plank->KnockoutSpeed = 600.f;
+				Plank->Color = FLinearColor(0.55f, 0.38f, 0.2f);
+				Plank->FinishSpawning(T);
+			}
+		}
+	}
 
 	// --- Wanted posters around town
 	{

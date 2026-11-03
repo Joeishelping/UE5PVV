@@ -16,6 +16,8 @@ void ABRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPlayerState, JobReadyAt);
 	DOREPLIFETIME(ABRPlayerState, Points);
 	DOREPLIFETIME(ABRPlayerState, WantedStars);
+	DOREPLIFETIME_CONDITION(ABRPlayerState, MissionDeadline, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ABRPlayerState, MissionPay, COND_OwnerOnly);
 	DOREPLIFETIME(ABRPlayerState, bReady);
 	DOREPLIFETIME(ABRPlayerState, StatCrossings);
 	DOREPLIFETIME(ABRPlayerState, StatSmuggled);

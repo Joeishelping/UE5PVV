@@ -107,6 +107,11 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> RainLoopSound;
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> WindLoopSound;
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> ThunderSound;
+	/** Ambience (set loops to Looping): crickets at night, town chatter near town, wind in the desert. Dog barks play now and then at night. */
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> NightCricketsLoop;
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> TownChatterLoop;
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> DesertWindLoop;
+	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TArray<TSoftObjectPtr<USoundBase>> DistantDogBarks;
 
 	USoundBase* GetSound(EBRSfx Sfx) const;
 

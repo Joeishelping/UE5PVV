@@ -38,7 +38,8 @@ enum class EBRItem : uint8
 	Poncho			UMETA(DisplayName = "Disguise Poncho"),
 	Lasso			UMETA(DisplayName = "Lasso"),
 	CardboardBox	UMETA(DisplayName = "Cardboard Box"),
-	Knife			UMETA(DisplayName = "Knife")
+	Knife			UMETA(DisplayName = "Knife"),
+	Package			UMETA(DisplayName = "Smuggling Package")
 };
 
 /** Hats: each one gives a skill. Get knocked out and it may fly off - anyone can pick it up. */
@@ -166,7 +167,7 @@ namespace BR
 	/** Slider 0..1 -> natural hair colours, then dyed ones. Below 0.05 = keep the hair's own colour. */
 	PIRATESVSVIKINGS_API FLinearColor HairColor(float Slider);
 	/** Contraband: worth big money if you get it to the Safe Zone; confiscated if you're caught. */
-	inline bool IsIllegal(EBRItem Item) { return Item == EBRItem::IllegalGun || Item == EBRItem::Drugs; }
+	inline bool IsIllegal(EBRItem Item) { return Item == EBRItem::IllegalGun || Item == EBRItem::Drugs || Item == EBRItem::Package; }
 }
 
 /** Character customization (menu sliders). Same options for every player on both teams. */

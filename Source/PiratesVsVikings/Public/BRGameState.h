@@ -30,6 +30,14 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	EBRWeather Weather = EBRWeather::Clear;
 
+	/** "Day 3": how many rounds this host has played (+1). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 DayNumber = 1;
+	/** The best moments of the round (shown on the end screen). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	TArray<FString> TopMoments;
+	TArray<float> TopMomentScores;
+
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 RunnersSafe = 0;
 

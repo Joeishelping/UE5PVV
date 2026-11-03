@@ -1983,6 +1983,8 @@ void ABRPhysicsProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ABRPhysicsProp, Holder);
+	DOREPLIFETIME(ABRPhysicsProp, Color);
+	DOREPLIFETIME(ABRPhysicsProp, PropShape);
 }
 
 void ABRPhysicsProp::OnConstruction(const FTransform& Transform)
@@ -1998,6 +2000,13 @@ void ABRPhysicsProp::BeginPlay()
 {
 	Super::BeginPlay();
 	Mesh->SetMassOverrideInKg(NAME_None, MassKg, true);
+	if (!PropMesh && PropShape == 1)
+	{
+		if (UStaticMesh* Round = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+		{
+			Mesh->SetStaticMesh(Round);
+		}
+	}
 	if (!PropMesh)
 	{
 		if (UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(0))
@@ -2092,6 +2101,13 @@ void ABRPhysicsProp::OnPropHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	}
 	// Bonk.
 	Victim->ApplyKnockdown(LastThrower.Get(), Vel.GetSafeNormal2D() * 500.f + FVector(0.f, 0.f, 250.f));
+	if (PropShape == 1)
+	{
+		// Bottles SMASH.
+		ABRGameState::FX(this, EBRFX::Sparks, GetActorLocation());
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 60.f), TEXT("*SMASH*"));
+		SetLifeSpan(0.05f);
+	}
 	if (ABRCharacter* Thrower = LastThrower.Get())
 	{
 		if (ABRPlayerState* PS = Thrower->GetBRPlayerState())

@@ -1,5 +1,6 @@
 #include "BRHUD.h"
 #include "BRCantina.h"
+#include "BRDesertArena.h"
 #include "BRCar.h"
 #include "BRCharacter.h"
 #include "BRDrone.h"
@@ -132,7 +133,7 @@ void ABRHUD::DrawHUD()
 		}
 	}
 	const TCHAR* WeatherText = GS->Weather == EBRWeather::Rain ? TEXT("Rain") : GS->Weather == EBRWeather::Sandstorm ? TEXT("SANDSTORM") : TEXT("Clear");
-	Centered(FString::Printf(TEXT("%s  %s   |   %s   |   Warden approval %d%%"), *TimeOfDayText(GS->TimeOfDay), GS->IsNight() ? TEXT("(night)") : TEXT(""),
+	Centered(FString::Printf(TEXT("DAY %d   |   %s  %s   |   %s   |   Warden approval %d%%"), GS->DayNumber, *TimeOfDayText(GS->TimeOfDay), GS->IsNight() ? TEXT("(night)") : TEXT(""),
 		WeatherText, FMath::RoundToInt(GS->Approval)), 46.f, White, Small, 1.2f);
 	Bar(SX * 0.5f - 150.f, 66.f, 300.f, 10.f, GS->Approval / 100.f, GS->Approval >= ABRGameState::DroneApproval ? Green : (GS->Approval >= ABRGameState::LethalApproval ? Yellow : Red));
 
@@ -186,6 +187,18 @@ void ABRHUD::DrawHUD()
 			{
 				Centered(FString::Printf(TEXT("%s:  %s  (%d %s)"), Award.Title, *Best->GetPlayerName(), Best->*Award.Stat, Award.Unit), AwardY, Yellow, Big, 1.3f);
 				AwardY += 32.f;
+			}
+		}
+		// --- Best moments of the round
+		if (GS->TopMoments.Num() > 0)
+		{
+			AwardY += 20.f;
+			Centered(FString::Printf(TEXT("DAY %d - BEST MOMENTS"), GS->DayNumber), AwardY, White, Big, 1.4f);
+			AwardY += 36.f;
+			for (int32 i = 0; i < GS->TopMoments.Num(); ++i)
+			{
+				Centered(FString::Printf(TEXT("%d.  %s"), i + 1, *GS->TopMoments[i]), AwardY, FLinearColor(1.f, 0.85f, 0.5f), Small, 1.3f);
+				AwardY += 26.f;
 			}
 		}
 	}
@@ -540,6 +553,19 @@ void ABRHUD::DrawHUD()
 		Centered(Me->IsHiddenFromPatrol() ? TEXT("In the box: invisible while you stand still") : TEXT("In the box: MOVING (they can see you)"), SY * 0.7f, Me->IsHiddenFromPatrol() ? Green : Yellow, Small, 1.3f);
 	}
 
+	// --- Smuggling job timer
+	if (const ABRPlayerState* JobPS = Me->GetBRPlayerState(); JobPS && JobPS->MissionPay > 0)
+	{
+		const int32 Left = FMath::Max(0, FMath::CeilToInt(JobPS->MissionDeadline - GS->GetServerWorldTimeSeconds()));
+		Centered(FString::Printf(TEXT("SMUGGLING JOB  $%d   -   %d:%02d to reach the Safe Zone"), JobPS->MissionPay, Left / 60, Left % 60), 155.f, Left < 30 ? Red : Yellow, Small, 1.3f);
+	}
+
+	// --- Map (hold Tab)
+	if (PC->bShowScoreboard)
+	{
+		DrawMap(Me, GS);
+	}
+
 	// --- Wanted stars (your own)
 	if (const ABRPlayerState* MyPS = Me->GetBRPlayerState(); MyPS && MyPS->WantedStars > 0)
 	{
@@ -617,6 +643,9 @@ void ABRHUD::DrawHUD()
 	if (Me->GetCondition() == EPVVCondition::Detained)
 	{
 		Centered(TEXT("N = watch other players"), SY * 0.4f + 40.f, White, Small, 1.2f);
+		Centered(Me->bGuardWatching ? TEXT("A GUARD IS WATCHING - wait for them to leave...") : TEXT("Nobody's watching: MASH SPACE to pick your cuffs!"),
+			SY * 0.4f + 75.f, Me->bGuardWatching ? Red : Green, Small, 1.3f);
+		Bar(SX * 0.5f - 150.f, SY * 0.4f + 100.f, 300.f, 12.f, Me->EscapeProgress, Me->bGuardWatching ? Red : Green);
 	}
 	switch (Me->GetCondition())
 	{
@@ -637,4 +666,63 @@ void ABRHUD::DrawHUD()
 	{
 		Bar(SX * 0.5f - 120.f, SY * 0.62f + 38.f, 240.f, 14.f, Me->GetHoldProgress(), Yellow);
 	}
+}
+
+void ABRHUD::DrawMap(const ABRCharacter* Me, const ABRGameState* GS)
+{
+	const ABRDesertArena* Arena = nullptr;
+	for (TActorIterator<ABRDesertArena> It(GetWorld()); It; ++It)
+	{
+		Arena = *It;
+	}
+	(void)GS;
+	if (!Arena || !Me)
+	{
+		return; // the map only knows the built-in test map
+	}
+	const float MinX = -ABRDesertArena::HalfX, MaxX = ABRDesertArena::EastX, MinY = -ABRDesertArena::HalfY, MaxY = ABRDesertArena::HalfY;
+	const float W = FMath::Min(560.f, Canvas->SizeX * 0.42f);
+	const float H = W * (MaxY - MinY) / (MaxX - MinX);
+	const float Left = Canvas->SizeX - W - 20.f, Top = Canvas->SizeY - H - 110.f;
+	const FVector O = Arena->GetActorLocation();
+	auto ToMap = [&](const FVector& World) { return FVector2D(Left + (World.X - O.X - MinX) / (MaxX - MinX) * W, Top + (World.Y - O.Y - MinY) / (MaxY - MinY) * H); };
+	auto Band = [&](float X0, float X1, const FLinearColor& C) { const FVector2D A = ToMap(O + FVector(X0, MinY, 0.f)), B = ToMap(O + FVector(X1, MaxY, 0.f)); DrawRect(C, A.X, A.Y, B.X - A.X, B.Y - A.Y); };
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), Left - 6.f, Top - 24.f, W + 12.f, H + 30.f);
+	DrawRect(FLinearColor(0.55f, 0.42f, 0.26f, 0.9f), Left, Top, W, H);
+	Band(-ABRDesertArena::RiverHalfWidth, ABRDesertArena::RiverHalfWidth, FLinearColor(0.15f, 0.35f, 0.7f, 0.95f));
+	Band(ABRDesertArena::LineX - 25.f, ABRDesertArena::LineX + 25.f, FLinearColor(1.f, 0.85f, 0.f));
+	Band(ABRDesertArena::WallX - 40.f, ABRDesertArena::WallX + 40.f, FLinearColor(0.3f, 0.3f, 0.3f));
+	Band(ABRDesertArena::SafeX, ABRDesertArena::EastX, FLinearColor(0.1f, 0.7f, 0.2f, 0.6f));
+	{
+		const FVector2D A = ToMap(O + FVector(MinX, ABRDesertArena::RoadY - 350.f, 0.f)), B = ToMap(O + FVector(MaxX, ABRDesertArena::RoadY + 350.f, 0.f));
+		DrawRect(FLinearColor(0.12f, 0.12f, 0.13f), A.X, A.Y, B.X - A.X, FMath::Max(2.f, B.Y - A.Y));
+	}
+	struct FSpot { float X, Y; const TCHAR* Name; };
+	static const FSpot Spots[] = { {-11000.f, 0.f, TEXT("TOWN")}, {-8000.f, -6300.f, TEXT("CANTINA")}, {-7550.f, 3000.f, TEXT("CAR LOT")},
+		{-11000.f, -6200.f, TEXT("RING")}, {-9000.f, 2200.f, TEXT("PIT")}, {-9800.f, 1900.f, TEXT("JOBS")}, {6100.f, 4000.f, TEXT("PEN")},
+		{8500.f, 4000.f, TEXT("HQ")}, {3500.f, -1200.f, TEXT("GATE")}, {23500.f, 0.f, TEXT("SAFE ZONE")} };
+	for (const FSpot& Spot : Spots)
+	{
+		const FVector2D P = ToMap(O + FVector(Spot.X, Spot.Y, 0.f));
+		DrawText(Spot.Name, FLinearColor::White, P.X - 12.f, P.Y - 6.f, GEngine->GetSmallFont(), 0.75f);
+	}
+	// People: you, your teammates, and tagged enemies (never untagged Runners for Border Patrol).
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		const ABRCharacter* C = *It;
+		if (C->IsNPC())
+		{
+			continue;
+		}
+		const bool bMe = C == Me, bMate = C->GetFaction() == Me->GetFaction();
+		if (!bMe && !bMate && !C->IsSpotted())
+		{
+			continue;
+		}
+		const FVector2D P = ToMap(C->GetActorLocation());
+		const FLinearColor Col = bMe ? FLinearColor::White : (bMate ? FLinearColor(0.2f, 1.f, 0.3f) : FLinearColor(1.f, 0.2f, 0.2f));
+		const float Sz = bMe ? 9.f : 7.f;
+		DrawRect(Col, P.X - Sz * 0.5f, P.Y - Sz * 0.5f, Sz, Sz);
+	}
+	DrawText(TEXT("MAP  (white = you, green = team, red = tagged)"), FLinearColor(1.f, 0.9f, 0.6f), Left, Top - 20.f, GEngine->GetSmallFont(), 0.9f);
 }

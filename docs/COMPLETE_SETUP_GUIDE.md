@@ -444,6 +444,23 @@ So all you have to do is **import the files** (keep their names). Anything you s
 
 ---
 
+## Part 15f: Prison breaks, jobs, weapons, map, smarter AI
+
+- **Prison breaks:** locked in the holding pen and no Border Patrol within ~18 m? **Mash SPACE** to pick your cuffs (bar on screen). A guard nearby = no progress. Escape = alarm + noise ping. NPC prisoners work their cuffs loose on their own if nobody watches them.
+- **Smuggling jobs:** the **SE BUSCA** job board in town (near the cockfight pit). Take a package, get it to the Safe Zone before the timer runs out = $300-650 bonus. The package shows up as CONTRABAND on the scanner. Too slow = the client takes it back.
+- **Weapons to grab (Z) and swing:** chairs and bottles in the cantina (bottles SMASH when they hit someone), planks lying around town.
+- **Mariachi serenade:** the trumpet (G) now makes anyone nearby dance (locals, the other team), not just Border Patrol. Not your teammates.
+- **Map:** hold **Tab** (with the scoreboard): top-down map with landmarks, you (white), your team (green) and tagged enemies (red).
+- **Day counter** at the top, and the round-end screen lists the **5 best moments** of the round.
+- **Ambient sounds:** Project Settings → Border Run → Sounds → **Night Crickets Loop, Town Chatter Loop, Desert Wind Loop, Distant Dog Barks** (tick Looping on the loops).
+- **NPC trucks** keep a much bigger gap in the queue at the border.
+- **Smarter AI:**
+  - *Runner bots* spread out along the border, duck into hiding spots when Border Patrol is near, fight back when cornered (and finish off dazed cops), block.
+  - *Border Patrol bots* lead their target, **tase** runners who run, investigate noises, and work the checkpoint (walk up to waiting trucks, scan everyone, order the dirty ones out, chase the ones that bolt).
+  - *NPC fighters* back off and block when hurt, circle instead of walking into punches, and pounce on anyone who's dazed. Fleeing NPCs dive away from grabs.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
@@ -465,7 +482,7 @@ Tick these off. Anything you skip just stays silent or uses a simple placeholder
 **BP_BRGameMode (Part 4):** character classes + GameMode Override in World Settings.
 
 **Project Settings → Border Run (all optional):**
-- [ ] **Sounds**: every slot, including the new Gate Smash, Cantina Music, Bar Fight, Drink, **Rain Loop, Wind Loop, Thunder**
+- [ ] **Sounds**: every slot, including Gate Smash, Cantina Music, Bar Fight, Drink, Rain Loop, Wind Loop, Thunder, **Night Crickets Loop, Town Chatter Loop, Desert Wind Loop, Distant Dog Barks**
 - [ ] **Body Sounds**: footsteps, thumps, grunts, yells, whooshes
 - [ ] **Effects**: Niagara effects (dust, splash, smoke, punch hit, cigarette smoke, sparks, **rain, sandstorm**)
 - [ ] **Test Map Look**: the World Texture material + textures (Part 9)

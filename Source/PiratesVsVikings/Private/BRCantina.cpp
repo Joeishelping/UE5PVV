@@ -219,6 +219,21 @@ void ABRCantina::BeginPlay()
 			Spot->FinishSpawning(T);
 		}
 	}
+	// Things to grab and swing (Z): chairs and bottles.
+	for (int32 i = 0; i < 10; ++i)
+	{
+		const bool bBottle = i >= 5;
+		const FVector At = bBottle ? Local(-HalfX + 230.f, -320.f + (i - 5) * 150.f, 150.f) : Local(FMath::FRandRange(-150.f, HalfX - 200.f), FMath::FRandRange(-HalfY + 150.f, HalfY - 150.f), 60.f);
+		const FTransform T(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At, bBottle ? FVector(0.08f, 0.08f, 0.26f) : FVector(0.42f, 0.42f, 0.8f));
+		if (ABRPhysicsProp* Prop = GetWorld()->SpawnActorDeferred<ABRPhysicsProp>(ABRPhysicsProp::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn))
+		{
+			Prop->PropShape = bBottle ? 1 : 0;
+			Prop->MassKg = bBottle ? 1.f : 7.f;
+			Prop->KnockoutSpeed = bBottle ? 450.f : 650.f;
+			Prop->Color = bBottle ? (i % 2 ? FLinearColor(0.15f, 0.45f, 0.15f) : FLinearColor(0.5f, 0.3f, 0.08f)) : FLinearColor(0.38f, 0.22f, 0.1f);
+			Prop->FinishSpawning(T);
+		}
+	}
 	// The bouncer on the porch.
 	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 	{
@@ -778,6 +793,53 @@ void ABRCantina::TickBouncer()
 		P->LaunchCharacter(Out * 900.f + FVector(0.f, 0.f, 250.f), true, true);
 		P->Notify(LOCTEXT("Bounced", "\"NOT TONIGHT, AMIGO.\" - you started too many fights in here. The bouncer won't let you in."));
 	}
+}
+
+// ===========================================================================================
+// Smuggling job board
+
+ABRMissionBoard::ABRMissionBoard()
+{
+	bReplicates = true;
+	AddMesh(TEXT("Board"), CubeMesh, FVector(0.f, 0.f, 200.f), FVector(10.f, 220.f, 160.f), FLinearColor(0.35f, 0.22f, 0.1f));
+	AddMesh(TEXT("LegL"), CubeMesh, FVector(0.f, -90.f, 60.f), FVector(10.f, 12.f, 120.f), FLinearColor(0.25f, 0.15f, 0.07f));
+	AddMesh(TEXT("LegR"), CubeMesh, FVector(0.f, 90.f, 60.f), FVector(10.f, 12.f, 120.f), FLinearColor(0.25f, 0.15f, 0.07f));
+	for (int32 i = 0; i < 4; ++i)
+	{
+		AddMesh(*FString::Printf(TEXT("Note%d"), i), CubeMesh, FVector(7.f, -75.f + i * 50.f, 190.f + (i % 2) * 25.f), FVector(2.f, 38.f, 46.f), FLinearColor(0.92f, 0.88f, 0.75f), FRotator::ZeroRotator, false);
+	}
+	if (UTextRenderComponent* Sign = AddLabel(TEXT("Sign"), FVector(10.f, 0.f, 300.f), 40.f, FColor(255, 215, 80)))
+	{
+		Sign->SetText(FText::FromString(TEXT("SE BUSCA: SMUGGLING JOBS")));
+	}
+}
+
+bool ABRMissionBoard::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRPlayerState* PS = CantinaPS(Interactor);
+	return IsFreePlayer(Interactor) && Interactor->GetFaction() == BR::Runners && PS && PS->MissionPay == 0 && PS->HasFreeSlot();
+}
+
+FText ABRMissionBoard::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return FText::Format(LOCTEXT("TakeJob", "Take a smuggling job: get a package to the Safe Zone in {0} min (${1}-${2})"),
+		FMath::RoundToInt(TimeLimit / 60.f), MinPay, MaxPay);
+}
+
+void ABRMissionBoard::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRPlayerState* PS = CantinaPS(Interactor);
+	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
+	ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	if (!HasAuthority() || !PS || !GS || !BRC || !CanInteract_Implementation(Interactor) || !PS->AddItem(EBRItem::Package))
+	{
+		return;
+	}
+	PS->MissionPay = FMath::RandRange(MinPay, MaxPay) / 10 * 10;
+	PS->MissionDeadline = GS->GetServerWorldTimeSeconds() + TimeLimit;
+	BRC->Client_Banner(FString::Printf(TEXT("SMUGGLING JOB: $%d   -   %d:00 to reach the Safe Zone"), PS->MissionPay, FMath::RoundToInt(TimeLimit / 60.f)), true);
+	BRC->Notify(LOCTEXT("JobTaken", "Package in your pocket. Don't get scanned - it shows up as CONTRABAND!"));
+	ABRGameState::Sfx(this, EBRSfx::Buy, GetActorLocation());
 }
 
 // ===========================================================================================

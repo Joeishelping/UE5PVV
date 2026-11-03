@@ -1,5 +1,6 @@
 #include "BRCharacter.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "PVVDetentionZone.h"
 #include "Animation/AnimSequence.h"
 #include "Engine/SkeletalMesh.h"
 #include "BRSettings.h"
@@ -191,6 +192,8 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bPeaceful);
 	DOREPLIFETIME(ABRCharacter, bBlocking);
 	DOREPLIFETIME(ABRCharacter, DazedUntil);
+	DOREPLIFETIME_CONDITION(ABRCharacter, EscapeProgress, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ABRCharacter, bGuardWatching, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, GuardMeter, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, TipsyUntil);
 	DOREPLIFETIME_CONDITION(ABRCharacter, bChugging, COND_OwnerOnly);
@@ -1035,7 +1038,11 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		{
 			Away = (GetActorLocation() - WanderHome) * FVector(1.f, 1.f, 0.f);
 		}
-		const FVector Wiggle = FVector::CrossProduct(Away.GetSafeNormal(), FVector::UpVector) * FMath::Sin(Now * 2.3f) * 0.4f;
+		const FVector Wiggle = FVector::CrossProduct(Away.GetSafeNormal(), FVector::UpVector) * FMath::Sin(Now * 2.3f) * 0.7f;
+		if (Closest < 260.f && FMath::FRand() < 0.04f)
+		{
+			Server_Dive_Implementation(); // dive away from the grab
+		}
 		GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
 		AddMovementInput((Away.GetSafeNormal() + Wiggle).GetSafeNormal(), 1.f);
 		return;
@@ -1525,7 +1532,8 @@ void ABRCharacter::PlayTrumpet()
 	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 	{
 		ABRCharacter* Other = *It;
-		if (Other != this && Other->IsWarden() && Other->GetCondition() == EPVVCondition::Normal && !Other->GetCurrentBoat()
+		const bool bTeammate = !Other->IsNPC() && Other->GetFaction() == GetFaction();
+		if (Other != this && !bTeammate && !Other->bPeaceful && !Other->bNoFightBack && Other->GetCondition() == EPVVCondition::Normal && !Other->GetCurrentBoat()
 			&& FVector::Dist(Other->GetActorLocation(), GetActorLocation()) < TrumpetRange)
 		{
 			Other->ForceDance(DanceSeconds);
@@ -2670,6 +2678,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority())
 	{
 		TickFlight();
+		TickPrisonBreak(DeltaSeconds);
 		TickWander(DeltaSeconds);
 		TickFollow(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
@@ -3026,6 +3035,11 @@ bool ABRCharacter::HandleJumpPressed()
 	if (bChugging)
 	{
 		Server_Chug(); // drinking contest: mash Space to chug
+		return true;
+	}
+	if (GetCondition() == EPVVCondition::Detained)
+	{
+		Server_PickCuffs(); // locked up: mash Space to pick your cuffs when nobody's watching
 		return true;
 	}
 	if (GrabbedBy)
@@ -3417,6 +3431,41 @@ void ABRCharacter::Input_RightHandStop()
 	}
 }
 
+void ABRCharacter::BotScan(ABRCharacter* Who)
+{
+	if (Who)
+	{
+		const FVector From = GetActorLocation() + FVector(0.f, 0.f, 40.f);
+		SetActorRotation(FRotator(0.f, (Who->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
+		Server_Scan_Implementation(From, (Who->GetActorLocation() - From).GetSafeNormal());
+	}
+}
+
+void ABRCharacter::BotOrderOut()
+{
+	Server_OrderOut_Implementation();
+}
+
+bool ABRCharacter::BotTase(ABRCharacter* Who)
+{
+	if (!HasAuthority() || !Who || !IsWarden() || GetCurrentBoat() || AmmoTaser <= 0)
+	{
+		return false;
+	}
+	const bool bWasDrawn = bWeaponDrawn;
+	const bool bWasLethal = bLethalMode;
+	bWeaponDrawn = true;
+	bLethalMode = false;
+	const FVector Eye = GetActorLocation() + FVector(0.f, 0.f, 60.f);
+	const FVector Aim = (Who->GetActorLocation() + Who->GetVelocity() * 0.15f - Eye).GetSafeNormal(); // lead the target a little
+	SetActorRotation(FRotator(0.f, Aim.Rotation().Yaw, 0.f));
+	const int32 Before = AmmoTaser;
+	Server_Fire_Implementation(Eye, Aim);
+	bWeaponDrawn = bWasDrawn;
+	bLethalMode = bWasLethal;
+	return AmmoTaser != Before;
+}
+
 void ABRCharacter::Input_BlockStart() { Server_SetBlock(true); }
 void ABRCharacter::Input_OrderOut() { Server_OrderOut(); }
 
@@ -3487,6 +3536,88 @@ bool ABRCharacter::IsThreatTo(const ABRCharacter* Who) const
 		|| (IsBrawling() && GetBrawlTarget() == Who)							// NPC coming at you
 		|| Who->GrabbedBy.Get() == this											// has you in their hands
 		|| (HeldItem == EBRItem::Knife && FVector::Dist(GetActorLocation(), Who->GetActorLocation()) < 1500.f); // knife out
+}
+
+void ABRCharacter::Server_PickCuffs_Implementation()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (GetCondition() != EPVVCondition::Detained || bGuardWatching || Now - LastMashTime < 0.08f)
+	{
+		return;
+	}
+	LastMashTime = Now;
+	EscapeProgress = FMath::Min(1.f, EscapeProgress + 0.012f);
+	if (EscapeProgress >= 1.f)
+	{
+		BreakOut();
+	}
+}
+
+void ABRCharacter::TickPrisonBreak(float DeltaSeconds)
+{
+	if (!HasAuthority() || GetCondition() != EPVVCondition::Detained)
+	{
+		EscapeProgress = 0.f;
+		return;
+	}
+	// Is any Border Patrol player close enough to see you?
+	bool bWatched = false;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		if (It->IsWarden() && !It->IsNPC() && It->GetCondition() == EPVVCondition::Normal && FVector::Dist(It->GetActorLocation(), GetActorLocation()) < 1800.f)
+		{
+			bWatched = true;
+			break;
+		}
+	}
+	bGuardWatching = bWatched;
+	if (bWatched)
+	{
+		EscapeProgress = FMath::Max(0.f, EscapeProgress - DeltaSeconds * 0.05f); // they notice your fiddling
+	}
+	else if (bIsNPC)
+	{
+		EscapeProgress += DeltaSeconds / 40.f; // NPCs work their cuffs loose on their own (~40 s unwatched)
+		if (EscapeProgress >= 1.f)
+		{
+			BreakOut();
+		}
+	}
+}
+
+void ABRCharacter::BreakOut()
+{
+	if (!HasAuthority() || GetCondition() != EPVVCondition::Detained)
+	{
+		return;
+	}
+	EscapeProgress = 0.f;
+	const FVector Here = GetActorLocation();
+	const FVector Zone = GetDetentionZone() ? GetDetentionZone()->GetActorLocation() : Here - GetActorForwardVector() * 100.f;
+	FVector Away = (Here - Zone).GetSafeNormal2D();
+	if (Away.IsNearlyZero())
+	{
+		Away = GetActorForwardVector().GetSafeNormal2D();
+	}
+	ReleaseFromDetention(Here + Away * 900.f + FVector(0.f, 0.f, 60.f));
+	if (ABRPlayerState* PS = GetBRPlayerState())
+	{
+		PS->SentenceSeconds = 0;
+	}
+	if (bIsNPC)
+	{
+		StartFleeing(40.f);
+	}
+	Notify(LOCTEXT("BrokeOut", "You slipped the cuffs and got out! RUN!"));
+	ABRGameState::Sfx(this, EBRSfx::TripwireAlarm, Here);
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->Feed(FString::Printf(TEXT("PRISON BREAK! %s escaped the holding pen!"), *GetPlayerDisplayName()));
+	}
+	if (ABRGameState* GS = GetBRGameState())
+	{
+		GS->Multicast_NoisePing(Here);
+	}
 }
 
 bool ABRCharacter::IsDazed() const
@@ -4100,8 +4231,26 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 	{
 		return;
 	}
-	const float Pace = FMath::Lerp(1.f, 0.35f, FMath::Clamp(Aggression, 0.f, 1.f));
+	float Pace = FMath::Lerp(1.f, 0.35f, FMath::Clamp(Aggression, 0.f, 1.f));
+	if (Foe->IsDazed())
+	{
+		Pace *= 0.45f; // they're seeing birds: finish them
+	}
 	BrawlNextMove = Now + Pace * FMath::FRandRange(0.7f, 1.3f);
+	// Hurt: back off with the guard up for a moment (then come back swinging).
+	if (GetBalanceFraction() < 0.3f && !Foe->IsDazed() && Dist < 350.f && FMath::FRand() < 0.45f)
+	{
+		BotBlock(FMath::FRandRange(0.6f, 1.1f));
+		LaunchCharacter(-ToFoe.GetSafeNormal() * 350.f, true, false);
+		BrawlNextMove = Now + 0.8f;
+		return;
+	}
+	// Mid range: circle to the side instead of walking straight into punches.
+	if (Dist > 180.f && Dist < 330.f && FMath::FRand() < 0.35f)
+	{
+		const FVector Side = FVector::CrossProduct(ToFoe.GetSafeNormal(), FVector::UpVector) * (FMath::RandBool() ? 1.f : -1.f);
+		LaunchCharacter(Side * 260.f + ToFoe.GetSafeNormal() * 120.f, true, false);
+	}
 	if (Foe->GetCondition() != EPVVCondition::Normal)
 	{
 		return; // they're down: let them get up (the crowd loves it)

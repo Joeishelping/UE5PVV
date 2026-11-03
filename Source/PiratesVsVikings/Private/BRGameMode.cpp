@@ -89,6 +89,7 @@ void ABRGameMode::StartMatchFlow()
 		GS->bLobby = bUseLobby && GetNetMode() != NM_Standalone;
 		GS->LobbyCountdown = 0;
 		GS->bBestOf3 = bBestOf3;
+		GS->DayNumber = GI ? GI->RoundsPlayed + 1 : 1;
 		if (GI && bBestOf3)
 		{
 			GS->SeriesRunnerWins = GI->SeriesRunnerWins;
@@ -286,6 +287,17 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 			AssignJob(PS);
 		}
 
+		// Smuggling job ran out of time: the client wants their package back.
+		if (PS->MissionPay > 0 && GS->GetServerWorldTimeSeconds() > PS->MissionDeadline)
+		{
+			PS->MissionPay = 0;
+			PS->MissionDeadline = -1.f;
+			PS->RemoveItem(EBRItem::Package);
+			if (ABRCharacter* Late = Cast<ABRCharacter>(C))
+			{
+				Late->Notify(LOCTEXT("JobLate", "Too slow! The client took their package back. No pay."));
+			}
+		}
 		if (C->GetCondition() == EPVVCondition::Detained)
 		{
 			PS->SentenceSeconds = FMath::Max(0, PS->SentenceSeconds - 1);
@@ -321,9 +333,18 @@ void ABRGameMode::TickRunners(ABRGameState* GS)
 			{
 				Contraband += BR::IsIllegal(Item) ? 1 : 0;
 			}
+			// Smuggling job delivered in time: the big payout.
+			int32 JobPay = 0;
+			if (PS->HasItem(EBRItem::Package) && PS->MissionPay > 0 && GS->GetServerWorldTimeSeconds() <= PS->MissionDeadline)
+			{
+				JobPay = PS->MissionPay;
+				Feed(FString::Printf(TEXT("%s delivered a smuggling job! +$%d"), *NameOf(C), JobPay));
+			}
+			PS->MissionPay = 0;
+			PS->MissionDeadline = -1.f;
 			PS->RemoveIllegalItems();
 			PS->StatContraband += Contraband;
-			const int32 Pay = CrossingPay + Contraband * ContrabandPay;
+			const int32 Pay = CrossingPay + Contraband * ContrabandPay + JobPay;
 			PS->AddMoney(Pay);
 			ABRGameState::Sfx(this, EBRSfx::SafeZone, Where);
 			ABRGameState::FX(this, EBRFX::MoneyText, Where + FVector(0.f, 0.f, 60.f), FString::Printf(TEXT("+$%d"), Pay));

@@ -130,6 +130,9 @@ protected:
 	UPROPERTY() TObjectPtr<UNiagaraComponent> SandFX;
 	UPROPERTY() TObjectPtr<UAudioComponent> RainAudio;
 	UPROPERTY() TObjectPtr<UAudioComponent> WindAudio;
+	UPROPERTY() TObjectPtr<UAudioComponent> CricketsAudio;
+	UPROPERTY() TObjectPtr<UAudioComponent> TownAudio;
+	UPROPERTY() TObjectPtr<UAudioComponent> DesertAudio;
 
 private:
 	bool bGameplaySpawned = false;
@@ -149,6 +152,8 @@ private:
 	void TickSkyAndWeather(float DeltaSeconds, const class ABRGameState* GS);
 	void TickParticles(float DeltaSeconds);
 	void TickFootprints();
+	void TickAmbience();
+	float NextBark = 20.f;
 	struct FPrint { FTransform T; float Time; };
 	TArray<FPrint> Prints;
 	int32 NextPrint = 0;

@@ -1015,8 +1015,8 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 	const bool bNearCheckpoint = RouteIndex == CheckpointIndex && Distance < 2000.f;
 	ThrottleInput = FMath::Clamp(0.75f * (1.f - FMath::Abs(Delta) / 120.f), 0.25f, bNearCheckpoint ? 0.35f : 0.75f);
 
-	// Keep a gap to whatever's in front in my lane (no more pile-ups).
-	if (IsLaneBlocked(Lane, 950.f, 0.f))
+	// Keep a big gap to whatever's in front in my lane (spaced-out queue at the border, no pile-ups).
+	if (IsLaneBlocked(Lane, bNearCheckpoint ? 1250.f : 1500.f, 0.f))
 	{
 		ThrottleInput = 0.f;
 		if (BlockedSince < 0.f)

@@ -33,6 +33,8 @@ void ABRGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRGameState, bBestOf3);
 	DOREPLIFETIME(ABRGameState, SeriesRunnerWins);
 	DOREPLIFETIME(ABRGameState, SeriesWardenWins);
+	DOREPLIFETIME(ABRGameState, DayNumber);
+	DOREPLIFETIME(ABRGameState, TopMoments);
 }
 
 void ABRGameState::Multicast_NoisePing_Implementation(FVector_NetQuantize Location)
@@ -102,6 +104,22 @@ void ABRGameState::Highlight(const UObject* Context, ABRCharacter* Star, float S
 	ABRGameState* GS = World ? World->GetGameState<ABRGameState>() : nullptr;
 	if (GS && GS->HasAuthority() && Star && GS->Phase == EBRPhase::Invasion)
 	{
+		// Keep the 5 best moments of the round for the end screen.
+		int32 At = 0;
+		while (At < GS->TopMomentScores.Num() && GS->TopMomentScores[At] >= Score)
+		{
+			++At;
+		}
+		if (At < 5 && !GS->TopMoments.Contains(Caption))
+		{
+			GS->TopMoments.Insert(Caption, At);
+			GS->TopMomentScores.Insert(Score, At);
+			if (GS->TopMoments.Num() > 5)
+			{
+				GS->TopMoments.SetNum(5);
+				GS->TopMomentScores.SetNum(5);
+			}
+		}
 		GS->Multicast_Highlight(Star, Score, Caption);
 	}
 }

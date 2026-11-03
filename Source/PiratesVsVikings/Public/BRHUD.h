@@ -18,5 +18,7 @@ private:
 	void Centered(const FString& Text, float Y, const FLinearColor& Color, UFont* Font, float Scale = 1.f);
 	void Bar(float X, float Y, float W, float H, float Fraction, const FLinearColor& Color);
 	void Marker(const FVector& World, const FString& Text, const FLinearColor& Color);
+	/** Top-down map of the test map (hold Tab). */
+	void DrawMap(const class ABRCharacter* Me, const class ABRGameState* GS);
 	UPROPERTY() TObjectPtr<class ABRReplayDirector> Replay;
 };

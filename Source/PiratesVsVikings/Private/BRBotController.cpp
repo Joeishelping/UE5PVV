@@ -1,5 +1,6 @@
 #include "BRBotController.h"
 #include "BRCharacter.h"
+#include "BRCar.h"
 #include "BRGameState.h"
 #include "BRMapKit.h"
 #include "BRPlayerState.h"
@@ -16,6 +17,7 @@ namespace
 	bool IsClimbable(const AActor* A) { return A->IsA<ABRLadder>() || A->IsA<ABRWall>() || A->IsA<ABRWallSegment>() || A->IsA<ABRSpikeFence>() || A->IsA<ABRTunnel>(); }
 	bool IsLadder(const AActor* A) { return A->IsA<ABRLadder>(); }
 	bool IsPen(const AActor* A) { return A->IsA<APVVDetentionZone>(); }
+	bool IsHidingSpot(const AActor* A) { return A->IsA<ABRHidingSpot>(); }
 
 	bool CanUse(AActor* Thing, APVVCharacter* C)
 	{
@@ -136,7 +138,11 @@ void ABRBotController::Tick(float DeltaSeconds)
 
 	if (ABRCharacter* Foe = MeleeFoe.Get(); Foe && !C->IsBusyInteracting() && C->IsWarden())
 	{
-		C->BrawlerAct(Foe, 0.6f, DeltaSeconds);
+		C->BrawlerAct(Foe, 0.7f, DeltaSeconds);
+	}
+	if (ABRCharacter* Foe = MeleeFoeRunner.Get(); Foe && !C->IsBusyInteracting() && C->IsRunner())
+	{
+		C->BrawlerAct(Foe, 0.75f, DeltaSeconds); // cornered Runner fights back
 	}
 	if (!C->IsBusyInteracting())
 	{
@@ -311,7 +317,53 @@ void ABRBotController::ThinkRunner(ABRCharacter* C, ABRPlayerState* PS)
 			}
 		}
 	}
-	const FVector Goal = SafeZoneGoal(C);
+	MeleeFoeRunner = nullptr;
+	// Hiding in a dumpster/potty: stay put while Border Patrol is around, then sneak out.
+	if (C->IsHidingInSpot())
+	{
+		if ((!Threat || ThreatDist > 1600.f) && GetWorld()->GetTimeSeconds() > HideUntil)
+		{
+			if (AActor* Spot = FindNearestUsable(C, 400.f, &IsHidingSpot))
+			{
+				C->BotInteractWith(Spot); // climb out
+			}
+		}
+		return;
+	}
+	// Border Patrol closing in: duck into a hiding spot if there's one right here.
+	if (Threat && ThreatDist < 1300.f && ThreatDist > 350.f && !C->IsBusyInteracting())
+	{
+		if (AActor* Spot = FindNearestUsable(C, 700.f, &IsHidingSpot))
+		{
+			HideUntil = GetWorld()->GetTimeSeconds() + FMath::FRandRange(6.f, 12.f);
+			GoUse(C, Spot, 200.f);
+			bWantSprint = true;
+			return;
+		}
+	}
+	// Cornered: fight back (especially if they're dazed), guard up now and then.
+	if (Threat && ThreatDist < 260.f)
+	{
+		if (Threat->IsDazed() || C->GetBalanceFraction() > 0.6f || FMath::FRand() < 0.3f)
+		{
+			MeleeFoeRunner = Threat;
+		}
+		else if (FMath::FRand() < 0.25f)
+		{
+			C->BotBlock(0.6f);
+		}
+	}
+	// Each bot picks its own crossing (spread out along the border instead of a conga line).
+	if (!bRouteChosen)
+	{
+		bRouteChosen = true;
+		RouteOffsetY = FMath::FRandRange(-3500.f, 3500.f);
+	}
+	FVector Goal = SafeZoneGoal(C);
+	if (FVector::Dist2D(Goal, C->GetActorLocation()) > 9000.f)
+	{
+		Goal += FVector(0.f, RouteOffsetY, 0.f);
+	}
 	FVector ToGoal = (Goal - C->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	ToGoal.Normalize();
 
@@ -385,7 +437,10 @@ void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 			{
 				ABRCharacter* R = *It;
 				const ABRPlayerState* RPS = Cast<ABRPlayerState>(R->GetPVVPlayerState());
-				if (!R->IsRunner() || R->IsNPC() || !RPS || !RPS->bHasCrossedLine || R->GetCondition() == EPVVCondition::Detained || R->GetCarrier() || R->IsDisguised() || R->IsHiddenFromPatrol())
+				// Runners who crossed, or NPC suspects that got tagged (scanned / bolted from a truck).
+				const bool bNPCSuspect = R->IsNPC() && R->IsSuspect() && R->IsSpotted() && !R->GetCurrentBoat();
+				if (!R->IsRunner() || (!bNPCSuspect && (R->IsNPC() || !RPS || !RPS->bHasCrossedLine)) || R->GetCondition() == EPVVCondition::Detained || R->GetCarrier()
+					|| (!R->IsSpotted() && R->IsDisguised()) || R->IsHiddenFromPatrol())
 				{
 					continue;
 				}
@@ -413,7 +468,19 @@ void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 					C->BotInteractWith(T);
 					return;
 				}
-				SteerTo(C, T->GetActorLocation(), 120.f, true);
+				// Head them off: aim where they're going, not where they are.
+				SteerTo(C, T->GetActorLocation() + T->GetVelocity() * FMath::Clamp(D / 900.f, 0.f, 0.8f), 120.f, true);
+				// Running away at range: TASE them.
+				if (D > 350.f && D < 1300.f && Now >= NextTase)
+				{
+					FHitResult Hit;
+					FCollisionQueryParams Params(SCENE_QUERY_STAT(BRBotTase), false, C);
+					Params.AddIgnoredActor(T);
+					if (!GetWorld()->LineTraceSingleByChannel(Hit, C->GetActorLocation() + FVector(0.f, 0.f, 60.f), T->GetActorLocation(), ECC_Visibility, Params))
+					{
+						NextTase = Now + (C->BotTase(T) ? FMath::FRandRange(3.f, 5.f) : 1.f);
+					}
+				}
 				// Up close: Gang Beasts brawling (punches, grabs, headbutts, kicks, dives) every frame in Tick.
 				MeleeFoe = D < 450.f ? T : nullptr;
 			}
@@ -421,6 +488,72 @@ void ABRBotController::ThinkWarden(ABRCharacter* C, ABRPlayerState* /*PS*/)
 			{
 				// Down or zip-tied: hold E on them (zip-tie, then pick up).
 				GoUse(C, T, 170.f);
+			}
+			return;
+		}
+	}
+
+	if (GS->Phase == EBRPhase::Invasion)
+	{
+		// Heard a noise (wire cutters, gunshots, a whistle, a prison break)? Go look.
+		if (GS->NoisePings.Num() > 0 && GS->NoisePingTimes.Num() == GS->NoisePings.Num() && Now - GS->NoisePingTimes.Last() < 2.f)
+		{
+			InvestigatePoint = GS->NoisePings.Last();
+			InvestigateUntil = Now + 15.f;
+		}
+		if (Now < InvestigateUntil)
+		{
+			if (SteerTo(C, InvestigatePoint, 300.f, true))
+			{
+				InvestigateUntil = -1.f;
+			}
+			bWantSprint = true;
+			return;
+		}
+		// Checkpoint duty: walk up to a waiting NPC truck, scan everyone, order the dirty ones out.
+		ABRTruck* Waiting = nullptr;
+		float Best = 5000.f;
+		for (TActorIterator<ABRTruck> It(GetWorld()); It; ++It)
+		{
+			if (!It->IsNPCTruck() || It->GetVelocity().Size2D() > 60.f || !It->GetDriver())
+			{
+				continue;
+			}
+			const float D = FVector::Dist2D(It->GetActorLocation(), C->GetActorLocation());
+			if (D < Best)
+			{
+				Best = D;
+				Waiting = *It;
+			}
+		}
+		if (Waiting)
+		{
+			if (!SteerTo(C, Waiting->GetActorLocation() + Waiting->GetActorRightVector() * 260.f, 220.f, true))
+			{
+				return;
+			}
+			if (Now >= NextScan)
+			{
+				NextScan = Now + 1.4f;
+				bool bDirty = false;
+				for (APVVCharacter* Occ : Waiting->GetOccupants())
+				{
+					ABRCharacter* Rider = Cast<ABRCharacter>(Occ);
+					if (!Rider)
+					{
+						continue;
+					}
+					if (Now - Rider->LastScannedTime > 30.f)
+					{
+						C->BotScan(Rider); // one at a time
+						return;
+					}
+					bDirty |= Rider->IsSuspect();
+				}
+				if (bDirty)
+				{
+					C->BotOrderOut();
+				}
 			}
 			return;
 		}

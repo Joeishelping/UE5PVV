@@ -52,6 +52,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 Points = 0;
 	/** Fights started this round (punching locals, bar fights). Enough of it = WANTED. */
 	int32 Trouble = 0;
+	/** Smuggling job from the job board: deliver the Package to the Safe Zone before this (server time) for MissionPay. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") float MissionDeadline = -1.f;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 MissionPay = 0;
 	float LastTroubleTime = -100.f;
 	/** 0-3 wanted stars (from Trouble). Your team sees them; Border Patrol only when you're tagged. 3 stars = Border Patrol hears where you are. */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 WantedStars = 0;

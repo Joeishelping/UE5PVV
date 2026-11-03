@@ -457,7 +457,9 @@ public:
 
 	/** Your mesh (leave empty for a crate). */
 	UPROPERTY(EditAnywhere, Category = "BR|Prop") TObjectPtr<UStaticMesh> PropMesh;
-	UPROPERTY(EditAnywhere, Category = "BR|Prop") FLinearColor Color = FLinearColor(0.6f, 0.45f, 0.25f);
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Prop") FLinearColor Color = FLinearColor(0.6f, 0.45f, 0.25f);
+	/** 0 = box/crate, 1 = round (bottle). Bottles smash when they hit someone. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Prop") uint8 PropShape = 0;
 	/** Speed (cm/s) at which it knocks people over when it hits them. */
 	UPROPERTY(EditAnywhere, Category = "BR|Prop") float KnockoutSpeed = 800.f;
 	/** Heavier = harder to throw far. */

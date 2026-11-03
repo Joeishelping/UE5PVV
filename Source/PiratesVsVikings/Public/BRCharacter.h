@@ -108,6 +108,12 @@ public:
 	void BotMash();
 	void BotEat();
 	void BotDive();
+	/** Bots: scan this person (Border Patrol). */
+	void BotScan(ABRCharacter* Who);
+	/** Bots: order the suspects out of the nearest vehicle. */
+	void BotOrderOut();
+	/** Bots: zap someone with the taser (needs ammo). True if it fired. */
+	bool BotTase(ABRCharacter* Who);
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDisguised() const { return bDisguised; }
 	/** Server: put on a hat (drops nothing - see KnockOffHat). */
 	void SetHat(EBRHat Hat);
@@ -193,6 +199,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */
 	bool IsThreatTo(const ABRCharacter* Who) const;
+	/** Locked in the pen: picking your cuffs (only while no Border Patrol is watching). 1 = out! */
+	UPROPERTY(Replicated) float EscapeProgress = 0.f;
+	UPROPERTY(Replicated) bool bGuardWatching = false;
+	UFUNCTION(Server, Reliable) void Server_PickCuffs();
+	void TickPrisonBreak(float DeltaSeconds);
+	void BreakOut();
 	float LastAggressionTime = -100.f;
 	TWeakObjectPtr<ABRCharacter> LastAggressionTarget;
 	float GuardBrokenUntil = -1.f;

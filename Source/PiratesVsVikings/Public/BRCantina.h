@@ -125,6 +125,24 @@ protected:
 	TArray<ABRCharacter*> PlayersInside() const;
 };
 
+/** Smuggling job board: take a package (Runners), get it to the Safe Zone before the clock runs out for a big payout. */
+UCLASS(meta = (DisplayName = "BR Smuggling Job Board"))
+class PIRATESVSVIKINGS_API ABRMissionBoard : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRMissionBoard();
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.5f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+
+	UPROPERTY(EditAnywhere, Category = "BR|Jobs") int32 MinPay = 300;
+	UPROPERTY(EditAnywhere, Category = "BR|Jobs") int32 MaxPay = 650;
+	UPROPERTY(EditAnywhere, Category = "BR|Jobs") float TimeLimit = 180.f;
+};
+
 /** A wanted poster on a wall: shows whoever has the bounty (or is winning). */
 UCLASS(meta = (DisplayName = "BR Wanted Poster"))
 class PIRATESVSVIKINGS_API ABRWantedPoster : public ABRGreyboxActor
