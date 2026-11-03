@@ -422,6 +422,16 @@ Everything here is built on the test map automatically.
 
 ---
 
+## Part 15d: Fights last longer (Gang Beasts pacing)
+
+- Every hit does about half the damage it used to and pushes you less, so brawls go on longer and you stay in the scrap.
+- **DAZED:** the hit that *would* have knocked you out dazes you instead. Birds circle your head, you stagger slowly and can't punch for about 2 seconds. One more good hit while dazed = knocked out. Get away or block!
+- **Bar fight:** 2.5 minutes on the clock. Getting knocked down once doesn't end it for you: get back up. The **second** time you're out (-$50).
+- **Lucha ring:** 2.5-minute fights.
+- Tweak it yourself: BP_Runner / BP_Warden → **BR | Brawl → Fight Toughness** (higher = longer fights, 1.9 now), **Hit Push Scale** (0.7), **Daze Seconds** (2.2).
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

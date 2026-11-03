@@ -63,7 +63,7 @@ public:
 	/** Bar fight: what you pay if you get knocked out. */
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 LoseFine = 50;
 	/** Bar fight: seconds before the cops break it up (nobody wins). */
-	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float FightSeconds = 75.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float FightSeconds = 150.f;
 	/** Seconds after a bar fight before fresh locals wander in. */
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float RefillSeconds = 150.f;
 	/** Bar fights you can start before the bouncer stops letting you in. */
@@ -94,6 +94,9 @@ protected:
 	UPROPERTY(Replicated) int32 LocalsStanding = 0;
 	UPROPERTY(Replicated) float FightEndsAt = 0.f;
 	bool bToldFinalDuel = false;
+	/** Times each player has been knocked down this fight (2 = out). */
+	TMap<TWeakObjectPtr<ABRCharacter>, int32> PlayerKOs;
+	TSet<TWeakObjectPtr<ABRCharacter>> PlayersDown;
 	UPROPERTY() TArray<TObjectPtr<ABRCharacter>> Patrons;
 	UPROPERTY() TObjectPtr<ABRCharacter> Bouncer;
 	UPROPERTY() TArray<TObjectPtr<ABRCharacter>> Contestants;

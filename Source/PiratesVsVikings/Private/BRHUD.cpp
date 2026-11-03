@@ -547,6 +547,11 @@ void ABRHUD::DrawHUD()
 		Centered(FString::Printf(TEXT("WANTED  %s%s"), *Stars, MyPS->WantedStars >= 3 ? TEXT("   (Border Patrol can hear where you are!)") : TEXT("   (lay low to cool off)")), 130.f, Yellow, Small, 1.3f);
 	}
 
+	if (Me->IsDazed())
+	{
+		Centered(TEXT("DAZED!  (one more hit and you're out - get away or block!)"), SY * 0.42f, Yellow, Big, 1.4f);
+	}
+
 	// --- Blocking
 	if (Me->IsBlocking())
 	{

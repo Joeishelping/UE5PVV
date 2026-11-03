@@ -174,6 +174,17 @@ public:
 	/** Server: NPC brawlers put their guard up for a moment. */
 	void BotBlock(float Seconds);
 	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) override;
+	float ApplyBlock(APVVCharacter* Attacker, float Damage, FVector& Impulse);
+	/** Gang Beasts pacing: every hit is divided by this (higher = longer fights). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FightToughness = 1.9f;
+	/** Gang Beasts pacing: hits push you this much (lower = you stay in the fight instead of flying off). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HitPushScale = 0.7f;
+	/** Rocked: the hit that WOULD knock you out dazes you instead (staggering, can't punch). The next good hit knocks you out. */
+	UPROPERTY(Replicated) float DazedUntil = -1.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DazeSeconds = 2.2f;
+	float LastDazeTime = -100.f;
+	bool bDazedSpeedApplied = false;
+	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	float GuardBrokenUntil = -1.f;
 	float BlockReleaseAt = -1.f;
 

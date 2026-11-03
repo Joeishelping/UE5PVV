@@ -187,6 +187,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, ClimbNormal);
 	DOREPLIFETIME(ABRCharacter, bPeaceful);
 	DOREPLIFETIME(ABRCharacter, bBlocking);
+	DOREPLIFETIME(ABRCharacter, DazedUntil);
 	DOREPLIFETIME_CONDITION(ABRCharacter, GuardMeter, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, TipsyUntil);
 	DOREPLIFETIME_CONDITION(ABRCharacter, bChugging, COND_OwnerOnly);
@@ -1089,6 +1090,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	if (bBlocking)
 	{
 		Multiplier *= 0.45f; // shuffle with your guard up
+	}
+	if (IsDazed())
+	{
+		Multiplier *= 0.35f; // staggering
 	}
 	if (bInBox)
 	{
@@ -2559,7 +2564,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
 	{
 		const bool bKO = GetCondition() == EPVVCondition::KnockedDown;
-		const bool bDizzy = !bKO && GetCondition() == EPVVCondition::Normal && GetBalanceFraction() < 0.3f && !GetCurrentBoat();
+		const bool bDizzy = !bKO && GetCondition() == EPVVCondition::Normal && (GetBalanceFraction() < 0.3f || IsDazed()) && !GetCurrentBoat();
 		KOStars->SetHiddenInGame(!bKO && !bDizzy);
 		if (bDizzy)
 		{
@@ -2580,6 +2585,12 @@ void ABRCharacter::Tick(float DeltaSeconds)
 			const FVector Head = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation();
 			KOStars->SetWorldLocationAndRotation(Head + FVector(0.f, 0.f, 45.f), FRotator(0.f, GetWorld()->GetTimeSeconds() * 360.f, 0.f));
 		}
+	}
+	// Daze wears off: walk normally again.
+	if (IsDazed() != bDazedSpeedApplied)
+	{
+		bDazedSpeedApplied = IsDazed();
+		UpdateMovementSpeed();
 	}
 	// Guard: comes back over time; NPC blocks end on their own; can't keep blocking while knocked down etc.
 	if (HasAuthority())
@@ -3325,7 +3336,44 @@ void ABRCharacter::BotBlock(float Seconds)
 	}
 }
 
+bool ABRCharacter::IsDazed() const
+{
+	const ABRGameState* GS = GetBRGameState();
+	return GS && GetCondition() == EPVVCondition::Normal && DazedUntil > GS->GetServerWorldTimeSeconds();
+}
+
 float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse)
+{
+	// Gang Beasts pacing: hits wear you down slowly, push you less, and the "knockout" hit dazes you first.
+	Damage /= FMath::Max(0.1f, FightToughness);
+	Impulse *= HitPushScale;
+	Damage = ApplyBlock(Attacker, Damage, Impulse);
+	const ABRGameState* GS = GetBRGameState();
+	if (!GS || GetCondition() != EPVVCondition::Normal || Damage <= 0.f)
+	{
+		return Damage;
+	}
+	const float Now = GS->GetServerWorldTimeSeconds();
+	const float After = Balance - Damage * GetDamageTakenMultiplier();
+	if (IsDazed())
+	{
+		return Damage * 1.5f; // already seeing birds: this one puts you down
+	}
+	if (After <= 0.f && Now - LastDazeTime > 6.f)
+	{
+		// Would've been a knockout: DAZED instead. Stagger around for a moment - one more good hit and you're out.
+		LastDazeTime = Now;
+		DazedUntil = Now + DazeSeconds;
+		bBlocking = false;
+		UpdateMovementSpeed();
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 130.f), TEXT("DAZED!"));
+		ForceNetUpdate();
+		return FMath::Max(0.f, Balance / FMath::Max(0.01f, GetDamageTakenMultiplier()) - 1.f); // left hanging on by a thread
+	}
+	return Damage;
+}
+
+float ABRCharacter::ApplyBlock(APVVCharacter* Attacker, float Damage, FVector& Impulse)
 {
 	if (!bBlocking || !Attacker || GetCondition() != EPVVCondition::Normal)
 	{
@@ -3358,9 +3406,9 @@ float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVe
 
 void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 {
-	if (bBlocking)
+	if (bBlocking || IsDazed())
 	{
-		return; // guard's up
+		return; // guard's up / seeing birds
 	}
 	StopEmote();
 	Multicast_PunchHand(bLeft);

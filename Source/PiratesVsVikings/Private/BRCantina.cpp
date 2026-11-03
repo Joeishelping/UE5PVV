@@ -381,6 +381,8 @@ void ABRCantina::StartFight(ABRCharacter* Starter)
 	{
 		FightEndsAt = GS->GetServerWorldTimeSeconds() + FightSeconds;
 	}
+	PlayerKOs.Reset();
+	PlayersDown.Reset();
 	Contestants.Reset();
 	Losers.Reset();
 	KnockedOut.Reset();
@@ -531,10 +533,31 @@ void ABRCantina::TickFight()
 			Contestants.AddUnique(P);
 		}
 	}
-	// Players go down = they lose (once).
+	// Players: knocked down once = you get back up and keep going. Twice = you lose.
 	for (ABRCharacter* C : Contestants)
 	{
-		if (IsValid(C) && !Losers.Contains(C) && C->GetCondition() == EPVVCondition::KnockedDown)
+		if (!IsValid(C) || Losers.Contains(C))
+		{
+			continue;
+		}
+		const bool bDown = C->GetCondition() == EPVVCondition::KnockedDown;
+		const bool bWasDown = PlayersDown.Contains(C);
+		if (bDown && !bWasDown)
+		{
+			PlayersDown.Add(C);
+			int32& KOs = PlayerKOs.FindOrAdd(C);
+			++KOs;
+			if (KOs < 2)
+			{
+				C->Client_Banner(TEXT("DOWN! Get up - one more and you're out!"), false);
+				continue;
+			}
+		}
+		else if (!bDown && bWasDown)
+		{
+			PlayersDown.Remove(C);
+		}
+		if (bDown && PlayerKOs.FindRef(C) >= 2)
 		{
 			Losers.Add(C);
 			if (ABRPlayerState* PS = C->GetBRPlayerState())
@@ -574,7 +597,7 @@ void ABRCantina::TickFight()
 	TArray<ABRCharacter*> Winners;
 	for (ABRCharacter* C : Contestants)
 	{
-		if (IsStanding(C) && !Losers.Contains(C) && IsInside(C->GetActorLocation()))
+		if (IsValid(C) && !Losers.Contains(C) && (IsStanding(C) || C->GetCondition() == EPVVCondition::KnockedDown) && IsInside(C->GetActorLocation()))
 		{
 			Winners.Add(C);
 		}
@@ -651,6 +674,8 @@ void ABRCantina::EndFight(const TArray<ABRCharacter*>& Winners, bool bTimeUp)
 			P->SetKnockdownSeconds(14.f);
 		}
 	}
+	PlayerKOs.Reset();
+	PlayersDown.Reset();
 	Contestants.Reset();
 	Losers.Reset();
 	KnockedOut.Reset();

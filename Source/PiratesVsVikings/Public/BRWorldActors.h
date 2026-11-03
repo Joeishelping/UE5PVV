@@ -860,7 +860,7 @@ public:
 	/** Put the challenge + betting counters around the ring automatically. */
 	UPROPERTY(EditAnywhere, Category = "BR|Lucha") bool bSpawnCounters = true;
 	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float BettingSeconds = 15.f;
-	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float FightSeconds = 90.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float FightSeconds = 150.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Lucha") int32 KnockdownsToWin = 2;
 	/** How much tougher he gets per $100 of wager (1 = +100% balance). */
 	UPROPERTY(EditAnywhere, Category = "BR|Lucha") float ToughnessPer100 = 0.35f;
