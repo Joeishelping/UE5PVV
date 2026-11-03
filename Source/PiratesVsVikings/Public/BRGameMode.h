@@ -168,6 +168,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerContraband = 2;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerCatch = 2;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerIllegalNPC = 1;
+	/** Of the NPCs carrying contraband, how many carry a GUN (they'll shoot at Border Patrol when busted). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") float NPCGunChance = 0.2f;
 	/** Runners team gets this for every illegal NPC who makes it across uncaught (on foot or in a truck). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Points") int32 PointsPerIllegalNPCThrough = 1;
 	/** ...and this per NPC carrying contraband who gets it across. */

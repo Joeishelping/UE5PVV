@@ -231,16 +231,46 @@ void ABRCharacter::ReactToBust(ABRCharacter* Cop, bool bMinorOffense)
 	{
 		return;
 	}
-	// How bad a person are they? Smugglers with no papers are worse than someone with a bit of contraband.
-	const float Menace = FMath::FRand() * (bMinorOffense ? 0.7f : 1.f);
 	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
-	if (!Cop || Menace < 0.25f)
+	if (!Cop)
 	{
-		if (!Cop || FMath::FRand() < 0.5f)
+		StartFleeing(30.f); // nobody to fight: RUN!
+		return;
+	}
+	// Armed: they pull the gun and start shooting (self-defense = shoot back, no scandal).
+	if (bCarriesContraband && ContrabandItem == EBRItem::IllegalGun)
+	{
+		SetNPCHeldItem(EBRItem::IllegalGun);
+		StartBrawling(Cop, 90.f, 1.f);
+		if (GM)
 		{
-			StartFleeing(30.f); // RUN!
-			return;
+			GM->Feed(FString::Printf(TEXT("A suspect pulled a GUN on %s!"), *Cop->GetPlayerDisplayName()));
 		}
+		return;
+	}
+	// Most busted people FIGHT (no papers = more likely). Some run, a few give up.
+	const float Fight = FMath::Clamp(bMinorOffense ? SuspectFightChance * 0.7f : SuspectFightChance, 0.f, 1.f);
+	const float GiveUp = bMinorOffense ? SuspectSurrenderChance * 2.f : SuspectSurrenderChance;
+	const float Roll = FMath::FRand();
+	if (Roll < Fight)
+	{
+		const bool bKnife = FMath::FRand() < SuspectKnifeShare;
+		if (bKnife)
+		{
+			SetNPCHeldItem(EBRItem::Knife);
+			Multicast_Sfx(3);
+		}
+		// Comes out swinging, and keeps at it (Gang Beasts: a real scrap, not one punch and run).
+		StartBrawling(Cop, 90.f, FMath::FRandRange(0.8f, 1.f));
+		if (GM)
+		{
+			GM->Feed(bKnife ? FString::Printf(TEXT("A suspect pulled a KNIFE on %s!"), *Cop->GetPlayerDisplayName())
+				: FString::Printf(TEXT("A suspect wants to FIGHT %s!"), *Cop->GetPlayerDisplayName()));
+		}
+		return;
+	}
+	if (Roll < Fight + GiveUp)
+	{
 		// Gives up: stands there with their hands up (zip-tie them).
 		StartWandering(GetActorLocation(), 40.f);
 		if (GM)
@@ -249,38 +279,7 @@ void ABRCharacter::ReactToBust(ABRCharacter* Cop, bool bMinorOffense)
 		}
 		return;
 	}
-	if (bCarriesContraband && ContrabandItem == EBRItem::IllegalGun)
-	{
-		// Rare: they had a GUN. They pull it and start shooting at you (self-defense = shoot back, no scandal).
-		SetNPCHeldItem(EBRItem::IllegalGun);
-		StartBrawling(Cop, 60.f, 1.f);
-		if (GM)
-		{
-			GM->Feed(FString::Printf(TEXT("A suspect pulled a GUN on %s!"), *Cop->GetPlayerDisplayName()));
-		}
-		return;
-	}
-	if (Menace > 0.82f)
-	{
-		SetNPCHeldItem(EBRItem::Knife);
-		StartBrawling(Cop, 60.f, 1.f); // pulled a KNIFE - fights until somebody drops
-		Multicast_Sfx(3);
-		if (GM)
-		{
-			GM->Feed(FString::Printf(TEXT("A suspect pulled a KNIFE on %s!"), *Cop->GetPlayerDisplayName()));
-		}
-		return;
-	}
-	if (Menace > 0.45f)
-	{
-		StartBrawling(Cop, 45.f, FMath::Lerp(0.6f, 0.95f, (Menace - 0.45f) / 0.37f)); // comes out swinging
-		if (GM && FMath::FRand() < 0.5f)
-		{
-			GM->Feed(FString::Printf(TEXT("A suspect wants to FIGHT %s!"), *Cop->GetPlayerDisplayName()));
-		}
-		return;
-	}
-	StartFleeing(30.f);
+	StartFleeing(30.f); // RUN!
 }
 
 void ABRCharacter::StartFleeing(float Seconds)
@@ -1058,10 +1057,15 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			BrawlerAct(Foe, BrawlAggression, DeltaSeconds);
 			return;
 		}
-		// Knocked them flat? A real hard case waits for them to get up and goes again.
-		if (Now < AngryUntil && BrawlAggression >= 0.8f && Foe->GetCondition() == EPVVCondition::KnockedDown)
+		// Knocked them flat? Gang Beasts: grab them, haul them up over your head and THROW them - then leg it.
+		if (Now < AngryUntil && BrawlAggression >= 0.75f && Foe->GetCondition() == EPVVCondition::KnockedDown)
 		{
+			BrawlerFinish(Foe);
 			return;
+		}
+		if (HandGrabTarget.Get() == Foe)
+		{
+			ReleaseHandGrab();
 		}
 		AngryAt = nullptr;
 		FleeUntil = Now + 20.f; // done fighting: leg it
@@ -4661,6 +4665,60 @@ void ABRCharacter::TickRope()
 // -------------------------------------------------------------------------------------------
 // Kick + headbutt
 
+void ABRCharacter::BrawlerFinish(ABRCharacter* Foe)
+{
+	if (!HasAuthority() || !Foe || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat())
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	const FVector ToFoe = (Foe->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	if (HandGrabTarget.Get() == Foe)
+	{
+		ArmsReaching = 3;
+		if (bLiftOverhead)
+		{
+			if (Now >= BrawlHoldUntil)
+			{
+				Server_Grab_Implementation(); // HURL them
+				AngryAt = nullptr;
+				FleeUntil = Now + 20.f; // and run while they're down
+			}
+			return;
+		}
+		if (Now >= BrawlHoldUntil && HandGrabMask == 3)
+		{
+			Server_Lift_Implementation(); // up over the head...
+			BrawlHoldUntil = Now + LiftSeconds + FMath::FRandRange(0.4f, 1.2f);
+			return;
+		}
+		// ...dragging them a couple of steps first.
+		AddMovementInput(-ToFoe.GetSafeNormal(), 0.6f);
+		return;
+	}
+	// Walk up and grab the body.
+	GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
+	if (ToFoe.Size() > 110.f)
+	{
+		AddMovementInput(ToFoe.GetSafeNormal(), 1.f);
+		return;
+	}
+	SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw, 0.f));
+	if (Now >= BrawlNextMove)
+	{
+		BrawlNextMove = Now + 0.4f;
+		ArmsReaching = 3;
+		if (TryHandGrab(3))
+		{
+			BrawlHoldUntil = Now + FMath::FRandRange(0.8f, 1.8f);
+		}
+		else
+		{
+			ArmsReaching = 0;
+		}
+	}
+}
+
 void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSeconds)
 {
 	if (!HasAuthority() || !Foe || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat())
@@ -4754,6 +4812,13 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 	// Got them in your hands: beat on them, then THROW them.
 	if (HandGrabTarget.Get() == Foe)
 	{
+		// They're seeing birds and we've got both hands on them: UP over the head (then hurl - see BrawlerFinish).
+		if (HandGrabMask == 3 && Foe->IsDazed() && !bLiftOverhead && Aggression >= 0.7f)
+		{
+			Server_Lift_Implementation();
+			BrawlHoldUntil = Now + LiftSeconds + FMath::FRandRange(0.4f, 1.f);
+			return;
+		}
 		if (Now > BrawlHoldUntil)
 		{
 			Server_Grab_Implementation(); // throw

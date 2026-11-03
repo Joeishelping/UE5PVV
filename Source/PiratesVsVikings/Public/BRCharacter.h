@@ -236,6 +236,14 @@ public:
 	UPROPERTY(Replicated) bool bKnockedOut = false;
 	bool bWasKnockedOut = false;
 	FTimerHandle PunchWindupTimer;
+	/** Busted NPCs (scanned illegal / ordered out): chance they FIGHT you (contraband-only people a bit less). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Suspects") float SuspectFightChance = 0.75f;
+	/** Of the ones who fight, how many pull a knife. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Suspects") float SuspectKnifeShare = 0.3f;
+	/** Chance they put their hands up (the rest run). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Suspects") float SuspectSurrenderChance = 0.1f;
+	/** NPC finishing move on someone they knocked down: grab, drag, lift overhead, throw. */
+	void BrawlerFinish(ABRCharacter* Foe);
 	bool bDazedSpeedApplied = false;
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsDazed() const;
 	/** Self-defense: is this person attacking Who right now (hit them lately, fighting them, holding them, knife out)? */

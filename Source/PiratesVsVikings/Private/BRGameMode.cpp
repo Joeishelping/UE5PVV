@@ -742,7 +742,7 @@ void ABRGameMode::SpawnNPCTruck()
 		{
 			NPC->bIllegal = FMath::FRand() < IllegalNPCChance;
 			NPC->bCarriesContraband = FMath::FRand() < ContrabandNPCChance;
-			NPC->ContrabandItem = FMath::FRand() < 0.92f ? EBRItem::Drugs : EBRItem::IllegalGun; // guns are rare
+			NPC->ContrabandItem = FMath::FRand() < NPCGunChance ? EBRItem::IllegalGun : EBRItem::Drugs; // guns are rare-ish (and show on a scan)
 			Truck->AddNPC(NPC);
 		}
 	}
