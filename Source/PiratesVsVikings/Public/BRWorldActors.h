@@ -743,7 +743,7 @@ public:
 
 	/** Recolour any piece by name (House3_Body, Church_Tower, Stall2_Awning ...). See the names in the Components list. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") TMap<FName, FLinearColor> ColorOverrides;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") float LampBrightness = 6000.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Village") float LampBrightness = 800.f;
 
 protected:
 	UPROPERTY(Transient) TArray<TObjectPtr<USceneComponent>> Chickens;

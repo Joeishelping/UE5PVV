@@ -4353,6 +4353,12 @@ float ABRCharacter::GetDamageTakenMultiplier() const
 	return (WornHat == EBRHat::HardHat ? 0.6f : 1.f) * (IsTipsy() ? 0.7f : 1.f); // liquid courage
 }
 
+float ABRCharacter::GetTipsySecondsLeft() const
+{
+	const ABRGameState* GS = GetBRGameState();
+	return GS ? FMath::Max(0.f, TipsyUntil - GS->GetServerWorldTimeSeconds()) : 0.f;
+}
+
 bool ABRCharacter::IsTipsy() const
 {
 	const ABRGameState* GS = GetBRGameState();
@@ -4366,7 +4372,8 @@ void ABRCharacter::MakeTipsy(float Seconds)
 	{
 		return;
 	}
-	TipsyUntil = FMath::Max(TipsyUntil, GS->GetServerWorldTimeSeconds()) + Seconds;
+	const float Now = GS->GetServerWorldTimeSeconds();
+	TipsyUntil = FMath::Min(FMath::Max(TipsyUntil, Now) + Seconds, Now + 45.f); // drinks stack a bit, but never more than 45 s
 	ForceNetUpdate();
 }
 
@@ -4752,6 +4759,13 @@ void ABRCharacter::Server_DropCash_Implementation()
 		Cash->FinishSpawning(T);
 	}
 	Notify(FText::Format(LOCTEXT("CashDropped", "Dropped ${0}. Anyone can pick it up..."), Amount));
+}
+
+void ABRCharacter::Client_Banner_Implementation(const FString& Text, bool bGood)
+{
+	BannerText = Text;
+	bBannerGood = bGood;
+	BannerUntil = GetWorld()->GetTimeSeconds() + 5.f;
 }
 
 void ABRCharacter::TickBlink()

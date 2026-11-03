@@ -176,6 +176,13 @@ public:
 	UPROPERTY(Replicated) float ChugMine = 0.f;
 	UPROPERTY(Replicated) float ChugRival = 0.f;
 	UFUNCTION(Server, Reliable) void Server_Chug();
+	/** Big message across the middle of this player's screen for a few seconds (YOU WON THE BAR FIGHT!). */
+	UFUNCTION(Client, Reliable) void Client_Banner(const FString& Text, bool bGood);
+	FString BannerText;
+	bool bBannerGood = true;
+	float BannerUntil = -1.f;
+	/** Seconds of tipsiness left (server time based), for the HUD. */
+	float GetTipsySecondsLeft() const;
 
 	/** Server: set this character's customization (replicates to everyone). */
 	void SetLook(const FBRLook& NewLook);

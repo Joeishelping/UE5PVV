@@ -53,13 +53,17 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") FString CantinaName = TEXT("LA CANTINA DEL DIABLO");
-	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 PatronCount = 12;
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 PatronCount = 8;
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 DrinkPrice = 15;
-	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float TipsySeconds = 60.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float TipsySeconds = 25.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 ContestEntry = 50;
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 ContestPrize = 150;
-	/** Bar fight: each knocked-out local drops this for the winner. Losing costs the same. */
-	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 CashPerLocal = 50;
+	/** Bar fight: the WINNER (the last one standing) finds this much next to each knocked-out local. Nobody else gets anything. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 CashPerLocal = 40;
+	/** Bar fight: what you pay if you get knocked out. */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") int32 LoseFine = 50;
+	/** Bar fight: seconds before the cops break it up (nobody wins). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float FightSeconds = 75.f;
 	/** Seconds after a bar fight before fresh locals wander in. */
 	UPROPERTY(EditAnywhere, Category = "BR|Cantina") float RefillSeconds = 150.f;
 	/** Bar fights you can start before the bouncer stops letting you in. */
@@ -73,6 +77,8 @@ public:
 
 	bool IsInside(const FVector& WorldLocation) const;
 	bool IsFightOn() const { return bFight; }
+	int32 GetLocalsStanding() const { return LocalsStanding; }
+	float GetFightSecondsLeft() const;
 	bool IsContestOn() const { return ContestDrinker != nullptr; }
 	bool IsBanned(const APVVCharacter* Who) const;
 
@@ -85,6 +91,9 @@ public:
 
 protected:
 	UPROPERTY(Replicated) bool bFight = false;
+	UPROPERTY(Replicated) int32 LocalsStanding = 0;
+	UPROPERTY(Replicated) float FightEndsAt = 0.f;
+	bool bToldFinalDuel = false;
 	UPROPERTY() TArray<TObjectPtr<ABRCharacter>> Patrons;
 	UPROPERTY() TObjectPtr<ABRCharacter> Bouncer;
 	UPROPERTY() TArray<TObjectPtr<ABRCharacter>> Contestants;
@@ -108,7 +117,7 @@ protected:
 	void TickFight();
 	void TickContest(float Now);
 	void TickBouncer();
-	void EndFight(const TArray<ABRCharacter*>& Winners);
+	void EndFight(const TArray<ABRCharacter*>& Winners, bool bTimeUp = false);
 	ABRCharacter* PickFoe(ABRCharacter* For) const;
 	TArray<ABRCharacter*> PlayersInside() const;
 };

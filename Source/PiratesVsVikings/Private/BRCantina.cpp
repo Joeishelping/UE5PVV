@@ -4,6 +4,7 @@
 #include "BRGameState.h"
 #include "BRPlayerState.h"
 #include "Components/AudioComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -130,6 +131,21 @@ ABRCantina::ABRCantina()
 	{
 		AddMesh(*FString::Printf(TEXT("Cantina_Table%d"), i), CylinderMesh, FVector(Tables[i].X, Tables[i].Y, 40.f), FVector(110.f, 110.f, 80.f), Wood);
 	}
+	// Warm hanging lights inside (always on - it's dark in a cantina) + one over the door.
+	const FVector LightSpots[] = { {-HalfX + 300.f, 0.f, H - 60.f}, {0.f, -300.f, H - 60.f}, {0.f, 300.f, H - 60.f}, {400.f, 0.f, H - 60.f}, {HalfX + 150.f, 0.f, 300.f} };
+	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(LightSpots)); ++i)
+	{
+		UPointLightComponent* Bulb = CreateDefaultSubobject<UPointLightComponent>(*FString::Printf(TEXT("Cantina_Light%d"), i));
+		Bulb->SetupAttachment(Root);
+		Bulb->SetRelativeLocation(LightSpots[i]);
+		Bulb->SetIntensityUnits(ELightUnits::Candelas);
+		Bulb->SetIntensity(i == 4 ? 500.f : 350.f);
+		Bulb->SetAttenuationRadius(i == 4 ? 1400.f : 1100.f);
+		Bulb->SetLightColor(FLinearColor(1.f, 0.72f, 0.42f));
+		Bulb->SetCastShadows(false);
+		Bulb->SetMobility(EComponentMobility::Movable);
+		AddMesh(*FString::Printf(TEXT("Cantina_Lamp%d"), i), SphereMesh, LightSpots[i] + FVector(0.f, 0.f, 20.f), FVector(28.f, 28.f, 28.f), FLinearColor(1.f, 0.85f, 0.5f), FRotator::ZeroRotator, false);
+	}
 	if (UTextRenderComponent* Sign = AddLabel(TEXT("Cantina_Sign"), FVector(HalfX + 30.f, 0.f, H + 120.f), 80.f, FColor(255, 215, 80)))
 	{
 		Sign->SetText(FText::FromString(TEXT("LA CANTINA DEL DIABLO")));
@@ -140,11 +156,19 @@ void ABRCantina::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifeti
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ABRCantina, bFight);
+	DOREPLIFETIME(ABRCantina, LocalsStanding);
+	DOREPLIFETIME(ABRCantina, FightEndsAt);
 }
 
 FVector ABRCantina::Local(float X, float Y, float Z) const
 {
 	return GetActorTransform().TransformPositionNoScale(FVector(X, Y, Z));
+}
+
+float ABRCantina::GetFightSecondsLeft() const
+{
+	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
+	return GS ? FightEndsAt - GS->GetServerWorldTimeSeconds() : 0.f;
 }
 
 bool ABRCantina::IsInside(const FVector& WorldLocation) const
@@ -351,7 +375,12 @@ void ABRCantina::StartFight(ABRCharacter* Starter)
 		return;
 	}
 	bFight = true;
+	bToldFinalDuel = false;
 	FightStartTime = GetWorld()->GetTimeSeconds();
+	if (const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>())
+	{
+		FightEndsAt = GS->GetServerWorldTimeSeconds() + FightSeconds;
+	}
 	Contestants.Reset();
 	Losers.Reset();
 	KnockedOut.Reset();
@@ -377,7 +406,7 @@ void ABRCantina::StartFight(ABRCharacter* Starter)
 		if (IsStanding(P))
 		{
 			P->SetKnockdownSeconds(120.f);
-			P->StartBrawling(PickFoe(P), 60.f, FMath::FRandRange(0.6f, 1.f));
+			P->StartBrawling(PickFoe(P), 60.f, FMath::FRandRange(0.75f, 1.f));
 		}
 	}
 	if (FightSound)
@@ -392,7 +421,8 @@ void ABRCantina::StartFight(ABRCharacter* Starter)
 	}
 	for (ABRCharacter* C : Contestants)
 	{
-		C->Notify(FText::Format(LOCTEXT("FightOn", "BAR FIGHT! Be the last one standing: ${0} for every local knocked out. Go down and you pay ${0}."), CashPerLocal));
+		C->Client_Banner(TEXT("BAR FIGHT!"), false);
+		C->Notify(FText::Format(LOCTEXT("FightOn", "BAR FIGHT! Be the LAST ONE STANDING to win ${0} per local. Go down and you pay ${1}."), CashPerLocal, LoseFine));
 	}
 	ForceNetUpdate();
 }
@@ -412,7 +442,8 @@ ABRCharacter* ABRCantina::PickFoe(ABRCharacter* For) const
 		if (C != For && IsStanding(C) && !Losers.Contains(C) && IsInside(C->GetActorLocation()))
 		{
 			Options.Add(C);
-			Options.Add(C); // players are a bit more popular targets
+			Options.Add(C);
+			Options.Add(C); // everybody wants a piece of the outsider
 		}
 	}
 	if (Options.Num() == 0)
@@ -508,9 +539,9 @@ void ABRCantina::TickFight()
 			Losers.Add(C);
 			if (ABRPlayerState* PS = C->GetBRPlayerState())
 			{
-				const int32 Fine = FMath::Min(PS->Money, CashPerLocal);
+				const int32 Fine = FMath::Min(PS->Money, LoseFine);
 				PS->AddMoney(-Fine);
-				C->Notify(FText::Format(LOCTEXT("YouLost", "You got knocked out in the bar fight. -${0}, and no winnings for you."), Fine));
+				C->Client_Banner(FString::Printf(TEXT("YOU LOST THE BAR FIGHT   -$%d"), Fine), false);
 			}
 		}
 	}
@@ -548,40 +579,63 @@ void ABRCantina::TickFight()
 			Winners.Add(C);
 		}
 	}
-	if (Standing == 0 && Winners.Num() > 0)
+	if (LocalsStanding != Standing)
 	{
-		EndFight(Winners); // last one(s) standing
+		LocalsStanding = Standing;
+		ForceNetUpdate();
 	}
-	else if (Winners.Num() == 0 || Now - FightStartTime > 150.f)
+	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
+	const bool bTimeUp = GS && GS->GetServerWorldTimeSeconds() >= FightEndsAt;
+	if (Standing == 0 && Winners.Num() == 1)
 	{
-		EndFight(TArray<ABRCharacter*>()); // every player is out (or it went on forever)
+		EndFight(Winners); // THE last one standing
 	}
+	else if (Standing == 0 && Winners.Num() > 1 && !bToldFinalDuel)
+	{
+		bToldFinalDuel = true; // only players left: they settle it between themselves
+		for (ABRCharacter* W : Winners)
+		{
+			W->Client_Banner(TEXT("LOCALS ARE DOWN - NOW FIGHT EACH OTHER!"), true);
+		}
+	}
+	if (bFight && (Winners.Num() == 0 || bTimeUp))
+	{
+		EndFight(TArray<ABRCharacter*>(), bTimeUp); // every player is out, or the cops showed up
+	}
+	(void)Now;
 }
 
-void ABRCantina::EndFight(const TArray<ABRCharacter*>& Winners)
+void ABRCantina::EndFight(const TArray<ABRCharacter*>& Winners, bool bTimeUp)
 {
+	if (bTimeUp)
+	{
+		for (ABRCharacter* C : Contestants)
+		{
+			if (IsValid(C) && !Losers.Contains(C))
+			{
+				C->Client_Banner(TEXT("TIME! The cops broke it up - nobody wins"), false);
+			}
+		}
+	}
 	bFight = false;
+	LocalsStanding = 0;
 	RefillAt = GetWorld()->GetTimeSeconds() + RefillSeconds;
 	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
 	if (Winners.Num() > 0 && GM)
 	{
 		// $50 next to every knocked-out local - only the winners can pick it up.
-		int32 i = 0;
+		ABRCharacter* Winner = Winners[0];
+		int32 Total = 0;
 		for (ABRCharacter* Out : KnockedOut)
 		{
-			if (!IsValid(Out))
+			if (IsValid(Out))
 			{
-				continue;
+				GM->DropCash(Out->GetActorLocation() - FVector(0.f, 0.f, 80.f), CashPerLocal, Winner->GetBRPlayerState());
+				Total += CashPerLocal;
 			}
-			ABRCharacter* Winner = Winners[i++ % Winners.Num()];
-			GM->DropCash(Out->GetActorLocation() - FVector(0.f, 0.f, 80.f), CashPerLocal, Winner->GetBRPlayerState());
 		}
-		TArray<FString> Names;
-		for (ABRCharacter* W : Winners)
-		{
-			Names.Add(W->GetPlayerDisplayName());
-			W->Notify(FText::Format(LOCTEXT("YouWon", "LAST ONE STANDING! Pick up the cash off the floor (${0} each)."), CashPerLocal));
-		}
+		TArray<FString> Names = { Winner->GetPlayerDisplayName() };
+		Winner->Client_Banner(FString::Printf(TEXT("YOU WON THE BAR FIGHT!   $%d on the floor - only you can grab it"), Total), true);
 		GM->Feed(FString::Printf(TEXT("%s won the bar fight at %s!"), *FString::Join(Names, TEXT(" & ")), *CantinaName));
 		ABRGameState::Sfx(this, EBRSfx::Payday, GetActorLocation());
 	}

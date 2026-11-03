@@ -3146,6 +3146,19 @@ void ABRVillage::House(const TCHAR* Name, float X, float Y, float W, float D, fl
 	const float Face = Y > -1200.f ? -1.f : 1.f;
 	const float FaceY = Y + Face * (D * 0.5f + 4.f);
 	AddMesh(*N(TEXT("Door")), CubeMesh, FVector(X, FaceY, VillageFloorZ + 110.f), FVector(110.f, 8.f, 220.f), VillageDarkWood, FRotator::ZeroRotator, false);
+	// A warm light over the door (lights the street in front of the house at night).
+	{
+		UPointLightComponent* Porch = CreateDefaultSubobject<UPointLightComponent>(*N(TEXT("PorchLight")));
+		Porch->SetupAttachment(Root);
+		Porch->SetRelativeLocation(FVector(X, FaceY + Face * 70.f, VillageFloorZ + 260.f));
+		Porch->SetIntensityUnits(ELightUnits::Candelas);
+		Porch->SetIntensity(0.f);
+		Porch->SetAttenuationRadius(1100.f);
+		Porch->SetLightColor(FLinearColor(1.f, 0.7f, 0.4f));
+		Porch->SetCastShadows(false);
+		Porch->SetMobility(EComponentMobility::Movable);
+		Porch->ComponentTags.Add(TEXT("Porch"));
+	}
 	AddMesh(*N(TEXT("WindowL")), CubeMesh, FVector(X - W * 0.3f, FaceY, VillageFloorZ + H * 0.6f), FVector(90.f, 8.f, 80.f), VillageGlass, FRotator::ZeroRotator, false);
 	AddMesh(*N(TEXT("WindowR")), CubeMesh, FVector(X + W * 0.3f, FaceY, VillageFloorZ + H * 0.6f), FVector(90.f, 8.f, 80.f), VillageGlass, FRotator::ZeroRotator, false);
 	AddMesh(*N(TEXT("ShutterL")), CubeMesh, FVector(X - W * 0.3f - 60.f, FaceY, VillageFloorZ + H * 0.6f), FVector(25.f, 10.f, 90.f), Trim, FRotator::ZeroRotator, false);
@@ -3221,8 +3234,9 @@ void ABRVillage::Lamp(float X, float Y)
 	UPointLightComponent* Light = CreateDefaultSubobject<UPointLightComponent>(*FString::Printf(TEXT("%s_Light"), *Id));
 	Light->SetupAttachment(Root);
 	Light->SetRelativeLocation(FVector(X, Y, VillageFloorZ + 440.f));
+	Light->SetIntensityUnits(ELightUnits::Candelas);
 	Light->SetIntensity(0.f);
-	Light->SetAttenuationRadius(1100.f);
+	Light->SetAttenuationRadius(2000.f);
 	Light->SetLightColor(FLinearColor(1.f, 0.75f, 0.45f));
 	Light->SetCastShadows(false);
 	Light->SetMobility(EComponentMobility::Movable);
@@ -3325,7 +3339,7 @@ void ABRVillage::Tick(float DeltaSeconds)
 	{
 		NextLampCheck = Now + 1.f;
 		const ABRGameState* GS = BRGame(this);
-		const bool bNight = GS && GS->IsNight();
+		const bool bNight = GS && (GS->TimeOfDay < 6.5f || GS->TimeOfDay >= 18.5f || GS->Weather != EBRWeather::Clear); // on at dusk, and in bad weather
 		if (bNight != bLampsOn)
 		{
 			bLampsOn = bNight;
@@ -3333,7 +3347,7 @@ void ABRVillage::Tick(float DeltaSeconds)
 			{
 				if (Light)
 				{
-					Light->SetIntensity(bNight ? LampBrightness : 0.f);
+					Light->SetIntensity(bNight ? LampBrightness * (Light->ComponentHasTag(TEXT("Porch")) ? 0.4f : 1.f) : 0.f);
 				}
 			}
 		}

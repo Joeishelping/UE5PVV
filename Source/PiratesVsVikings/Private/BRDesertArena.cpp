@@ -141,18 +141,7 @@ ABRDesertArena::ABRDesertArena()
 				AddBlock(*FString::Printf(TEXT("Lamp_Post%d"), LampIndex), FVector(X, Y, Ground + 250.f), FVector(18.f, 18.f, 500.f), Iron);
 				AddBlock(*FString::Printf(TEXT("Lamp_Arm%d"), LampIndex), FVector(X, Y - Side * 70.f, Ground + 495.f), FVector(12.f, 150.f, 10.f), Iron, FRotator::ZeroRotator, false);
 				AddBlock(*FString::Printf(TEXT("Lamp_Light%d"), LampIndex), FVector(X, Y - Side * 135.f, Ground + 480.f), FVector(40.f, 40.f, 20.f), Glow, FRotator::ZeroRotator, false);
-				if (LampIndex % 2 == 0) // every other lamp really lights up the road at night
-				{
-					UPointLightComponent* Bulb = CreateDefaultSubobject<UPointLightComponent>(*FString::Printf(TEXT("Lamp_Bulb%d"), LampIndex));
-					Bulb->SetupAttachment(Root);
-					Bulb->SetRelativeLocation(FVector(X, Y - Side * 135.f, Ground + 440.f));
-					Bulb->SetIntensity(0.f);
-					Bulb->SetAttenuationRadius(1600.f);
-					Bulb->SetLightColor(FLinearColor(1.f, 0.78f, 0.45f));
-					Bulb->SetCastShadows(false);
-					Bulb->SetMobility(EComponentMobility::Movable);
-					StreetLights.Add(Bulb);
-				}
+				AddNightLight(*FString::Printf(TEXT("Lamp_Bulb%d"), LampIndex), FVector(X, Y - Side * 135.f, Ground + 450.f), 1.f, 2400.f);
 				++LampIndex;
 			}
 		}
@@ -196,6 +185,26 @@ ABRDesertArena::ABRDesertArena()
 			AddBlock(*FString::Printf(TEXT("Lot_FlagPole%d"), i), FVector(-8450.f + i * 380.f, 3470.f, Ground + 160.f), FVector(8.f, 8.f, 320.f), Iron, FRotator::ZeroRotator, false);
 		}
 		AddSign(TEXT("Sign_CarLot"), TEXT("AUTOS EL GATO - CARROS USADOS\nwalk up to a car + hold E to buy"), FVector(-7550.f, 3480.f, Ground + 420.f), -90.f, 60.f, FColor(255, 220, 80));
+
+		// More night lights: car lot, cantina front, the arch, checkpoint, bridge, Border Patrol base, pen, safe zone, town squares.
+		const FVector Extra[] = {
+			{-8100.f, 3000.f, Ground + 500.f}, {-7000.f, 3000.f, Ground + 500.f},				// car lot
+			{-8000.f, -5000.f, Ground + 450.f},												// cantina porch
+			{TownEdgeX + 150.f, RoadY, Ground + 560.f},										// arch
+			{WallX - 400.f, RoadY - 500.f, Ground + 500.f}, {WallX - 400.f, RoadY + 500.f, Ground + 500.f},	// checkpoint
+			{WallX + 400.f, RoadY, Ground + 500.f},
+			{-1200.f, RoadY, Ground + 350.f}, {1200.f, RoadY, Ground + 350.f},				// bridge
+			{6100.f, 4000.f, Ground + 450.f}, {8500.f, 3100.f, Ground + 450.f}, {7800.f, 800.f, Ground + 450.f},	// pen, HQ, supply
+			{SafeX + 300.f, RoadY, Ground + 500.f}, {SafeX + 300.f, 3000.f, Ground + 500.f}, {SafeX + 300.f, -5000.f, Ground + 500.f},
+			{-10450.f, 1000.f, Ground + 550.f}, {-12000.f, 1500.f, Ground + 550.f}, {-9000.f, 2200.f, Ground + 550.f},	// plaza, pit
+			{-11000.f, -6200.f, Ground + 600.f}, {-10300.f, 3000.f, Ground + 500.f},			// lucha ring, mariachi
+			{-13500.f, -1200.f, Ground + 500.f}, {-11500.f, -1200.f, Ground + 500.f}, {-9500.f, -1200.f, Ground + 500.f}, {-7500.f, -1200.f, Ground + 500.f},	// town street
+		};
+		int32 ExtraIndex = 0;
+		for (const FVector& At : Extra)
+		{
+			AddNightLight(*FString::Printf(TEXT("Night_Light%d"), ExtraIndex++), At, 1.3f, 2800.f);
+		}
 	}
 
 	// Lighting (removed at BeginPlay if the level has its own). Day/night + weather are driven by the GameState.
@@ -251,6 +260,22 @@ ABRDesertArena::ABRDesertArena()
 	AmbientMusic->bAutoActivate = false;
 	AmbientMusic->bAllowSpatialization = false;
 	AmbientMusic->bIsUISound = true;
+}
+
+UPointLightComponent* ABRDesertArena::AddNightLight(const TCHAR* Name, const FVector& Location, float Strength, float Radius)
+{
+	UPointLightComponent* Bulb = CreateDefaultSubobject<UPointLightComponent>(Name);
+	Bulb->SetupAttachment(Root);
+	Bulb->SetRelativeLocation(Location);
+	Bulb->SetIntensityUnits(ELightUnits::Candelas);
+	Bulb->SetIntensity(0.f);
+	Bulb->SetAttenuationRadius(Radius);
+	Bulb->SetLightColor(FLinearColor(1.f, 0.8f, 0.55f));
+	Bulb->SetCastShadows(false);
+	Bulb->SetMobility(EComponentMobility::Movable);
+	Bulb->ComponentTags.Add(*FString::Printf(TEXT("Strength_%.2f"), Strength));
+	StreetLights.Add(Bulb);
+	return Bulb;
 }
 
 UStaticMeshComponent* ABRDesertArena::AddBlock(const TCHAR* Name, const FVector& Center, const FVector& SizeCm, const FLinearColor& Color, const FRotator& Rotation, bool bCollide)
@@ -471,7 +496,7 @@ void ABRDesertArena::Tick(float DeltaSeconds)
 		Sun->SetWorldRotation(FRotator(-Angle, 30.f, 0.f));
 		Sun->SetIntensity(10.f * FMath::Clamp(Elevation * 2.f, 0.f, 1.f) * WeatherDim);
 		Moon->SetWorldRotation(FRotator(-(Angle + 180.f), 210.f, 0.f));
-		Moon->SetIntensity(0.4f * FMath::Clamp(-Elevation * 2.f, 0.f, 1.f));
+		Moon->SetIntensity(1.8f * FMath::Clamp(-Elevation * 2.f, 0.f, 1.f)); // bright moonlight so night is playable
 	}
 
 	if (Fog)
@@ -484,6 +509,19 @@ void ABRDesertArena::Tick(float DeltaSeconds)
 	{
 		TickSkyAndWeather(DeltaSeconds, GS);
 	}
+}
+
+float ABRDesertArena::LightStrength(const UPointLightComponent* Bulb)
+{
+	for (const FName& Tag : Bulb->ComponentTags)
+	{
+		FString S = Tag.ToString();
+		if (S.RemoveFromStart(TEXT("Strength_")))
+		{
+			return FCString::Atof(*S);
+		}
+	}
+	return 1.f;
 }
 
 void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* GS)
@@ -499,33 +537,33 @@ void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* G
 	{
 		FPostProcessSettings& S = Grade->Settings;
 		S.bOverride_AutoExposureBias = true;
-		S.AutoExposureBias = -2.6f * Night - 0.5f * RainAmount - 0.3f * SandAmount;
+		S.AutoExposureBias = -0.7f * Night - 0.4f * RainAmount - 0.3f * SandAmount; // dark enough to feel like night, bright enough to see
 		S.bOverride_ColorSaturation = true;
-		const float Sat = 1.f - 0.35f * Night - 0.3f * RainAmount;
+		const float Sat = 1.f - 0.25f * Night - 0.3f * RainAmount;
 		S.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
 		S.bOverride_SceneColorTint = true;
-		FLinearColor Tint = FMath::Lerp(FLinearColor::White, FLinearColor(0.62f, 0.72f, 1.f), Night);
+		FLinearColor Tint = FMath::Lerp(FLinearColor::White, FLinearColor(0.78f, 0.85f, 1.f), Night);
 		Tint = FMath::Lerp(Tint, Tint * FLinearColor(1.f, 0.82f, 0.58f), SandAmount);
 		Tint = FMath::Lerp(Tint, Tint * FLinearColor(0.85f, 0.9f, 1.f), RainAmount);
 		S.SceneColorTint = Tint;
 		S.bOverride_VignetteIntensity = true;
-		S.VignetteIntensity = 0.4f + 0.4f * Night + 0.3f * SandAmount;
+		S.VignetteIntensity = 0.4f + 0.2f * Night + 0.3f * SandAmount;
 	}
 	if (Fog)
 	{
-		const FLinearColor DayFog(0.75f, 0.82f, 0.95f), NightFog(0.03f, 0.04f, 0.08f), SandFog(0.85f, 0.55f, 0.25f);
+		const FLinearColor DayFog(0.75f, 0.82f, 0.95f), NightFog(0.08f, 0.1f, 0.18f), SandFog(0.85f, 0.55f, 0.25f);
 		FLinearColor FogColor = FMath::Lerp(DayFog, NightFog, Night);
 		FogColor = FMath::Lerp(FogColor, SandFog * (1.f - 0.8f * Night), SandAmount);
 		Fog->SetFogInscatteringColor(FogColor);
 	}
 	// Street lamps on at dusk.
-	const bool bWantLights = Night > 0.4f || SandAmount > 0.6f;
+	const bool bWantLights = Night > 0.2f || SandAmount > 0.6f || RainAmount > 0.7f;
 	if (bWantLights != bLightsOn)
 	{
 		bLightsOn = bWantLights;
 		for (UPointLightComponent* Bulb : StreetLights)
 		{
-			Bulb->SetIntensity(bLightsOn ? 6000.f : 0.f);
+			Bulb->SetIntensity(bLightsOn ? StreetLightCandelas * LightStrength(Bulb) : 0.f);
 		}
 	}
 	// A few old street lamps flicker and cut out now and then.
@@ -534,13 +572,14 @@ void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* G
 		const float T = GetWorld()->GetTimeSeconds();
 		for (int32 i = 0; i < StreetLights.Num(); ++i)
 		{
-			if (i % 3 != 1)
+			if (i % 7 != 3 || !StreetLights[i]->GetName().StartsWith(TEXT("Lamp_")))
 			{
-				continue; // most lamps are fine
+				continue; // most lamps are fine (only a few old road lamps flicker)
 			}
 			const float Noise = FMath::PerlinNoise1D(T * 6.f + i * 17.3f);
 			const bool bOut = Noise < -0.25f || FMath::PerlinNoise1D(T * 0.3f + i * 5.1f) < -0.4f; // stutters + longer outages
-			StreetLights[i]->SetIntensity(bOut ? 300.f : 6000.f * (0.85f + 0.15f * FMath::Sin(T * 40.f + i)));
+			const float Full = StreetLightCandelas * LightStrength(StreetLights[i]);
+			StreetLights[i]->SetIntensity(bOut ? Full * 0.08f : Full * (0.85f + 0.15f * FMath::Sin(T * 40.f + i)));
 		}
 	}
 	// Lightning in the rain: a white flash, thunder a moment later.
@@ -562,7 +601,7 @@ void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* G
 	LightningFlash = FMath::Max(0.f, LightningFlash - DeltaSeconds * 4.f);
 	if (Moon)
 	{
-		Moon->SetIntensity(0.4f * FMath::Clamp(-Elevation * 2.f, 0.f, 1.f) + 12.f * LightningFlash * (FMath::Fmod(Now * 23.f, 1.f) > 0.3f ? 1.f : 0.3f));
+		Moon->SetIntensity(1.8f * FMath::Clamp(-Elevation * 2.f, 0.f, 1.f) + 12.f * LightningFlash * (FMath::Fmod(Now * 23.f, 1.f) > 0.3f ? 1.f : 0.3f));
 	}
 	// Weather sounds.
 	if (RainAudio && RainAudio->GetSound())

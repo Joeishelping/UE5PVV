@@ -48,6 +48,8 @@ This one guide replaces all the older ones. It covers everything you have to set
 Drag `SM_Trumpet.glb` into the same folder. It's a normal static mesh, so the skeleton doesn't matter.
 
 ### 2d. Animations
+**Already imported the animations before?** Just import **`SK_PVV_Animations_NewMoves.glb`** (same folder): it only has the 3 new ones, **Emote_Smoke, Kick, Headbutt**. Same import settings as below. Then set them in BP_Runner / BP_Warden (Part 3a).
+
 1. Make a folder **Characters → Animations**.
 2. Drag in `SK_PVV_Animations.glb`.
    - **Skeleton** = your body's skeleton
@@ -354,11 +356,11 @@ They're already inside **Art/Characters/SK_PVV_Animations.glb** (it has Kick and
 
 Everything here is built on the test map automatically.
 
-- **La Cantina del Diablo** (south of the town street, door faces the road). About 12 locals hang out inside.
-  - **TEQUILA ($15)** at the bar: you're *tipsy* for 60 s, wobblier but you take 30% less damage.
+- **La Cantina del Diablo** (south of the town street, door faces the road). 8 locals hang out inside. Nothing happens until YOU start it.
+  - **TEQUILA ($15)** at the bar: you're *tipsy* for 25 s (max 45 s if you keep drinking; the timer shows at the bottom of the screen), wobblier but you take 30% less damage.
   - **DRINKING CONTEST ($50, win $150)** at the table: **mash SPACE** to chug faster than El Borracho. Lose and you pass out.
-  - **THE BIG GUY** at the bar: hold E to shove him and start a **BAR FIGHT** (punching anybody in there starts one too). Everybody fights everybody. **Last one standing** gets **$50 per knocked-out local**, lying on the floor (only the winner can pick it up). **Get knocked out and you pay $50** and get nothing.
-  - **El Bouncer** stands at the door. Start 2 bar fights and he throws you out every time you come in.
+  - **THE BIG GUY** at the bar: hold E to shove him and start a **BAR FIGHT** (punching anybody in there starts one too). Everybody fights everybody, and they all gang up on you. You must be the **ONE last person standing** (if two players are left, you fight each other) within **75 seconds**. The winner gets a big **YOU WON THE BAR FIGHT!** banner and **$40 per knocked-out local** on the floor (only the winner can pick it up). **Get knocked out = YOU LOST, -$50**, nothing for you. Time runs out = the cops break it up, nobody wins. The top of the screen shows how many locals are still standing and the clock.
+  - **El Bouncer** stays outside at the door. Start 2 bar fights and he shoves you away every time you try to come in.
   - Locals come back about 2.5 min after a fight.
 - **Car lot "Autos El Gato"** (north of the plaza): walk up to a car and **hold E** to buy it. Pickup $500, Sedan $500, **Lowrider $800** (fast, 2 seats), **Van $1200** (6 seats; the 4 in the back are hidden inside the box, great for smuggling). You and your team can drive it.
 - **NPC trucks** now come in all 4 car types and lots of colours, so you can't tell a player's car from an NPC's.

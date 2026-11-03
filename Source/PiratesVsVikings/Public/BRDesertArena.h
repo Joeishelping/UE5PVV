@@ -119,6 +119,8 @@ protected:
 	/** Night look (darker, bluer) + weather tint. */
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPostProcessComponent> Grade;
 	UPROPERTY() TArray<TObjectPtr<UPointLightComponent>> StreetLights;
+	/** How bright the street lamps / night lights are (candelas). Raise it if nights are too dark. */
+	UPROPERTY(EditAnywhere, Category = "BR|Look") float StreetLightCandelas = 900.f;
 	/** Built-in rain streaks and blowing sand (follow your camera). Replaced by your Niagara effects if you set them. */
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> RainDrops;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> DustBits;
@@ -145,6 +147,8 @@ private:
 	void TickSkyAndWeather(float DeltaSeconds, const class ABRGameState* GS);
 	void TickParticles(float DeltaSeconds);
 
+	UPointLightComponent* AddNightLight(const TCHAR* Name, const FVector& Location, float Strength, float Radius);
+	static float LightStrength(const UPointLightComponent* Bulb);
 	UStaticMeshComponent* AddBlock(const TCHAR* Name, const FVector& Center, const FVector& SizeCm, const FLinearColor& Color, const FRotator& Rotation = FRotator::ZeroRotator, bool bCollide = true);
 	UTextRenderComponent* AddSign(const TCHAR* Name, const FString& Text, const FVector& Location, float Yaw, float Size, const FColor& Color);
 	void AddHut(const TCHAR* Prefix, const FVector& Center, const FVector& Size, const FLinearColor& Color);

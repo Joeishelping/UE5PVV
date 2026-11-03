@@ -1,4 +1,5 @@
 #include "BRHUD.h"
+#include "BRCantina.h"
 #include "BRCar.h"
 #include "BRCharacter.h"
 #include "BRDrone.h"
@@ -557,7 +558,21 @@ void ABRHUD::DrawHUD()
 	}
 	else if (Me->IsTipsy())
 	{
-		Centered(TEXT("~ tipsy ~  (wobbly, but tough)"), SY - 120.f, Yellow, Small, 1.1f);
+		Centered(FString::Printf(TEXT("~ tipsy ~  (wobbly, but tough)  %ds"), FMath::CeilToInt(Me->GetTipsySecondsLeft())), SY - 120.f, Yellow, Small, 1.1f);
+	}
+	// Bar fight scoreboard (when you're in the cantina during a fight).
+	for (TActorIterator<ABRCantina> It(GetWorld()); It; ++It)
+	{
+		if (It->IsFightOn() && It->IsInside(Me->GetActorLocation()))
+		{
+			const int32 Secs = FMath::Max(0, FMath::CeilToInt(It->GetFightSecondsLeft()));
+			Centered(FString::Printf(TEXT("BAR FIGHT!   locals still standing: %d   %d:%02d   (last one standing wins - go down and you pay)"), It->GetLocalsStanding(), Secs / 60, Secs % 60), 60.f, Red, Big, 1.1f);
+		}
+	}
+	// Big result banner.
+	if (Me->BannerUntil > GetWorld()->GetTimeSeconds())
+	{
+		Centered(Me->BannerText, SY * 0.3f, Me->bBannerGood ? Green : Red, Big, 2.2f);
 	}
 
 	// --- Climbing
