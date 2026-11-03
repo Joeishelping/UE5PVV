@@ -213,6 +213,11 @@ struct FBRLook
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") float HairColor = 0.f;
 	/** 0 = clean shaven, 1.. = Facial Hair Styles list on the character Blueprint (mustaches, beards). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 FacialHair = 0;
+	/** 0 = the Blueprint's own shirt / pants, 1.. = Shirt Styles / Pants Styles lists on the character Blueprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 ShirtStyle = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 PantsStyle = 0;
+	/** 0 = no glasses, 1.. = Glasses Styles list. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 Glasses = 0;
 	/** Hat you start with: -1 = your team's normal hat, otherwise an EBRHat you've unlocked. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Look") int32 HatChoice = -1;
 

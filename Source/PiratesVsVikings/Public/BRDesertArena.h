@@ -124,6 +124,8 @@ protected:
 	/** Built-in rain streaks and blowing sand (follow your camera). Replaced by your Niagara effects if you set them. */
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> RainDrops;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> DustBits;
+	/** Footprints in the sand (fade after ~20 s). */
+	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Footprints;
 	UPROPERTY() TObjectPtr<UNiagaraComponent> RainFX;
 	UPROPERTY() TObjectPtr<UNiagaraComponent> SandFX;
 	UPROPERTY() TObjectPtr<UAudioComponent> RainAudio;
@@ -146,6 +148,12 @@ private:
 	TArray<FVector> DustPos;
 	void TickSkyAndWeather(float DeltaSeconds, const class ABRGameState* GS);
 	void TickParticles(float DeltaSeconds);
+	void TickFootprints();
+	struct FPrint { FTransform T; float Time; };
+	TArray<FPrint> Prints;
+	int32 NextPrint = 0;
+	TMap<TWeakObjectPtr<AActor>, FVector> LastStep;
+	TMap<TWeakObjectPtr<AActor>, bool> StepLeft;
 
 	UPointLightComponent* AddNightLight(const TCHAR* Name, const FVector& Location, float Strength, float Radius);
 	static float LightStrength(const UPointLightComponent* Bulb);

@@ -52,6 +52,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 Points = 0;
 	/** Fights started this round (punching locals, bar fights). Enough of it = WANTED. */
 	int32 Trouble = 0;
+	float LastTroubleTime = -100.f;
+	/** 0-3 wanted stars (from Trouble). Your team sees them; Border Patrol only when you're tagged. 3 stars = Border Patrol hears where you are. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Stats") int32 WantedStars = 0;
 	/** Thrown out of the cantina by the bouncer (too much trouble). */
 	int32 CantinaStrikes = 0;
 	/** Lobby: pressed Y. */

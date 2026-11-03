@@ -1013,6 +1013,15 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 		{
 			BlockedSince = Now;
 		}
+		// Stuck in traffic: lean on the horn now and then.
+		if (Now - BlockedSince > 3.f && Now >= NextHonk)
+		{
+			NextHonk = Now + FMath::FRandRange(4.f, 10.f);
+			if (FMath::FRand() < 0.6f)
+			{
+				HonkHorn();
+			}
+		}
 		// Stuck behind someone for a bit and the other lane's clear: swerve over.
 		if (Now - BlockedSince > 2.5f && !IsLaneBlocked(-Lane, 1300.f, 450.f))
 		{

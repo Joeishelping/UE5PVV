@@ -3,6 +3,9 @@
 #include "BRAudio.h"
 #include "BRCar.h"
 #include "BRCantina.h"
+#include "PVVCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "BRDog.h"
 #include "BRGameState.h"
 #include "BRWorldActors.h"
@@ -245,6 +248,14 @@ ABRDesertArena::ABRDesertArena()
 	DustBits->SetStaticMesh(CubeMesh);
 	DustBits->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	DustBits->SetCastShadow(false);
+	Footprints = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Footprints"));
+	Footprints->SetupAttachment(Root);
+	Footprints->SetUsingAbsoluteLocation(true);
+	Footprints->SetUsingAbsoluteRotation(true);
+	Footprints->SetUsingAbsoluteScale(true);
+	Footprints->SetStaticMesh(CubeMesh);
+	Footprints->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Footprints->SetCastShadow(false);
 	RainAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("RainAudio"));
 	RainAudio->SetupAttachment(Root);
 	RainAudio->bAutoActivate = false;
@@ -426,6 +437,10 @@ void ABRDesertArena::BeginPlay()
 		if (UMaterialInstanceDynamic* RainMID = RainDrops->CreateDynamicMaterialInstance(0))
 		{
 			RainMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.65f, 0.75f, 0.9f));
+		}
+		if (UMaterialInstanceDynamic* PrintMID = Footprints->CreateDynamicMaterialInstance(0))
+		{
+			PrintMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.42f, 0.31f, 0.18f));
 		}
 		if (UMaterialInstanceDynamic* DustMID = DustBits->CreateDynamicMaterialInstance(0))
 		{
@@ -615,6 +630,75 @@ void ABRDesertArena::TickSkyAndWeather(float DeltaSeconds, const ABRGameState* G
 		WindAudio->SetVolumeMultiplier(SandAmount);
 	}
 	TickParticles(DeltaSeconds);
+	TickFootprints();
+}
+
+void ABRDesertArena::TickFootprints()
+{
+	if (!Footprints)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	constexpr int32 MaxPrints = 300;
+	constexpr float Life = 22.f;
+	bool bChanged = false;
+	for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
+	{
+		APVVCharacter* C = *It;
+		const UCharacterMovementComponent* Move = C->GetCharacterMovement();
+		if (!Move || !Move->IsMovingOnGround() || C->GetVelocity().Size2D() < 120.f || C->GetCurrentBoat() || C->GetCarrier())
+		{
+			continue;
+		}
+		const FVector Feet = C->GetActorLocation() - FVector(0.f, 0.f, C->GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+		FVector& Last = LastStep.FindOrAdd(C, Feet);
+		if (FVector::Dist2D(Last, Feet) < 75.f)
+		{
+			continue;
+		}
+		Last = Feet;
+		// Only in sand (not on the road, floors, the bridge...).
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRFootprint), false, C);
+		if (!GetWorld()->LineTraceSingleByChannel(Hit, Feet + FVector(0.f, 0.f, 40.f), Feet - FVector(0.f, 0.f, 80.f), ECC_Visibility, Params)
+			|| !Hit.GetComponent() || !Hit.GetComponent()->GetName().StartsWith(TEXT("Sand")))
+		{
+			continue;
+		}
+		bool& bLeft = StepLeft.FindOrAdd(C, false);
+		bLeft = !bLeft;
+		const FRotator Facing(0.f, C->GetVelocity().Rotation().Yaw, 0.f);
+		const FVector Side = FRotationMatrix(Facing).GetUnitAxis(EAxis::Y) * (bLeft ? -11.f : 11.f);
+		const FTransform T(Facing, Hit.ImpactPoint + Side + FVector(0.f, 0.f, 0.8f), FVector(0.16f, 0.07f, 0.01f));
+		if (Prints.Num() < MaxPrints)
+		{
+			Prints.Add({ T, Now });
+			Footprints->AddInstance(T, true);
+		}
+		else
+		{
+			Prints[NextPrint] = { T, Now };
+			NextPrint = (NextPrint + 1) % MaxPrints;
+		}
+		bChanged = true;
+	}
+	// Fade old prints (shrink away).
+	TArray<FTransform> All;
+	All.Reserve(Prints.Num());
+	for (const FPrint& P : Prints)
+	{
+		const float Age = Now - P.Time;
+		const float Keep = FMath::Clamp((Life - Age) / 8.f, 0.f, 1.f);
+		FTransform T = P.T;
+		T.SetScale3D(P.T.GetScale3D() * FVector(Keep, Keep, 1.f));
+		All.Add(T);
+		bChanged |= Age > Life - 8.f && Age < Life + 1.f;
+	}
+	if (bChanged && All.Num() > 0)
+	{
+		Footprints->BatchUpdateInstancesTransforms(0, All, true, true, false);
+	}
 }
 
 void ABRDesertArena::TickParticles(float DeltaSeconds)

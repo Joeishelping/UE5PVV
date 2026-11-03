@@ -74,6 +74,9 @@ void ABRPlayerController::Server_SetLook_Implementation(const FBRLook& NewLook)
 	Look.HairColor = FMath::Clamp(Look.HairColor, 0.f, 1.f);
 	Look.HairStyle = FMath::Clamp(Look.HairStyle, 0, 64);
 	Look.FacialHair = FMath::Clamp(Look.FacialHair, 0, 64);
+	Look.ShirtStyle = FMath::Clamp(Look.ShirtStyle, 0, 64);
+	Look.PantsStyle = FMath::Clamp(Look.PantsStyle, 0, 64);
+	Look.Glasses = FMath::Clamp(Look.Glasses, 0, 64);
 	Look.HatChoice = FMath::Clamp(Look.HatChoice, -1, static_cast<int32>(EBRHat::LuchaMask));
 	bool bHatChanged = false;
 	if (ABRPlayerState* PS = GetPlayerState<ABRPlayerState>())

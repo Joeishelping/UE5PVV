@@ -52,6 +52,9 @@ private:
 	UPROPERTY() TObjectPtr<UBorder> HairColorSwatch;
 	UPROPERTY() TObjectPtr<UTextBlock> HairLabel;
 	UPROPERTY() TObjectPtr<UTextBlock> FacialHairLabel;
+	UPROPERTY() TObjectPtr<UTextBlock> ShirtStyleLabel;
+	UPROPERTY() TObjectPtr<UTextBlock> PantsStyleLabel;
+	UPROPERTY() TObjectPtr<UTextBlock> GlassesLabel;
 	UPROPERTY() TObjectPtr<UTextBlock> HatLabel;
 	UPROPERTY() TObjectPtr<UTextBlock> HatLockedText;
 
@@ -110,6 +113,14 @@ private:
 	UFUNCTION() void OnHairNext();
 	UFUNCTION() void OnFacialPrev();
 	UFUNCTION() void OnFacialNext();
+	UFUNCTION() void OnShirtStylePrev();
+	UFUNCTION() void OnShirtStyleNext();
+	UFUNCTION() void OnPantsStylePrev();
+	UFUNCTION() void OnPantsStyleNext();
+	UFUNCTION() void OnGlassesPrev();
+	UFUNCTION() void OnGlassesNext();
+	/** 0 shirt, 1 pants, 2 glasses. */
+	void StepClothes(int32 Which, int32 Step);
 	UFUNCTION() void OnHatPrev();
 	// Settings panel (left side).
 	void BuildSettingsPanel(class UCanvasPanel* Canvas);

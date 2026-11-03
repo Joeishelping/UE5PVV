@@ -502,6 +502,14 @@ protected:
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_Cluck();
 	FVector Home = FVector::ZeroVector;
 	FVector Heading = FVector::ZeroVector;
+	float PanicUntil = -1.f;
+	FVector PanicFrom = FVector::ZeroVector;
+public:
+	/** Server: this chicken panics and runs from Where. */
+	void Panic(const FVector& Where, float Seconds);
+	/** Server: every chicken within Radius goes nuts (a chicken got thrown at them). */
+	static void Stampede(UWorld* World, const FVector& Where, float Radius);
+protected:
 	bool bPecking = false;
 	float NextHop = 0.f;
 };
@@ -648,6 +656,22 @@ public:
 
 private:
 	int32 ShownServings = -1;
+};
+
+// ===========================================================================================
+/** Candy from a smashed pinata: grab it (E) for full balance (shake off a beating). */
+UCLASS(NotPlaceable)
+class PIRATESVSVIKINGS_API ABRCandy : public ABRGreyboxActor, public IPVVInteractable
+{
+	GENERATED_BODY()
+
+public:
+	ABRCandy();
+	virtual void BeginPlay() override;
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 0.f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 };
 
 // ===========================================================================================

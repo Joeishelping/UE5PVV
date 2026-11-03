@@ -2078,6 +2078,12 @@ void ABRPhysicsProp::Drop()
 
 void ABRPhysicsProp::OnPropHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
+	// A thrown chicken landing among the other chickens: STAMPEDE.
+	if (HasAuthority() && IsA<ABRChicken>() && !Holder && GetWorld()->GetTimeSeconds() - ThrownTime < 4.f)
+	{
+		ThrownTime = -100.f;
+		ABRChicken::Stampede(GetWorld(), GetActorLocation(), 1800.f);
+	}
 	APVVCharacter* Victim = Cast<APVVCharacter>(OtherActor);
 	const FVector Vel = Mesh->GetPhysicsLinearVelocity();
 	if (!Victim || Holder || Vel.Size() < KnockoutSpeed || Victim == LastThrower.Get() || Victim->GetCondition() != EPVVCondition::Normal)
@@ -2190,9 +2196,15 @@ void ABRChicken::Tick(float DeltaSeconds)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
-	// Somebody close? RUN (and flap).
+	// Somebody close? RUN (and flap). Panicking (stampede)? Run from the commotion.
 	bool bScared = false;
-	for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
+	if (Now < PanicUntil)
+	{
+		const FVector Away = (GetActorLocation() - PanicFrom) * FVector(1.f, 1.f, 0.f);
+		Heading = (Away.GetSafeNormal() + FVector(FMath::FRandRange(-.6f, .6f), FMath::FRandRange(-.6f, .6f), 0.f)).GetSafeNormal();
+		bScared = true;
+	}
+	for (TActorIterator<APVVCharacter> It(GetWorld()); It && !bScared; ++It)
 	{
 		const FVector Away = (GetActorLocation() - It->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 		if (Away.Size() < 320.f)
@@ -2235,6 +2247,36 @@ void ABRChicken::Tick(float DeltaSeconds)
 		// Peck the ground.
 		const float Peck = FMath::Max(0.f, FMath::Sin(Now * 9.f)) * 25.f;
 		SetActorRotation(FRotator(-Peck, GetActorRotation().Yaw, 0.f), ETeleportType::TeleportPhysics);
+	}
+}
+
+void ABRChicken::Panic(const FVector& Where, float Seconds)
+{
+	PanicFrom = Where;
+	PanicUntil = GetWorld()->GetTimeSeconds() + Seconds;
+	if (FMath::FRand() < 0.6f)
+	{
+		Multicast_Cluck();
+	}
+}
+
+void ABRChicken::Stampede(UWorld* World, const FVector& Where, float Radius)
+{
+	int32 Count = 0;
+	for (TActorIterator<ABRChicken> It(World); It; ++It)
+	{
+		if (!It->IsHeld() && FVector::Dist(It->GetActorLocation(), Where) < Radius)
+		{
+			It->Panic(Where, FMath::FRandRange(5.f, 8.f));
+			++Count;
+		}
+	}
+	if (Count >= 3)
+	{
+		if (ABRGameMode* GM = World->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->Feed(TEXT("CHICKEN STAMPEDE!"));
+		}
 	}
 }
 
@@ -2641,6 +2683,28 @@ void ABRCashPickup::OnInteract_Implementation(APVVCharacter* Interactor)
 	{
 		GM->Feed(FString::Printf(TEXT("%s accepted $%d from %s. Totally normal."), *PS->GetPlayerName(), Taken, *DropperName));
 	}
+	// BRIBE: Border Patrol pocketed a Runner's cash -> that Runner's record is wiped clean (stars, bounty).
+	if (Interactor->GetFaction() == BR::Wardens && DropperTeam == BR::Runners && !DropperName.IsEmpty())
+	{
+		if (ABRGameState* BribeGS = BRGame(this))
+		{
+			for (APlayerState* Each : BribeGS->PlayerArray)
+			{
+				ABRPlayerState* Briber = Cast<ABRPlayerState>(Each);
+				if (Briber && Briber->GetPlayerName() == DropperName)
+				{
+					Briber->Trouble = 0;
+					Briber->WantedStars = 0;
+					if (BribeGS->BountyTarget == Briber)
+					{
+						BribeGS->BountyTarget = nullptr;
+					}
+					Tell(Cast<APVVCharacter>(Briber->GetPawn()), FText::Format(LOCTEXT("BribeTaken", "{0} took your ${1}. Your record is... clean. *wink*"), FText::FromString(PS->GetPlayerName()), Taken));
+					Tell(Interactor, FText::Format(LOCTEXT("BribeGot", "You took a bribe from {0}. Their record is wiped."), FText::FromString(DropperName)));
+				}
+			}
+		}
+	}
 	Tell(Interactor, FText::Format(LOCTEXT("GotCash", "+${0}"), Taken));
 	ABRGameState::Sfx(this, EBRSfx::CashPickup, GetActorLocation());
 	ABRGameState::FX(this, EBRFX::MoneyText, GetActorLocation() + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("+$%d"), Taken));
@@ -2826,9 +2890,56 @@ void ABRPinata::OnInteract_Implementation(APVVCharacter* Interactor)
 		PS->AddMoney(Cash);
 		Prize = FString::Printf(TEXT("$%d"), Cash);
 	}
+	// Candy rains down all around (grab it for full balance).
+	for (int32 i = 0; i < 10; ++i)
+	{
+		const float A = i * 2.f * PI / 10.f + FMath::FRandRange(-.2f, .2f);
+		const FVector At = GetActorLocation() + FVector(FMath::Cos(A), FMath::Sin(A), 0.f) * FMath::FRandRange(150.f, 420.f);
+		GetWorld()->SpawnActor<ABRCandy>(ABRCandy::StaticClass(), FTransform(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At));
+	}
 	GS->Multicast_Announce(FText::Format(LOCTEXT("PinataBurst", "{0} smashed the pinata and got {1}!"),
 		FText::FromString(Interactor->GetPlayerDisplayName()), FText::FromString(Prize)));
 	Multicast_Whack(true);
+}
+
+ABRCandy::ABRCandy()
+{
+	bReplicates = true;
+	static const FLinearColor Colors[] = { {1.f, .2f, .4f}, {.2f, .8f, 1.f}, {1.f, .85f, .1f}, {.4f, 1.f, .3f}, {.8f, .3f, 1.f} };
+	const FLinearColor C = Colors[FMath::RandRange(0, 4)];
+	AddMesh(TEXT("Candy"), SphereMesh, FVector(0.f, 0.f, 12.f), FVector(22.f, 22.f, 22.f), C, FRotator::ZeroRotator, false);
+	AddMesh(TEXT("WrapL"), ConeMesh, FVector(-16.f, 0.f, 12.f), FVector(12.f, 12.f, 12.f), C, FRotator(0.f, 0.f, 90.f), false);
+	AddMesh(TEXT("WrapR"), ConeMesh, FVector(16.f, 0.f, 12.f), FVector(12.f, 12.f, 12.f), C, FRotator(0.f, 0.f, -90.f), false);
+	AddPickupZone(70.f);
+	Tags.Add(TEXT("BRPickup"));
+}
+
+void ABRCandy::BeginPlay()
+{
+	Super::BeginPlay();
+	StartDespawn(40.f);
+}
+
+bool ABRCandy::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	return Interactor && Interactor->GetCondition() == EPVVCondition::Normal && !IsActorBeingDestroyed();
+}
+
+FText ABRCandy::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return LOCTEXT("Candy", "Eat the candy (full balance)");
+}
+
+void ABRCandy::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!HasAuthority() || !Interactor || IsActorBeingDestroyed())
+	{
+		return;
+	}
+	Interactor->RestoreBalance();
+	Tell(Interactor, LOCTEXT("CandyEaten", "Sugar rush! Full balance."));
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 60.f), TEXT("SUGAR!"));
+	Destroy();
 }
 
 void ABRPinata::Multicast_Whack_Implementation(bool bBurst)

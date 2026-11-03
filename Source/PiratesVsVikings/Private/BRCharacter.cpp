@@ -283,6 +283,9 @@ void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 	Random.LipSize = FMath::FRandRange(.4f, .6f);
 	Random.EarSize = FMath::FRandRange(.4f, .6f);
 	BR::RandomizeFace(Random, 0.38f); // lots of different faces in the crowd
+	Random.ShirtStyle = ShirtStyles.Num() > 0 ? FMath::RandRange(0, ShirtStyles.Num()) : 0;
+	Random.PantsStyle = PantsStyles.Num() > 0 ? FMath::RandRange(0, PantsStyles.Num()) : 0;
+	Random.Glasses = (GlassesStyles.Num() > 0 && FMath::FRand() < 0.18f) ? FMath::RandRange(1, GlassesStyles.Num()) : 0;
 	Random.HairStyle = HairStyles.Num() > 0 ? FMath::RandRange(1, HairStyles.Num()) : 1;
 	Random.FacialHair = (FacialHairStyles.Num() > 0 && FMath::RandRange(0, 2) == 0) ? FMath::RandRange(1, FacialHairStyles.Num()) : 0;
 	const float HairRoll = FMath::FRand();
@@ -538,6 +541,24 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 		return;
 	}
 	PickStyle(Hair, HairStyles, L.HairStyle);
+	// Shirt / pants: 0 = the Blueprint's own; glasses: 0 = none.
+	auto PickOrDefault = [this](USkeletalMeshComponent* Part, const TArray<TObjectPtr<USkeletalMesh>>& Styles, int32 Index, USkeletalMesh* Default)
+	{
+		if (!Part || Styles.Num() == 0)
+		{
+			return;
+		}
+		USkeletalMesh* Wanted = Index > 0 ? Styles[(Index - 1) % Styles.Num()].Get() : Default;
+		if (Part->GetSkeletalMeshAsset() != Wanted)
+		{
+			BRMakeFollowerSafe(Part);
+			Part->SetSkeletalMeshAsset(Wanted);
+			Part->SetLeaderPoseComponent(GetMesh(), true);
+		}
+	};
+	PickOrDefault(OutfitTop, ShirtStyles, L.ShirtStyle, DefaultTopMesh.Get());
+	PickOrDefault(OutfitBottom, PantsStyles, L.PantsStyle, DefaultBottomMesh.Get());
+	PickOrDefault(OutfitFace, GlassesStyles, L.Glasses, nullptr);
 	PickStyle(FacialHair, FacialHairStyles, L.FacialHair);
 	ApplySkin(BR::SkinColor(L.SkinTone));
 	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor), BR::ClothColor(L.ShirtColor), ClothMaterialSlot);
@@ -827,7 +848,8 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 	}
 	if (Dist > 250.f)
 	{
-		GetCharacterMovement()->MaxWalkSpeed = Dist > 900.f ? 650.f : 420.f;
+		const bool bWhistled = GetWorld()->GetTimeSeconds() < WhistleRunUntil;
+		GetCharacterMovement()->MaxWalkSpeed = bWhistled ? 760.f : (Dist > 900.f ? 650.f : 420.f);
 		AddMovementInput(ToLeader.GetSafeNormal(), 1.f);
 	}
 }
@@ -915,6 +937,12 @@ void ABRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	DefaultTopMesh = OutfitTop ? OutfitTop->GetSkeletalMeshAsset() : nullptr;
+	DefaultBottomMesh = OutfitBottom ? OutfitBottom->GetSkeletalMeshAsset() : nullptr;
+	if (StatusLabel)
+	{
+		StatusLabel->SetVisibility(false); // shown only to teammates (UpdateLocalVisibility)
+	}
 	for (USkeletalMeshComponent* Outfit : { OutfitTop.Get(), OutfitBottom.Get(), OutfitHead.Get(), OutfitFace.Get(), Hair.Get(), FacialHair.Get(), DisguiseOutfit.Get() })
 	{
 		// Clothes copy every bone of the body (incl. physics/ragdoll) and sit exactly on it.
@@ -1400,7 +1428,42 @@ void ABRCharacter::Multicast_Trumpet_Implementation()
 		UGameplayStatics::PlaySoundAtLocation(this, TrumpetSound, GetActorLocation());
 	}
 }
-void ABRCharacter::Input_Drone() { Server_LaunchDrone(); }
+void ABRCharacter::Input_Drone()
+{
+	if (IsRunner())
+	{
+		Server_CoyoteWhistle(); // Runners: whistle for your clients
+		return;
+	}
+	Server_LaunchDrone();
+}
+
+void ABRCharacter::Server_CoyoteWhistle_Implementation()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!IsRunner() || bIsNPC || Now - LastWhistleTime < 6.f || GetCondition() != EPVVCondition::Normal)
+	{
+		return;
+	}
+	LastWhistleTime = Now;
+	ABRGameState::Sfx(this, EBRSfx::Whistle, GetActorLocation());
+	int32 Called = 0;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		if (It->IsNPC() && It->Leader.Get() == this)
+		{
+			It->WhistleRunUntil = Now + 8.f;
+			++Called;
+		}
+	}
+	// Loud: Border Patrol hears where it came from.
+	if (ABRGameState* GS = GetBRGameState())
+	{
+		GS->Multicast_NoisePing(GetActorLocation());
+	}
+	Notify(Called > 0 ? FText::Format(LOCTEXT("Whistled", "*FWEEEET* {0} client(s) coming running! (Border Patrol heard that.)"), Called)
+		: LOCTEXT("WhistleNobody", "*FWEEEET* ...nobody's following you. (Border Patrol heard that.)"));
+}
 void ABRCharacter::Input_WeaponMode() { Server_ToggleWeaponMode(); }
 void ABRCharacter::Input_Trap() { Server_PlaceTrap(); }
 
@@ -1560,7 +1623,8 @@ void ABRCharacter::UpdateAimCamera(float DeltaSeconds)
 	const float Speed = 12.f;
 	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, bZoom ? AimArmLength : DefaultArmLength, DeltaSeconds, Speed);
 	CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, bZoom ? FVector(0.f, 55.f, 65.f) : DefaultSocketOffset, DeltaSeconds, Speed);
-	FollowCamera->SetFieldOfView(FMath::FInterpTo(FollowCamera->FieldOfView, bZoom ? AimFOV : DefaultFOV, DeltaSeconds, Speed));
+	KOPunch = FMath::Max(0.f, KOPunch - DeltaSeconds * 2.5f);
+	FollowCamera->SetFieldOfView(FMath::FInterpTo(FollowCamera->FieldOfView, (bZoom ? AimFOV : DefaultFOV) - 14.f * KOPunch, DeltaSeconds, Speed));
 }
 
 void ABRCharacter::Input_FireIfAiming()
@@ -2389,6 +2453,25 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		{
 			AddShake(1.f);
 		}
+		// Big knockout near you: a punchy zoom + shake (and a moment of slow-mo when playing alone).
+		if (GetNetMode() != NM_DedicatedServer)
+		{
+			const APlayerController* LocalPC = GetWorld()->GetFirstPlayerController();
+			ABRCharacter* Viewer = LocalPC ? Cast<ABRCharacter>(LocalPC->GetPawn()) : nullptr;
+			const float NowKO = GetWorld()->GetTimeSeconds();
+			if (Viewer && FVector::Dist(Viewer->GetActorLocation(), GetActorLocation()) < 700.f && NowKO - Viewer->LastKOPunchTime > 3.f)
+			{
+				Viewer->LastKOPunchTime = NowKO;
+				Viewer->KOPunch = 1.f;
+				Viewer->AddShake(0.7f);
+				if (GetNetMode() == NM_Standalone)
+				{
+					UGameplayStatics::SetGlobalTimeDilation(this, 0.3f);
+					FTimerHandle SlowMo;
+					GetWorldTimerManager().SetTimer(SlowMo, FTimerDelegate::CreateWeakLambda(this, [this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.f); }), 0.12f, false);
+				}
+			}
+		}
 		MashCount = 0;
 		KnockedDownAt = GetWorld()->GetTimeSeconds();
 		if (KnockoutSound && GetNetMode() != NM_DedicatedServer)
@@ -2476,7 +2559,21 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (KOStars && GetNetMode() != NM_DedicatedServer)
 	{
 		const bool bKO = GetCondition() == EPVVCondition::KnockedDown;
-		KOStars->SetHiddenInGame(!bKO);
+		const bool bDizzy = !bKO && GetCondition() == EPVVCondition::Normal && GetBalanceFraction() < 0.3f && !GetCurrentBoat();
+		KOStars->SetHiddenInGame(!bKO && !bDizzy);
+		if (bDizzy)
+		{
+			// Rocked: little birds circle your head until you get your balance back.
+			KOStars->SetText(FText::FromString(TEXT("v  ~  v  ~  v")));
+			KOStars->SetTextRenderColor(FColor(140, 200, 255));
+			const FVector Head = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation();
+			KOStars->SetWorldLocationAndRotation(Head + FVector(0.f, 0.f, 40.f), FRotator(0.f, GetWorld()->GetTimeSeconds() * 420.f, 0.f));
+		}
+		else if (bKO)
+		{
+			KOStars->SetText(FText::FromString(TEXT("*  @  *")));
+			KOStars->SetTextRenderColor(FColor(255, 230, 60));
+		}
 		if (bKO)
 		{
 			// Stars circle the head (follow the ragdoll's head).
@@ -2724,7 +2821,14 @@ void ABRCharacter::UpdateLocalVisibility()
 	// Name tags: teammates only (and never on NPCs) so disguises and hiding in trucks work.
 	if (StatusLabel)
 	{
-		const bool bShowLabel = !bIsNPC && Viewer == GetFaction() && Viewer != EPVVFaction::None;
+		bool bShowLabel = !bIsNPC && Viewer == GetFaction() && Viewer != EPVVFaction::None && !IsLocallyControlled();
+		if (bShowLabel && LocalPC && LocalPC->PlayerCameraManager)
+		{
+			// Fade out with distance (smaller, then gone) so far-away teammates don't clutter the screen.
+			const float Dist = FVector::Dist(LocalPC->PlayerCameraManager->GetCameraLocation(), GetActorLocation());
+			bShowLabel = Dist < 3000.f;
+			StatusLabel->SetWorldSize(FMath::GetMappedRangeValueClamped(FVector2D(800.f, 3000.f), FVector2D(22.f, 10.f), Dist));
+		}
 		if (StatusLabel->IsVisible() != bShowLabel)
 		{
 			StatusLabel->SetVisibility(bShowLabel);
@@ -2744,7 +2848,7 @@ void ABRCharacter::UpdateLocalVisibility()
 		GetRootComponent()->SetVisibility(!bHide, true);
 		if (StatusLabel && !bHide)
 		{
-			StatusLabel->SetVisibility(!bIsNPC && Viewer == GetFaction());
+			StatusLabel->SetVisibility(!bIsNPC && Viewer == GetFaction() && Viewer != EPVVFaction::None && !IsLocallyControlled());
 		}
 	}
 }
@@ -4701,6 +4805,16 @@ UAnimSequenceBase* ABRCharacter::EmoteAnimFor(int32 Index) const
 	}
 }
 
+void ABRCharacter::ForceEmote(int32 Index)
+{
+	if (HasAuthority() && Index >= 0 && Index < NumEmotes)
+	{
+		ActiveEmote = Index;
+		OnRep_ActiveEmote();
+		ForceNetUpdate();
+	}
+}
+
 void ABRCharacter::StopEmote()
 {
 	if (HasAuthority() && ActiveEmote >= 0)
@@ -4855,10 +4969,17 @@ void ABRCharacter::TickHeadTag()
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
 	const ABRGameState* GS = GetBRGameState();
-	const bool bBounty = GS && GS->BountyTarget && GS->BountyTarget == GetPlayerState() && GetCondition() != EPVVCondition::Restrained;
+	const APlayerController* LocalPC = GetWorld()->GetFirstPlayerController();
+	const ABRPlayerState* LocalPS = LocalPC ? LocalPC->GetPlayerState<ABRPlayerState>() : nullptr;
+	// Border Patrol never gets a free "that one's a player" tag: only teammates (or a tagged/spotted Runner) show anything.
+	const bool bFriendly = bIsNPC || (LocalPS && LocalPS->GetFaction() == GetFaction());
+	const bool bRevealed = bFriendly || IsSpotted();
+	const bool bBounty = GS && GS->BountyTarget && GS->BountyTarget == GetPlayerState() && GetCondition() != EPVVCondition::Restrained && bRevealed;
+	const ABRPlayerState* MyPS = GetBRPlayerState();
+	const int32 Stars = MyPS ? MyPS->WantedStars : 0;
 	FString Text;
 	FColor Color = FColor::White;
-	if (Now < EmoteBubbleUntil)
+	if (Now < EmoteBubbleUntil && bFriendly)
 	{
 		Text = EmoteBubble;
 	}
@@ -4871,6 +4992,11 @@ void ABRCharacter::TickHeadTag()
 	{
 		Text = TEXT("$ WANTED $");
 		Color = FColor(80, 255, 80);
+	}
+	else if (Stars > 0 && bRevealed && !bIsNPC)
+	{
+		Text = Stars >= 3 ? TEXT("* * *") : (Stars == 2 ? TEXT("* *") : TEXT("*"));
+		Color = FColor(255, 210, 40);
 	}
 	HeadTag->SetHiddenInGame(Text.IsEmpty());
 	if (Text.IsEmpty())

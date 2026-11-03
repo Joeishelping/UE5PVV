@@ -51,6 +51,8 @@ public:
 	bool OrderOut(APVVCharacter* Officer);
 	/** Can this officer order people out of it right now? */
 	bool CanOrderOut(const APVVCharacter* Officer) const { return WantsSearch(Officer); }
+	/** Server: beep beep. */
+	void HonkHorn() { Multicast_Horn(); }
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float FuelPerSecond = 1.f / 60.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float RideHeight = 45.f;
@@ -164,6 +166,7 @@ private:
 	/** -1 = right lane, +1 = left lane. */
 	float Lane = -1.f;
 	float BlockedSince = -1.f;
+	float NextHonk = 0.f;
 	float ReactAt = -1.f;
 	bool bReacted = false;
 	bool bRunningGate = false;

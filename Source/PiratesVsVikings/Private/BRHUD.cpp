@@ -540,6 +540,13 @@ void ABRHUD::DrawHUD()
 		Centered(Me->IsHiddenFromPatrol() ? TEXT("In the box: invisible while you stand still") : TEXT("In the box: MOVING (they can see you)"), SY * 0.7f, Me->IsHiddenFromPatrol() ? Green : Yellow, Small, 1.3f);
 	}
 
+	// --- Wanted stars (your own)
+	if (const ABRPlayerState* MyPS = Me->GetBRPlayerState(); MyPS && MyPS->WantedStars > 0)
+	{
+		const FString Stars = MyPS->WantedStars >= 3 ? TEXT("* * *") : (MyPS->WantedStars == 2 ? TEXT("* *") : TEXT("*"));
+		Centered(FString::Printf(TEXT("WANTED  %s%s"), *Stars, MyPS->WantedStars >= 3 ? TEXT("   (Border Patrol can hear where you are!)") : TEXT("   (lay low to cool off)")), 130.f, Yellow, Small, 1.3f);
+	}
+
 	// --- Blocking
 	if (Me->IsBlocking())
 	{

@@ -43,6 +43,9 @@ void UBRGameInstance::SaveLook() const
 	GConfig->SetInt(LookSection, TEXT("HairStyle"), Look.HairStyle, GGameUserSettingsIni);
 	GConfig->SetFloat(LookSection, TEXT("HairColor"), Look.HairColor, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("FacialHair"), Look.FacialHair, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("ShirtStyle"), Look.ShirtStyle, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("PantsStyle"), Look.PantsStyle, GGameUserSettingsIni);
+	GConfig->SetInt(LookSection, TEXT("Glasses"), Look.Glasses, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("HatChoice"), Look.HatChoice, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("LifetimeTacos"), LifetimeTacos, GGameUserSettingsIni);
 	GConfig->SetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);
@@ -74,6 +77,9 @@ void UBRGameInstance::LoadLook()
 	GConfig->GetInt(LookSection, TEXT("HairStyle"), Look.HairStyle, GGameUserSettingsIni);
 	GConfig->GetFloat(LookSection, TEXT("HairColor"), Look.HairColor, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("FacialHair"), Look.FacialHair, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("ShirtStyle"), Look.ShirtStyle, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("PantsStyle"), Look.PantsStyle, GGameUserSettingsIni);
+	GConfig->GetInt(LookSection, TEXT("Glasses"), Look.Glasses, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("HatChoice"), Look.HatChoice, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("LifetimeTacos"), LifetimeTacos, GGameUserSettingsIni);
 	GConfig->GetInt(LookSection, TEXT("LifetimeKnockdowns"), LifetimeKnockdowns, GGameUserSettingsIni);

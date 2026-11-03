@@ -472,6 +472,9 @@ void UBRMenuWidget::BuildCustomize(UVerticalBox* Box)
 	AddRow(CustomizeBox, MakePickerRow(TEXT("Hair"), HairLabel, 0), 2.f);
 	AddRow(CustomizeBox, MakePickerRow(TEXT("Beard"), FacialHairLabel, 1), 2.f);
 	AddRow(CustomizeBox, MakePickerRow(TEXT("Hat"), HatLabel, 2), 2.f);
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Shirt style"), ShirtStyleLabel, 3), 2.f);
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Pants style"), PantsStyleLabel, 4), 2.f);
+	AddRow(CustomizeBox, MakePickerRow(TEXT("Glasses"), GlassesLabel, 5), 2.f);
 	HatLockedText = MakeText(TEXT(""), 12, FLinearColor(0.7f, 0.7f, 0.7f));
 	AddRow(CustomizeBox, HatLockedText, 2.f);
 	AddRow(CustomizeBox, MakeSliderRow(TEXT("Hair color"), Look.HairColor, HairColorSlider, HairColorSwatch), 2.f);
@@ -517,7 +520,22 @@ UHorizontalBox* UBRMenuWidget::MakePickerRow(const FString& Label, TObjectPtr<UT
 	LabelBox->AddChild(Text);
 	UButton* Prev = MakeButton(TEXT("<"), Neutral);
 	UButton* Next = MakeButton(TEXT(">"), Neutral);
-	if (Which == 2)
+	if (Which == 3)
+	{
+		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnShirtStylePrev);
+		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnShirtStyleNext);
+	}
+	else if (Which == 4)
+	{
+		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnPantsStylePrev);
+		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnPantsStyleNext);
+	}
+	else if (Which == 5)
+	{
+		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnGlassesPrev);
+		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnGlassesNext);
+	}
+	else if (Which == 2)
 	{
 		Prev->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHatPrev);
 		Next->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHatNext);
@@ -560,6 +578,9 @@ void UBRMenuWidget::RefreshPickers()
 	};
 	if (HairLabel) HairLabel->SetText(FText::FromString(Describe(GI->Look.HairStyle, Me ? Me->GetHairStyleCount() : 0, TEXT("Bald"))));
 	if (FacialHairLabel) FacialHairLabel->SetText(FText::FromString(Describe(GI->Look.FacialHair, Me ? Me->GetFacialHairCount() : 0, TEXT("Clean shaven"))));
+	if (ShirtStyleLabel) ShirtStyleLabel->SetText(FText::FromString(Describe(GI->Look.ShirtStyle, Me ? Me->GetShirtStyleCount() : 0, TEXT("Team default"))));
+	if (PantsStyleLabel) PantsStyleLabel->SetText(FText::FromString(Describe(GI->Look.PantsStyle, Me ? Me->GetPantsStyleCount() : 0, TEXT("Team default"))));
+	if (GlassesLabel) GlassesLabel->SetText(FText::FromString(Describe(GI->Look.Glasses, Me ? Me->GetGlassesCount() : 0, TEXT("None"))));
 	if (HatLabel)
 	{
 		const FString HatText = GI->Look.HatChoice < 0 ? FString(TEXT("Team default"))
@@ -624,6 +645,29 @@ void UBRMenuWidget::StepStyle(bool bFacial, int32 Step)
 	SendLook();
 }
 
+void UBRMenuWidget::StepClothes(int32 Which, int32 Step)
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	const ABRPlayerController* PC = GetBRController();
+	const ABRCharacter* Me = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
+	if (!GI)
+	{
+		return;
+	}
+	const int32 Count = Me ? (Which == 0 ? Me->GetShirtStyleCount() : (Which == 1 ? Me->GetPantsStyleCount() : Me->GetGlassesCount())) : 6;
+	int32& Index = Which == 0 ? GI->Look.ShirtStyle : (Which == 1 ? GI->Look.PantsStyle : GI->Look.Glasses);
+	const int32 Options = FMath::Max(1, Count) + 1; // + default / none
+	Index = ((Index + Step) % Options + Options) % Options;
+	RefreshPickers();
+	SendLook();
+}
+
+void UBRMenuWidget::OnShirtStylePrev() { StepClothes(0, -1); }
+void UBRMenuWidget::OnShirtStyleNext() { StepClothes(0, 1); }
+void UBRMenuWidget::OnPantsStylePrev() { StepClothes(1, -1); }
+void UBRMenuWidget::OnPantsStyleNext() { StepClothes(1, 1); }
+void UBRMenuWidget::OnGlassesPrev() { StepClothes(2, -1); }
+void UBRMenuWidget::OnGlassesNext() { StepClothes(2, 1); }
 void UBRMenuWidget::OnHairPrev() { StepStyle(false, -1); }
 void UBRMenuWidget::OnHairNext() { StepStyle(false, 1); }
 void UBRMenuWidget::OnFacialPrev() { StepStyle(true, -1); }
@@ -729,6 +773,9 @@ void UBRMenuWidget::OnRandomLook()
 	const ABRCharacter* Me = PC ? Cast<ABRCharacter>(PC->GetPawn()) : nullptr;
 	GI->Look.HairStyle = FMath::RandRange(0, Me ? Me->GetHairStyleCount() : 0);
 	GI->Look.FacialHair = FMath::RandBool() ? 0 : FMath::RandRange(0, Me ? Me->GetFacialHairCount() : 0);
+	GI->Look.ShirtStyle = FMath::RandRange(0, Me ? Me->GetShirtStyleCount() : 0);
+	GI->Look.PantsStyle = FMath::RandRange(0, Me ? Me->GetPantsStyleCount() : 0);
+	GI->Look.Glasses = FMath::FRand() < 0.3f ? FMath::RandRange(0, Me ? Me->GetGlassesCount() : 0) : 0;
 	if (HeadSlider) HeadSlider->SetValue(GI->Look.HeadSize);
 	if (NoseSlider) NoseSlider->SetValue(GI->Look.NoseSize);
 	if (LipSlider) LipSlider->SetValue(GI->Look.LipSize);

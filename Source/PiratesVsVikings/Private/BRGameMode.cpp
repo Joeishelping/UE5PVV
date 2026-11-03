@@ -250,6 +250,17 @@ void ABRGameMode::AdvancePhase()
 				}
 			}
 		}
+		// Victory / defeat poses: winners celebrate, losers beg.
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			if (It->IsNPC() || It->GetCondition() != EPVVCondition::Normal || It->GetCurrentBoat())
+			{
+				continue;
+			}
+			const bool bWon = Winner != EPVVFaction::None && It->GetFaction() == Winner;
+			const int32 WinPoses[] = { 1, 4, 5 }; // flex, cheer, dance
+			It->ForceEmote(bWon || Winner == EPVVFaction::None ? WinPoses[FMath::RandRange(0, 2)] : 3);
+		}
 		EndMatch(Winner);
 	}
 }
@@ -854,7 +865,11 @@ void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
 	}
 	static const TCHAR* Verbs[] = { TEXT("FLATTENED"), TEXT("BONKED"), TEXT("BODY-SLAMMED"), TEXT("SENT FLYING"), TEXT("DROPPED"), TEXT("CLOTHESLINED") };
 	ABRGameState::Highlight(this, Cast<ABRCharacter>(Victim), 30.f, FString::Printf(TEXT("%s knocked out %s"), *NameOf(By), *NameOf(Victim)));
-	Feed(FString::Printf(TEXT("%s %s %s"), *NameOf(By), Verbs[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Verbs)) - 1)], *NameOf(Victim)));
+	static const TCHAR* Taunts[] = { TEXT("Adios!"), TEXT("Papers, please... oh wait."), TEXT("Sweet dreams, amigo."), TEXT("OLE!"), TEXT("That's gonna leave a mark."),
+		TEXT("Nap time."), TEXT("Somebody call his mama."), TEXT("Ay, caramba!"), TEXT("Lights out."), TEXT("Should've stayed home.") };
+	const ABRCharacter* ByChar = Cast<ABRCharacter>(By);
+	const FString Taunt = (ByChar && !ByChar->IsNPC() && FMath::FRand() < 0.6f) ? FString::Printf(TEXT("  \"%s\""), Taunts[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Taunts)) - 1)]) : FString();
+	Feed(FString::Printf(TEXT("%s %s %s%s"), *NameOf(By), Verbs[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Verbs)) - 1)], *NameOf(Victim), *Taunt));
 }
 
 void ABRGameMode::AddTrouble(ABRCharacter* Who, int32 Amount)
@@ -866,10 +881,11 @@ void ABRGameMode::AddTrouble(ABRCharacter* Who, int32 Amount)
 		return;
 	}
 	PS->Trouble += Amount;
+	PS->LastTroubleTime = GetWorld()->GetTimeSeconds();
+	PS->WantedStars = FMath::Clamp(PS->Trouble / 2, 0, 3);
 	if (PS->GetFaction() == BR::Runners && PS->Trouble >= TroubleForBounty && GS->BountyTarget != PS && GS->Phase == EBRPhase::Invasion)
 	{
 		GS->BountyTarget = PS;
-		PS->Trouble = 0;
 		ABRGameState::Sfx(this, EBRSfx::Bounty, FVector::ZeroVector, true);
 		Announce(FText::Format(LOCTEXT("TroubleBounty", "WANTED: {0} for starting fights all over town! Border Patrol gets +{1} for catching them."),
 			FText::FromString(PS->GetPlayerName()), BountyPoints));
@@ -878,6 +894,7 @@ void ABRGameMode::AddTrouble(ABRCharacter* Who, int32 Amount)
 	else if (PS->GetFaction() == BR::Wardens && PS->Trouble >= TroubleForBounty)
 	{
 		PS->Trouble = 0;
+		PS->WantedStars = 0;
 		ChangeApproval(-HarassmentPenalty);
 		Announce(FText::Format(LOCTEXT("CopTrouble", "{0} keeps beating up locals. Approval down!"), FText::FromString(PS->GetPlayerName())));
 	}
@@ -912,6 +929,27 @@ void ABRGameMode::DropItem(const FVector& At, EBRItem Item, APlayerState* Reserv
 
 void ABRGameMode::TickTownLife(ABRGameState* GS)
 {
+	// Wanted stars cool off (one star per 45 s of good behaviour). 3 stars: Border Patrol hears where you are every 10 s.
+	const float NowStars = GetWorld()->GetTimeSeconds();
+	const bool bPing = FMath::Fmod(NowStars, 10.f) < 1.f;
+	for (APlayerState* Each : GS->PlayerArray)
+	{
+		ABRPlayerState* PS = Cast<ABRPlayerState>(Each);
+		if (!PS)
+		{
+			continue;
+		}
+		if (PS->Trouble > 0 && NowStars - PS->LastTroubleTime > 45.f)
+		{
+			PS->Trouble = FMath::Max(0, PS->Trouble - 2);
+			PS->LastTroubleTime = NowStars;
+			PS->WantedStars = FMath::Clamp(PS->Trouble / 2, 0, 3);
+		}
+		if (PS->WantedStars >= 3 && bPing && PS->GetPawn() && PS->GetFaction() == BR::Runners)
+		{
+			GS->Multicast_NoisePing(PS->GetPawn()->GetActorLocation());
+		}
+	}
 	if (!Arena || !Arena->bBuildTestMap || GS->Phase == EBRPhase::Ended)
 	{
 		return;
@@ -1222,6 +1260,9 @@ void ABRGameMode::AddBot(EPVVFaction Team)
 	PS->Look.LipSize = FMath::FRandRange(.4f, .6f);
 	PS->Look.EarSize = FMath::FRandRange(.4f, .6f);
 	BR::RandomizeFace(PS->Look, 0.38f);
+	PS->Look.ShirtStyle = FMath::RandRange(0, 5);
+	PS->Look.PantsStyle = FMath::RandRange(0, 4);
+	PS->Look.Glasses = FMath::FRand() < 0.2f ? FMath::RandRange(1, 4) : 0;
 	PS->Look.HairStyle = FMath::RandRange(0, 8);
 	PS->Look.HairColor = FMath::RandBool() ? 0.f : FMath::FRandRange(.05f, .35f);
 	PS->Look.FacialHair = FMath::RandRange(0, 4);

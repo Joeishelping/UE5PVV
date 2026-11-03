@@ -393,6 +393,35 @@ Everything here is built on the test map automatically.
 
 ---
 
+## Part 15c: Clothes, glasses and the little extras
+
+**New clothes + glasses** (in `Art/Characters/Outfits`):
+- Shirts: `SK_Shirt_TShirt`, `SK_Shirt_TankTop`, `SK_Shirt_Flannel`, `SK_Shirt_Hoodie`, `SK_Shirt_Guayabera` (+ the old `SK_Outfit_WorkShirt`)
+- Pants: `SK_Pants_Shorts`, `SK_Pants_Cargo`, `SK_Pants_Sweatpants` (+ the old `SK_Outfit_Jeans`)
+- Glasses: `SK_Glasses_Aviator`, `SK_Glasses_Round`, `SK_Glasses_Shades` (+ the old `SK_Outfit_Sunglasses`)
+
+1. Import them like the hair: drag into the Content Browser, **Skeleton = your body's skeleton**, tick **Import Morph Targets**.
+2. Open **BP_Runner** (and BP_Warden if you want them there too) → Class Defaults → **BR | Look**:
+   - **Shirt Styles**: + one per shirt
+   - **Pants Styles**: + one per pants
+   - **Glasses Styles**: + one per glasses
+3. Compile + Save. In the **M** menu you now have **Shirt style / Pants style / Glasses** pickers (the colour sliders still tint them if their material has `ShirtColor` / `PantsColor`). NPCs and bots get random clothes and sometimes glasses too.
+
+**Extras:**
+- **Name tags:** only your teammates see your name (it shrinks and disappears with distance). Border Patrol never sees "Runner" tags, names or emote bubbles over players. Only a **tagged** Runner shows anything to them.
+- **Wanted stars:** start fights → 1, 2, 3 stars (shown at the top of your screen; your team sees them over your head). 3 stars = Border Patrol hears where you are every 10 s. They cool off after 45 s of behaving.
+- **Bribes:** drop cash (your cash-drop key) at a Border Patrol player's feet. If they pick it up, your stars and bounty are wiped. ("Totally normal.")
+- **Coyote whistle:** Runners press **Q** → your smuggling clients sprint to you. Loud: Border Patrol gets a noise ping.
+- **Victory poses** at the end of the round (winners flex/cheer/dance, losers beg).
+- **Dizzy birds** circle your head when you're nearly knocked out.
+- **Knockout taunts** in the kill feed. **Big knockouts** near you punch the camera in (and a moment of slow-mo when playing alone).
+- **Pinata candy:** smashing the pinata scatters candy. Eat it (E) for full balance.
+- **Chicken stampede:** throw a chicken (Z) at the other chickens and they all panic.
+- **Traffic honks:** NPC trucks stuck in line lean on the horn (uses the truck's Horn Sound).
+- **Footprints** in the sand that fade after ~20 s, handy for tracking people.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
@@ -406,7 +435,7 @@ Tick these off. Anything you skip just stays silent or uses a simple placeholder
 
 **BP_Runner AND BP_Warden (Part 3):**
 - [ ] Every **BR | Animations** slot, especially the new **Emote Smoke Anim, Kick Anim, Headbutt Anim**
-- [ ] **BR | Look**: Hair Styles, Facial Hair Styles
+- [ ] **BR | Look**: Hair Styles, Facial Hair Styles, **Shirt Styles, Pants Styles, Glasses Styles**
 - [ ] **BR | Hats**: Hat Meshes (6 rows), Default Hat, **Poncho Mesh**, Held Item Meshes (Trumpet)
 - [ ] **BR | Brawl / Mariachi / Weapons** sounds (optional)
 - [ ] Colour parameters in the materials (optional, 3e)

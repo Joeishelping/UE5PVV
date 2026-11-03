@@ -154,6 +154,16 @@ public:
 	/** Server (NPC): stop fighting / running and just hang around again. */
 	void CalmDown() { AngryAt = nullptr; AngryUntil = -1.f; FleeUntil = -1.f; MugTarget = nullptr; }
 	void SetKnockdownSeconds(float Seconds) { KnockdownDuration = Seconds; }
+	/** Server: play an emote right now (round-end poses), ignoring the cooldown. */
+	void ForceEmote(int32 Index);
+	/** Coyote whistle (Runners, Q): your smuggling clients sprint to you. Loud: Border Patrol hears it. */
+	UFUNCTION(Server, Reliable) void Server_CoyoteWhistle();
+	float LastWhistleTime = -100.f;
+	/** NPC client: running to the coyote's whistle until then. */
+	float WhistleRunUntil = -1.f;
+	/** Local: big knockout punch (zoom + shake) nearby. */
+	float KOPunch = 0.f;
+	float LastKOPunchTime = -100.f;
 
 	// --- Blocking (hold Left Alt): hits from the front do a fraction of the damage and barely push you.
 	UPROPERTY(Replicated) bool bBlocking = false;
@@ -190,6 +200,9 @@ public:
 	void PreviewLook(const FBRLook& NewLook);
 	UFUNCTION(BlueprintPure, Category = "BR|Look") FBRLook GetLook() const { return Look; }
 	int32 GetHairStyleCount() const { return HairStyles.Num(); }
+	int32 GetShirtStyleCount() const { return ShirtStyles.Num(); }
+	int32 GetPantsStyleCount() const { return PantsStyles.Num(); }
+	int32 GetGlassesCount() const { return GlassesStyles.Num(); }
 	int32 GetFacialHairCount() const { return FacialHairStyles.Num(); }
 
 	// --- Read these from an Animation Blueprint (Try Get Pawn Owner -> Cast to BRCharacter) ---
@@ -509,6 +522,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<FName> HairColorParameters = { TEXT("HairColor"), TEXT("Tint"), TEXT("BaseColorFactor") };
 	/** Hairstyles players can pick in the menu (SK_Hair_... meshes, skeleton = your body's). Empty = keep the Hair component as set. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> HairStyles;
+	/** Shirts players can pick (SK_Shirt_...). Slot 0 in the menu = the Blueprint's own OutfitTop. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> ShirtStyles;
+	/** Pants players can pick (SK_Pants_..., SK_Outfit_Jeans). Slot 0 = the Blueprint's own OutfitBottom. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> PantsStyles;
+	/** Glasses / sunglasses (SK_Glasses_..., SK_Outfit_Sunglasses), worn on the OutfitFace slot. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> GlassesStyles;
 	/** Mustaches and beards (SK_Face_... meshes). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> FacialHairStyles;
 
@@ -581,6 +600,8 @@ private:
 	float FleeUntil = -1.f;
 	TWeakObjectPtr<ABRCharacter> AngryAt;
 	float AngryUntil = -1.f;
+	UPROPERTY() TObjectPtr<USkeletalMesh> DefaultTopMesh;
+	UPROPERTY() TObjectPtr<USkeletalMesh> DefaultBottomMesh;
 	UPROPERTY(Replicated) float TipsyUntil = -1.f;
 	/** Eyes: random blinks (needs the "Blink" shape key on the body). Shut while knocked out. */
 	void TickBlink();

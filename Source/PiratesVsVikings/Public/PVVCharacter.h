@@ -93,6 +93,8 @@ public:
 	void ReceiveMeleeHit(APVVCharacter* Attacker, float Damage, const FVector& Impulse);
 	/** Multiplies how far hits and knockdowns throw you (the lucha ring turns it down so you stay inside the ropes). */
 	float KnockbackScale = 1.f;
+	/** Server: full balance again (candy!). */
+	void RestoreBalance() { Balance = MaxBalance; }
 	/** Blocking etc: change an incoming melee hit (return the new damage, edit the push). */
 	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) { return Damage; }
 	void ApplyKnockdown(AActor* Cause, const FVector& Impulse);
