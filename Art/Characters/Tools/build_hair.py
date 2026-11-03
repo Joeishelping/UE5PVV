@@ -45,13 +45,13 @@ def ragged(hairline):
     return lambda th: hairline(th) + .004 * np.sin(th * 37) + .003 * np.sin(th * 61 + 1.3)
 
 
-def shell(thick, hairline, S=200, rings=28, detail=1.):
-    return cap(lambda th, ph: HR + np.maximum(thick(th, ph), .006) + detail * strands(th, ph, thick(th, ph)), ragged(hairline), S=S, rings=rings)
+def shell(thick, hairline, S=200, rings=28, detail=1., minimum=.006):
+    return cap(lambda th, ph: HR + np.maximum(thick(th, ph), minimum) + detail * strands(th, ph, thick(th, ph)), ragged(hairline), S=S, rings=rings)
 
 
 TEX_STRAIGHT = None
 TEX_CURLY = None
-CURLY_STYLES = {"SK_Hair_Afro", "SK_Hair_CurlyTop", "SK_Hair_Twists"}
+CURLY_STYLES = {"SK_Hair_Afro", "SK_Hair_CurlyTop", "SK_Hair_Twists", "SK_Hair_Dreads"}
 
 
 def hair_textures(name):
@@ -70,22 +70,48 @@ def write_hair(name, parts):
     print("wrote", path)
 
 
-std = lambda th: hairline_std(th)
+def human_line(front=1.735, back=1.43, temples=.03):
+    """A real hairline: up on the forehead, a little higher still at the temples (the corners), down at the nape."""
+    return lambda th: hairline_std(th, front, back) + temples * np.exp(-((np.sin(th) - .62) / .17) ** 2)
+
+
+std = human_line()
 # Low sides so short cuts cover the temples (ears still show).
-low = lambda th: hairline_std(th, 1.68, 1.40)
+low = human_line(1.73, 1.40, .025)
 
 # ------------------------------------------------------------------ shared
-write_hair("SK_Hair_Buzz", [shell(lambda th, ph: np.full_like(th, .008), low)])
+# ------------------------------------------------------------------ fades & modern cuts
+def fade_band(top, bottom, density=1., S=220, rows=18, seed=3):
+    """A skin fade: a thin layer of hair between the bottom line (skin) and the top line (full hair), with little
+    patches dropped at random - sparse at the bottom, solid at the top - so it fades into the skin."""
+    rng = np.random.default_rng(seed)
+    th = TH(S)
+    y0, y1 = bottom(th), top(th)
+    ph0 = np.arcsin(np.clip((y0 - HC[1]) / HR, -.99, .99))
+    ph1 = np.arcsin(np.clip((y1 - HC[1]) / HR, -.99, .99))
+    rings = []
+    for k in np.linspace(0, 1, rows):
+        ph = ph0 + (ph1 - ph0) * k + .015
+        rings.append(sph(th, ph, np.full(S, HR + .0035)))
+    V, F = grid(rings, None, None)
+    row = (F[:, 0] // S) / (rows - 1)                                 # 0 = bottom (skin) .. 1 = top (hair)
+    tall = (y1 - y0)[F[:, 0] % S] > .015                              # no band where the lines meet (forehead)
+    keep = (rng.random(len(F)) < np.clip(row ** .8 * density, 0, 1)) & tall
+    return V, F[keep]
+
+
+buzz_top = human_line(1.73, 1.52, .025)
+write_hair("SK_Hair_Buzz", [shell(lambda th, ph: np.full_like(th, .0035), buzz_top, detail=.4, minimum=.003),
+                            fade_band(buzz_top, low, 1.3, seed=5)])       # a soft, short buzz that blends at the edges
 
 # ------------------------------------------------------------------ more cuts
-write_hair("SK_Hair_Fade", [shell(lambda th, ph: .004 + .04 * top(ph, .8, .3) * (.6 + .4 * front(th)), low)])
+
 
 write_hair("SK_Hair_SlickBack", [shell(
     lambda th, ph: .022 + .022 * top(ph, .6, .5) + .015 * (1 - front(th)) * ss((1.1 - ph) / .6)
     + .003 * np.sin(th * 26) * top(ph, .5, .4), std)])
 
-curl = lambda th, ph: .012 * np.abs(np.sin(th * 9) * np.sin(ph * 14))
-write_hair("SK_Hair_CurlyTop", [shell(lambda th, ph: .005 + (.055 + curl(th, ph)) * top(ph, .75, .3), low, detail=.3)])
+
 
 
 def mullet_line(th):
@@ -106,14 +132,11 @@ write_hair("SK_Hair_LongWavy", [shell(
     long_line)])
 
 # ------------------------------------------------------------------ regulation cuts
-write_hair("SK_Hair_HighAndTight", [shell(lambda th, ph: .003 + .025 * top(ph, 1.0, .2), low)])
 
-write_hair("SK_Hair_CrewCut", [shell(lambda th, ph: .008 + .02 * top(ph, .7, .4) * (.7 + .3 * front(th)), low)])
 
-flat_v, flat_f = shell(lambda th, ph: .006 + .07 * top(ph, .85, .25), low)
-roof = HC[1] + HR + .035
-flat_v[:, 1] = np.minimum(flat_v[:, 1], roof)  # sanded flat on top
-write_hair("SK_Hair_FlatTop", [(flat_v, flat_f)])
+
+
+
 
 
 def side_part(th, ph):
@@ -165,20 +188,169 @@ for x in np.linspace(-.2, .2, 7):
         rows.append(tube(pts, [.016], S=8, n=3, mod=lambda t: 1 + .25 * np.sin(t * 60)))
 write_hair("SK_Hair_Cornrows", rows)
 
+fade_low = lambda th: hairline_std(th, 1.71, 1.40)                    # where the hair ends (skin below)
+fade_mid = lambda th: hairline_std(th, 1.715, 1.58)                    # mid fade: full hair from here up
+fade_high = lambda th: hairline_std(th, 1.725, 1.66)                   # high & tight
+
+
+def curls(n, seed, ph_min=.85, r=(.018, .03), lift=.018):
+    rng = np.random.default_rng(seed)
+    parts = []
+    for _ in range(n):
+        ph = np.arcsin(rng.uniform(np.sin(ph_min), 1.))
+        t = rng.uniform(0, 2 * np.pi)
+        c = sph(np.array([t]), np.array([ph]), np.array([HR + lift + rng.uniform(0, .015)]))[0]
+        rr = rng.uniform(*r)
+        parts.append(ellipsoid(c, (rr, rr * .9, rr), 8, 5))
+    return merge(*parts)
+
+
+def spikes(n, seed, ph_min=.9, length=(.05, .085)):
+    rng = np.random.default_rng(seed)
+    parts = []
+    for _ in range(n):
+        ph = np.arcsin(rng.uniform(np.sin(ph_min), 1.))
+        t = rng.uniform(0, 2 * np.pi)
+        base = sph(np.array([t]), np.array([ph]), np.array([HR + .008]))[0]
+        up = (base - HC) / np.linalg.norm(base - HC) + [0, .3, .15]
+        up /= np.linalg.norm(up)
+        L = rng.uniform(*length)
+        parts.append(tube([base - up * .01, base + up * L * .5, base + up * L], [.018, .011, .002], S=7, n=2))
+    return merge(*parts)
+
+
+# Fade: short textured top, skin fade on the sides and back.
+write_hair("SK_Hair_Fade", [shell(lambda th, ph: .018 + .02 * top(ph, .85, .3) * (.6 + .4 * front(th)), fade_mid), fade_band(fade_mid, fade_low)])
+# High and tight: very short top, sides faded almost all the way up.
+write_hair("SK_Hair_HighAndTight", [shell(lambda th, ph: .006 + .012 * top(ph, 1.05, .25), fade_high), fade_band(fade_high, fade_low, .8)])
+# Crew cut: short all over, a bit longer at the front, low taper.
+crew_line = lambda th: hairline_std(th, 1.705, 1.50)
+write_hair("SK_Hair_CrewCut", [shell(lambda th, ph: .01 + .016 * top(ph, .7, .4) * (.6 + .4 * front(th)), crew_line), fade_band(crew_line, fade_low)])
+# Flat top: a flat-topped block of hair, sides faded.
+flat_v, flat_f = shell(lambda th, ph: .012 + .09 * top(ph, .95, .3), fade_mid)
+roof = HC[1] + HR + .045
+flat_v[:, 1] = np.minimum(flat_v[:, 1], roof)                         # sanded flat
+write_hair("SK_Hair_FlatTop", [(flat_v, flat_f), fade_band(fade_mid, fade_low)])
+# Curly top: a mop of curls on top, faded sides.
+write_hair("SK_Hair_CurlyTop", [shell(lambda th, ph: np.full_like(th, .01), fade_mid), curls(150, 11), fade_band(fade_mid, fade_low)])
+# Undercut: long top slicked back, sides shaved clean.
+under_line = lambda th: hairline_std(th, 1.70, 1.63)
+write_hair("SK_Hair_Undercut", [shell(lambda th, ph: .03 + .035 * top(ph, .9, .4) * (.5 + .5 * front(th)), under_line), fade_band(under_line, fade_low, .35)])
+# Mohawk: a strip of spikes front to back, the rest shaved.
+moh = [fade_band(lambda th: hairline_std(th, 1.71, 1.66), fade_low, .3, seed=8)]
+for t in np.linspace(-.8, .5, 15):
+    ang = np.pi / 2 * t                                               # from the back (-) over the top to the forehead hairline (+)
+    base = HC + np.array([0., np.cos(ang) * HR, np.sin(ang) * HR])
+    up = (base - HC) / np.linalg.norm(base - HC)
+    L = .1 * (1 - .35 * abs(t))
+    moh.append(tube([base - up * .01, base + up * L * .55, base + up * L + [0, 0, -.02]], [.028, .02, .003], S=8, n=2))
+write_hair("SK_Hair_Mohawk", moh)
+# Man bun: slicked back with a bun at the back of the head.
+slick = lambda th, ph: .016 + .012 * top(ph, .6, .5)
+write_hair("SK_Hair_ManBun", [shell(slick, std), ellipsoid((0., 1.71, -.30), (.085, .08, .08), 16, 10)])
+# Ponytail: slicked back, tail hanging down the back.
+write_hair("SK_Hair_Ponytail", [shell(slick, std), ellipsoid((0., 1.63, -.28), (.03, .03, .03), 10, 6),
+                                tube([(0., 1.64, -.30), (0., 1.56, -.36), (0., 1.44, -.37), (0., 1.33, -.35)], [.045, .04, .03, .012], S=12, n=4)])
+# Spiky: short base with gelled spikes all over the top.
+write_hair("SK_Hair_Spiky", [shell(lambda th, ph: np.full_like(th, .012), crew_line), spikes(70, 21), fade_band(crew_line, fade_low)])
+# Curtains: 90s middle part, hanging to the ears.
+def curtains(th, ph):
+    x = np.cos(ph) * np.cos(th) * HR
+    part = .012 * np.exp(-(x / .012) ** 2) * top(ph, .8, .3)
+    return .03 + .02 * (1 - top(ph, .5, .6)) + .015 * top(ph, .9, .3) - part
+curtain_line = lambda th: 1.45 + .27 * np.clip(np.sin(th), 0, 1) ** 3                 # parted high in the middle, down to the ears at the sides
+write_hair("SK_Hair_Curtains", [shell(curtains, curtain_line)])
+# Caesar: short all over with a straight fringe across the forehead.
+caesar_line = lambda th: np.minimum(human_line(1.7, 1.45, 0.)(th), 1.7)  # straight short fringe
+write_hair("SK_Hair_Caesar", [shell(lambda th, ph: .014 + .006 * front(th), caesar_line)])
+# Dreads: a thin cap with locks hanging all round to the shoulders.
+dreads = [shell(lambda th, ph: np.full_like(th, .012), std)]
+rng = np.random.default_rng(31)
+for t in np.linspace(0, 2 * np.pi, 34, endpoint=False):
+    if np.sin(t) > .55:
+        continue                                                      # keep the face clear
+    ph = rng.uniform(.25, .7)
+    base = sph(np.array([t]), np.array([ph]), np.array([HR + .015]))[0]
+    out = np.array([np.cos(t), 0, np.sin(t)])
+    L = rng.uniform(.18, .3)
+    dreads.append(tube([base, base + out * .05 - [0, .06, 0], base + out * .07 - [0, L * .6, 0], base + out * .07 - [0, L, 0]],
+                       [.016, .015, .014, .011], S=8, n=3))
+write_hair("SK_Hair_Dreads", dreads)
+
 # ------------------------------------------------------------------ facial hair
-def face_pt(x, y, off):
-    z2 = (HR + off) ** 2 - x ** 2 - (y - HC[1]) ** 2
-    return np.array([x, y, np.sqrt(max(z2, 1e-6))])
+# Every beard is a sheet hugging the lower face, built on a grid of (a = angle round the face, 0 = front; y = height),
+# kept only where the style's MASK says, and thick where THICK says (edges thin out so they blend into the skin).
+LIP_TOP, LIP_BOT, LIP_A = 1.441, 1.372, .33      # the lips (the new, smaller ones)
+NOSE_Y = 1.474                                      # bottom of the nose
+
+def _sm(x):
+    x = np.clip(x, 0, 1)
+    return x * x * (3 - 2 * x)
 
 
-def mustache_path(width, droop=0., curl=0., y=1.458):
-    xs = np.linspace(-width, width, 9)
-    pts = []
-    for x in xs:
-        k = abs(x) / width
-        yy = y - .01 * (1 - k) + droop * k ** 2 + curl * max(0, k - .75) * 8
-        pts.append(face_pt(x, yy, .028 - .012 * k))  # sits in front of the upper lip
-    return pts
+def face_sheet(mask, thick, a_max=1.45, y_lo=1.0, y_hi=1.62, cols=150, rows=90, drop=None, speckle=0.):
+    """mask(a, y) -> 0..1 coverage, thick(a, y) -> metres off the skin, drop(a, y) -> metres the hair hangs down (long beards)."""
+    A = np.linspace(-a_max, a_max, cols)
+    Y = np.linspace(y_lo, y_hi, rows)
+    AA, YY = np.meshgrid(A, Y)
+    M = mask(AA, YY)
+    T = thick(AA, YY) * _sm(M * 2.2)                 # thin out toward the edge of the mask
+    D = drop(AA, YY) * _sm(M * 2.2) if drop else np.zeros_like(AA)
+    r = HR + .002 + T
+    yy = YY - D
+    rr = np.sqrt(np.maximum(r ** 2 - (YY - HC[1]) ** 2, (r * .3) ** 2))
+    th = np.pi / 2 + AA
+    P = np.stack([rr * np.cos(th), yy, rr * np.sin(th) + D * .35], -1)
+    V, F = sheet(P)
+    keep = M.reshape(-1)[F].min(1) > .02
+    if speckle > 0:
+        rng = np.random.default_rng(7)
+        keep &= rng.random(len(F)) > speckle          # stubble: only some of the little patches
+    F = F[keep]
+    used = np.unique(F)
+    remap = -np.ones(len(V), int)
+    remap[used] = np.arange(len(used))
+    return V[used], remap[F]
+
+
+def lips_hole(a, y, pad=.012):
+    """1 = fine, 0 = on the lips (beards go round the mouth)."""
+    da = np.abs(a) / (LIP_A + .04)
+    dy = np.where(y > (LIP_TOP + LIP_BOT) / 2, (y - (LIP_TOP + LIP_BOT) / 2) / ((LIP_TOP - LIP_BOT) / 2 + pad),
+                  ((LIP_TOP + LIP_BOT) / 2 - y) / ((LIP_TOP - LIP_BOT) / 2 + pad))
+    return _sm((np.sqrt(da ** 2 + dy ** 2) - 1.) * 8)
+
+
+def jaw_bottom(a):
+    """Lowest line of the beard: under the chin in front, up toward the ears at the sides."""
+    return 1.24 + .09 * _sm((np.abs(a) - .2) / 1.1)
+
+
+def cheek_line(a, high=1.52):
+    """Top of the beard on the cheeks: low by the mouth, up to the sideburns by the ears."""
+    return 1.43 + (high - 1.43) * _sm((np.abs(a) - .35) / .7)
+
+
+def between(v, lo, hi, soft=.012):
+    return _sm((v - lo) / soft) * _sm((hi - v) / soft)
+
+
+def stache_mask(width=LIP_A + .06, lo=LIP_TOP - .004, hi=NOSE_Y - .002, droop=0.):
+    def m(a, y):
+        k = np.clip(np.abs(a) / width, 0, 1)
+        top = hi - .012 * k ** 2                     # follows under the nose, a bit lower at the ends
+        bot = lo - droop * k ** 2
+        return between(np.abs(a), -1, width, .03) * between(y, bot, top, .006)
+    return m
+
+
+def full_mask(high=1.52, mustache=True, bottom=jaw_bottom):
+    def m(a, y):
+        beard = between(y, bottom(a), cheek_line(a, high), .015) * between(np.abs(a), -1, 1.32, .05) * lips_hole(a, y)
+        if mustache:
+            beard = np.maximum(beard, stache_mask()(a, y))
+        return beard
+    return m
 
 
 def write_face(name, parts):
@@ -187,46 +359,59 @@ def write_face(name, parts):
     print("wrote", path)
 
 
-thick_mid = lambda t: .55 + .45 * np.sin(t * np.pi)
-write_face("SK_Face_Mustache", [tube(mustache_path(.075, -.012), [.016], S=10, n=4, mod=thick_mid)])
-write_face("SK_Face_Pencil", [tube(mustache_path(.06, -.004), [.006], S=8, n=4, mod=thick_mid)])
-write_face("SK_Face_Handlebar", [tube(mustache_path(.11, .0, .02), [.014], S=10, n=4, mod=thick_mid)])
-horse = [tube(mustache_path(.08, -.01), [.016], S=10, n=4, mod=thick_mid)]
-for sx in (-1, 1):
-    horse.append(tube([face_pt(sx * .082, y, .012) for y in np.linspace(1.445, 1.33, 6)], [.014], S=8, n=3))
-write_face("SK_Face_Horseshoe", horse)
+def curl_tip(sx, size=.011):
+    """Handlebar tip: continues out from the end of the mustache, then curls UP (3/4 of a turn)."""
+    a0 = LIP_A + .04
+    pts = []
+    for t in np.linspace(0, 1, 10):
+        ang = t * 4.4
+        a = a0 + .05 * t + (size / HR) * np.sin(ang)
+        y = 1.452 + size * (1 - np.cos(ang)) - .004
+        x = sx * np.sin(a) * (HR + .012)
+        z2 = (HR + .012) ** 2 - x ** 2 - (y - HC[1]) ** 2
+        pts.append((x, y, np.sqrt(max(z2, 1e-6))))
+    return tube(pts, [.0075, .006, .0035], S=8, n=3)
 
 
-def beard_sheet(top_y, bottom_y, half_angle, thick, cols=110, rows=20, lip_gap=True):
-    """Sheet over the lower face. top_y(a) / bottom_y(a) by angle from the face centre (a = 0 front)."""
-    A = np.linspace(-half_angle, half_angle, cols)
-    P = []
-    for t in np.linspace(0, 1, rows):
-        row = []
-        for a in A:
-            y = bottom_y(a) + (top_y(a) - bottom_y(a)) * t
-            th = np.pi / 2 + a
-            r = HR + thick(a, t) + np.clip(thick(a, t) * .35, .0005, .008) * (.5 + .5 * np.sin(a * 45 + 1.5 * np.sin(t * 6)) - .5)
-            rr = np.sqrt(max(r ** 2 - (y - HC[1]) ** 2, (r * .35) ** 2))
-            row.append([rr * np.cos(th), y, rr * np.sin(th)])
-        P.append(row)
-    V, F = sheet(np.array(P))
-    return V, F
+def hang_tube(sx, y0=1.43, y1=1.27, a=LIP_A + .02):
+    """A strand hanging down by the corner of the mouth (horseshoe / fu manchu)."""
+    pts = []
+    for y in np.linspace(y0, y1, 7):
+        x = sx * np.sin(a) * HR
+        z2 = (HR + .013) ** 2 - x ** 2 - (y - HC[1]) ** 2
+        pts.append((x, y, np.sqrt(max(z2, 1e-6))))
+    return pts
 
 
-def jaw_top(a, mouth=1.352, cheek=1.50):
-    # Stays under the lips in the middle, climbs the cheeks to the sideburns.
-    return mouth + (cheek - mouth) * ss((abs(a) - .3) / .5)
-
-
-full_bottom = lambda a: 1.235 + .03 * ss(abs(a) / 1.1)
-write_face("SK_Face_FullBeard", [
-    beard_sheet(jaw_top, full_bottom, 1.2, lambda a, t: .03 + .02 * (1 - t) + .004 * np.sin(a * 30)),
-    tube(mustache_path(.085, -.015), [.017], S=10, n=4, mod=thick_mid)])
-write_face("SK_Face_Stubble", [beard_sheet(jaw_top, full_bottom, 1.2, lambda a, t: np.full_like(np.asarray(a, float), .005)),
-                               tube(mustache_path(.075, -.012), [.006], S=8, n=4)])
-write_face("SK_Face_Goatee", [
-    beard_sheet(lambda a: 1.352, lambda a: 1.26 + .02 * abs(a) / .35, .35, lambda a, t: .022 + .01 * (1 - t)),
-    tube(mustache_path(.07, -.03), [.014], S=10, n=4, mod=thick_mid)])
-write_face("SK_Face_ChinStrap", [beard_sheet(lambda a: full_bottom(a) + .05 + .4 * ss((abs(a) - .6) / .6) * .25,
-                                             full_bottom, 1.2, lambda a, t: np.full_like(np.asarray(a, float), .012))])
+thick_full = lambda a, y: .022 + .012 * _sm((1.33 - y) / .1)
+write_face("SK_Face_FullBeard", [face_sheet(full_mask(), thick_full)])
+write_face("SK_Face_BoxedBeard", [face_sheet(full_mask(high=1.5), lambda a, y: np.full_like(a, .011))])
+write_face("SK_Face_Stubble", [face_sheet(full_mask(high=1.5), lambda a, y: np.full_like(a, .0028), cols=220, rows=130, speckle=.45)])
+write_face("SK_Face_LongBeard", [face_sheet(full_mask(), thick_full,
+                                            drop=lambda a, y: .16 * _sm((1.33 - y) / .1) * np.exp(-(a / .55) ** 2))])
+write_face("SK_Face_Mustache", [face_sheet(stache_mask(), lambda a, y: np.full_like(a, .012), y_lo=1.40, y_hi=1.5)])
+write_face("SK_Face_Pencil", [face_sheet(stache_mask(width=LIP_A, lo=1.452, hi=1.462), lambda a, y: np.full_like(a, .004), y_lo=1.43, y_hi=1.48)])
+write_face("SK_Face_Walrus", [face_sheet(stache_mask(width=LIP_A + .12, lo=LIP_TOP - .03, droop=.02),
+                                         lambda a, y: .022 + .01 * _sm((y - 1.42) / .04), y_lo=1.38, y_hi=1.5)])
+write_face("SK_Face_Handlebar", [face_sheet(stache_mask(width=LIP_A + .02), lambda a, y: np.full_like(a, .011), y_lo=1.40, y_hi=1.5),
+                                 curl_tip(1), curl_tip(-1)])
+write_face("SK_Face_Horseshoe", [face_sheet(stache_mask(), lambda a, y: np.full_like(a, .012), y_lo=1.40, y_hi=1.5),
+                                 tube(hang_tube(1), [.011], S=8, n=3), tube(hang_tube(-1), [.011], S=8, n=3)])
+write_face("SK_Face_FuManchu", [face_sheet(stache_mask(width=LIP_A + .02, lo=1.448), lambda a, y: np.full_like(a, .006), y_lo=1.42, y_hi=1.5),
+                                tube(hang_tube(1, 1.445, 1.27), [.007, .006, .003], S=6, n=3),
+                                tube(hang_tube(-1, 1.445, 1.27), [.007, .006, .003], S=6, n=3)])
+# Goatee = mustache + chin, joined round the mouth (a "circle beard").
+goatee = lambda a, y: np.maximum(stache_mask()(a, y),
+                                 between(np.abs(a), -1, LIP_A + .07, .04) * between(y, 1.235, LIP_TOP - .01, .012) * lips_hole(a, y))
+write_face("SK_Face_Goatee", [face_sheet(goatee, lambda a, y: .014 + .01 * _sm((1.32 - y) / .06))])
+# Van Dyke: pointy chin beard + separate mustache.
+vandyke = lambda a, y: np.maximum(stache_mask()(a, y), between(np.abs(a), -1, .2 - .55 * np.maximum(0, 1.33 - y), .03) * between(y, 1.2, LIP_BOT - .012, .01))
+write_face("SK_Face_VanDyke", [face_sheet(vandyke, lambda a, y: .013 + .012 * _sm((1.3 - y) / .07))])
+write_face("SK_Face_SoulPatch", [face_sheet(lambda a, y: between(np.abs(a), -1, .07, .02) * between(y, 1.335, LIP_BOT - .01, .008),
+                                            lambda a, y: np.full_like(a, .008), y_lo=1.3, y_hi=1.4)])
+# Chin strap: a band along the jaw line from ear to ear (no mustache).
+strap = lambda a, y: between(y, jaw_bottom(a), jaw_bottom(a) + .045 + .05 * _sm((np.abs(a) - .9) / .4), .01) * between(np.abs(a), -1, 1.32, .05)
+write_face("SK_Face_ChinStrap", [face_sheet(strap, lambda a, y: np.full_like(a, .01))])
+# Mutton chops: big sideburns over the cheeks to the jaw, bare chin.
+chops = lambda a, y: between(np.abs(a), 1.02 - 2.2 * np.maximum(0, 1.5 - y), 1.3, .05) * between(y, jaw_bottom(a) + .01, 1.54, .015)  # narrow sideburns widening down the cheeks
+write_face("SK_Face_MuttonChops", [face_sheet(chops, lambda a, y: np.full_like(a, .016))])

@@ -736,6 +736,29 @@ Nothing to set up. Just update the code. What's new:
 
 ---
 
+## Part 15p: New hairstyles and beards
+
+**23 hairstyles:**
+- **Fixed** (hair no longer comes down to the eyebrows like a helmet; real hairline, slightly higher at the temples): Afro, Buzz (now a soft short buzz), Caesar, Cornrows, LongWavy, Mullet, Pompadour, SidePart, SlickBack, Twists, Waves.
+- **Real skin fades** (the hair gets sparser down the sides until it's skin): Fade, HighAndTight, CrewCut, FlatTop (now a proper flat block), CurlyTop (now real curls on top).
+- **New:** Undercut, Mohawk, ManBun, Ponytail, Spiky, Curtains (middle part), Dreads.
+
+**15 beards and mustaches (all rebuilt to hug the face and fit around the new lips):**
+- Stubble (speckled, not a solid block), BoxedBeard, FullBeard, LongBeard, Goatee, VanDyke, SoulPatch, ChinStrap, MuttonChops.
+- Mustache, Pencil, Walrus, Handlebar (the tips curl UP properly now), Horseshoe, FuManchu.
+
+**Import:**
+1. Drag **all** `Art/Characters/SK_Hair_*.glb` and `SK_Face_*.glb` into your hair folder in Unreal:
+   - Skeleton = your body skeleton.
+   - Tick **Import Morph Targets**.
+   - When it asks about existing ones, **Reimport / Replace all**.
+2. Your **Hair Styles** / **Facial Hair Styles** lists fill themselves with every SK_Hair_ / SK_Face_ mesh (if you filled them by hand, add the new ones).
+3. NPCs and bots pick from all of them.
+
+Previews: **Art/Characters/Previews/Hairstyles.png** and **FacialHair.png**.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.
