@@ -1501,6 +1501,80 @@ void ABRCannon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(ABRCannon, Loaded);
 	DOREPLIFETIME(ABRCannon, Aim);
 	DOREPLIFETIME(ABRCannon, PluggedUntil);
+	DOREPLIFETIME(ABRCannon, FuseLitAt);
+}
+
+bool ABRCannon::PhaseAllowsFiring() const
+{
+	const ABRGameState* GS = BRGame(this);
+	return GS && !GS->bLobby && (GS->Phase == EBRPhase::Invasion || (bUsableDuringPrep && GS->Phase == EBRPhase::Prep));
+}
+
+void ABRCannon::FindRiders(TArray<ABRCharacter*>& Out) const
+{
+	// Anyone whose body is along the top of the barrel (between the back end and the muzzle).
+	const FVector Back = BarrelPivot->GetComponentLocation() - BarrelPivot->GetForwardVector() * 40.f;
+	const FVector Front = Muzzle->GetComponentLocation() + BarrelPivot->GetForwardVector() * 40.f;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* C = *It;
+		if (C->GetCarrier() || C->GetCurrentBoat() || C->IsInCannon() || C->GetCondition() == EPVVCondition::Detained || C->GetCondition() == EPVVCondition::KnockedDown)
+		{
+			continue;
+		}
+		const FVector P = C->GetActorLocation();
+		if (FMath::PointDistToSegment(P, Back, Front) < 175.f && P.Z > BarrelPivot->GetComponentLocation().Z - 10.f)
+		{
+			Out.Add(C);
+		}
+	}
+}
+
+bool ABRCannon::IsRider(const APVVCharacter* Who) const
+{
+	TArray<ABRCharacter*> Riders;
+	FindRiders(Riders);
+	return Riders.ContainsByPredicate([Who](const ABRCharacter* R) { return R == Who; });
+}
+
+FVector ABRCannon::FusePoint() const
+{
+	return BarrelPivot->GetComponentLocation() - BarrelPivot->GetForwardVector() * 30.f + FVector(0.f, 0.f, 50.f);
+}
+
+void ABRCannon::FireRiders()
+{
+	FuseLitAt = 0.f;
+	TArray<ABRCharacter*> Riders;
+	FindRiders(Riders);
+	const FVector Dir = BarrelPivot->GetForwardVector();
+	ABRGameState::FX(this, EBRFX::Smoke, Muzzle->GetComponentLocation() + Dir * 80.f);
+	Multicast_Boom();
+	if (Loaded)
+	{
+		Fire(); // whoever is inside goes too
+	}
+	int32 Index = 0;
+	for (ABRCharacter* Rider : Riders)
+	{
+		Rider->TeleportTo(Muzzle->GetComponentLocation() + Dir * (60.f + Index * 90.f) + FVector(0.f, 0.f, 40.f), FRotator(0.f, Dir.Rotation().Yaw, 0.f), false, true);
+		Rider->StartFlight(Dir * LaunchSpeed * FMath::FRandRange(0.85f, 1.f) + FVector(FMath::FRandRange(-150.f, 150.f), FMath::FRandRange(-150.f, 150.f), 0.f));
+		Rider->Spot(8.f);
+		if (ABRPlayerState* PS = Rider->GetBRPlayerState())
+		{
+			++PS->StatCannonShots;
+		}
+		if (ABRGameState* GS = BRGame(this))
+		{
+			GS->Multicast_Announce(FText::Format(LOCTEXT("CannonRider", "BOOM! {0} got blasted off the top of the cannon!"), FText::FromString(Rider->GetPlayerDisplayName())));
+		}
+		++Index;
+	}
+	if (ABRGameState* GS = BRGame(this))
+	{
+		GS->Multicast_NoisePing(GetActorLocation());
+	}
+	ForceNetUpdate();
 }
 
 bool ABRCannon::IsPlugged() const
@@ -1519,13 +1593,24 @@ bool ABRCannon::CanInteract_Implementation(APVVCharacter* Interactor) const
 	{
 		return Interactor == Loaded; // only the one inside can fire it
 	}
-	if (IsPlugged())
+	if (IsPlugged() || FuseLitAt > 0.f)
 	{
 		return false;
 	}
 	if (IsFreeWarden(Interactor))
 	{
 		return true; // plug it
+	}
+	// Someone's sitting on the barrel: any Runner can light the fuse (even the one sitting there).
+	TArray<ABRCharacter*> Riders;
+	FindRiders(Riders);
+	if (IsFreeRunner(Interactor) && Riders.Num() > 0 && PhaseAllowsFiring())
+	{
+		return true;
+	}
+	if (IsFreeRunner(Interactor) && !IsRider(Interactor))
+	{
+		return true; // climb up on the barrel (or into it with a suit)
 	}
 	const ABRPlayerState* PS = BRState(Interactor);
 	const ABRGameState* GS = BRGame(this);
@@ -1541,7 +1626,17 @@ float ABRCannon::GetInteractDuration_Implementation(APVVCharacter* Interactor) c
 	{
 		return 0.f; // fire instantly
 	}
-	return Interactor && Interactor->GetFaction() == BR::Wardens ? 4.f : 1.5f;
+	if (Interactor && Interactor->GetFaction() == BR::Wardens)
+	{
+		return 4.f;
+	}
+	TArray<ABRCharacter*> Riders;
+	FindRiders(Riders);
+	if (Riders.Num() > 0 && PhaseAllowsFiring())
+	{
+		return 0.5f; // strike a match
+	}
+	return 1.f;
 }
 
 FText ABRCannon::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
@@ -1554,7 +1649,20 @@ FText ABRCannon::GetInteractPrompt_Implementation(APVVCharacter* Interactor) con
 	{
 		return LOCTEXT("CannonPlug", "Plug the cannon (hold)");
 	}
-	return LOCTEXT("CannonLoad", "Climb into the cannon (hold) - uses your Cannonball Suit");
+	TArray<ABRCharacter*> Riders;
+	FindRiders(Riders);
+	if (Riders.Num() > 0 && PhaseAllowsFiring())
+	{
+		return IsRider(Interactor) ? LOCTEXT("LightOwn", "LIGHT THE FUSE (you're sitting on it...)") : LOCTEXT("LightFuse", "LIGHT THE FUSE!");
+	}
+	const ABRPlayerState* PS = BRState(Interactor);
+	const ABRCharacter* BRC = Cast<ABRCharacter>(Interactor);
+	const bool bSuited = (PS && PS->HasItem(EBRItem::CannonSuit)) || (BRC && BRC->GetHat() == EBRHat::CannonHelmet);
+	if (bSuited && PhaseAllowsFiring())
+	{
+		return LOCTEXT("CannonLoad", "Climb INTO the cannon (aim it yourself)");
+	}
+	return LOCTEXT("CannonClimb", "Climb up on the barrel (get someone to light the fuse!)");
 }
 
 void ABRCannon::OnInteract_Implementation(APVVCharacter* Interactor)
@@ -1571,13 +1679,44 @@ void ABRCannon::OnInteract_Implementation(APVVCharacter* Interactor)
 	}
 	if (Interactor->GetFaction() == BR::Wardens)
 	{
+		FuseLitAt = 0.f;
 		PluggedUntil = (GS ? GS->GetServerWorldTimeSeconds() : 0.f) + PluggedSeconds;
 		Tell(Interactor, LOCTEXT("Plugged", "Cannon plugged. Nobody's flying anywhere for a while."));
 		return;
 	}
 	ABRPlayerState* PS = BRState(Interactor);
 	ABRCharacter* Runner = Cast<ABRCharacter>(Interactor);
-	if (!PS || !Runner || (Runner->GetHat() != EBRHat::CannonHelmet && !PS->RemoveItem(EBRItem::CannonSuit)))
+	if (!PS || !Runner)
+	{
+		return;
+	}
+	// Someone on the barrel: light the fuse.
+	TArray<ABRCharacter*> Riders;
+	FindRiders(Riders);
+	if (Riders.Num() > 0 && PhaseAllowsFiring())
+	{
+		FuseLitAt = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+		LastFuseCount = -1;
+		if (FuseSound)
+		{
+			UGameplayStatics::SpawnSoundAtLocation(this, FuseSound, FusePoint());
+		}
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->Feed(FString::Printf(TEXT("%s lit the cannon fuse..."), *Runner->GetPlayerDisplayName()));
+		}
+		ForceNetUpdate();
+		return;
+	}
+	const bool bSuited = PS->HasItem(EBRItem::CannonSuit) || Runner->GetHat() == EBRHat::CannonHelmet;
+	if (!bSuited || !PhaseAllowsFiring())
+	{
+		// No suit: just climb up on top of the barrel. Someone else lights the fuse.
+		const FVector Top = BarrelPivot->GetComponentLocation() + BarrelPivot->GetForwardVector() * 230.f + FVector(0.f, 0.f, 140.f);
+		Runner->TeleportTo(Top, FRotator(0.f, GetActorRotation().Yaw + 180.f, 0.f), false, true);
+		return;
+	}
+	if (Runner->GetHat() != EBRHat::CannonHelmet && !PS->RemoveItem(EBRItem::CannonSuit))
 	{
 		return;
 	}
@@ -1664,6 +1803,37 @@ void ABRCannon::Tick(float DeltaSeconds)
 		}
 	}
 
+	// Fuse burning: sparks on every screen, BOOM on the server.
+	if (FuseLitAt > 0.f && GS)
+	{
+		const float Burnt = GS->GetServerWorldTimeSeconds() - FuseLitAt;
+		const float Now = GetWorld()->GetTimeSeconds();
+		if (GetNetMode() != NM_DedicatedServer && Now >= NextSpark)
+		{
+			NextSpark = Now + 0.15f;
+			const FTransform At(FusePoint() + FMath::VRand() * 10.f);
+			if (ABRFX* Spark = GetWorld()->SpawnActorDeferred<ABRFX>(ABRFX::StaticClass(), At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+			{
+				Spark->Kind = EBRFX::Dust;
+				Spark->FinishSpawning(At);
+				Spark->SetActorScale3D(FVector(0.25f));
+			}
+		}
+		if (HasAuthority())
+		{
+			const int32 Count = FMath::CeilToInt(FuseSeconds - Burnt);
+			if (Count != LastFuseCount && Count > 0)
+			{
+				LastFuseCount = Count;
+				ABRGameState::Sfx(this, EBRSfx::Countdown, FusePoint());
+			}
+			if (Burnt >= FuseSeconds)
+			{
+				FireRiders();
+			}
+		}
+	}
+
 	// Barrel follows the aim (smoothly on every screen) and kicks back when it fires.
 	const FRotator Current = BarrelPivot->GetRelativeRotation();
 	const FRotator Target = Loaded ? Aim : FRotator(30.f, 0.f, 0.f);
@@ -1673,7 +1843,11 @@ void ABRCannon::Tick(float DeltaSeconds)
 
 	if (Sign)
 	{
-		FString Text = TEXT("HUMAN CANNON\nneeds a Cannonball Suit");
+		FString Text = TEXT("HUMAN CANNON\nclimb on the barrel - get a friend to light the fuse");
+		if (FuseLitAt > 0.f && GS)
+		{
+			Text = FString::Printf(TEXT("FUSE LIT!\n%d..."), FMath::Max(1, FMath::CeilToInt(FuseSeconds - (GS->GetServerWorldTimeSeconds() - FuseLitAt))));
+		}
 		if (GS && GS->GetServerWorldTimeSeconds() < PluggedUntil)
 		{
 			const int32 Left = FMath::CeilToInt(PluggedUntil - GS->GetServerWorldTimeSeconds());

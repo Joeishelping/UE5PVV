@@ -394,6 +394,10 @@ public:
 	/** Usable during Prep too (off = only once the Line is open). */
 	UPROPERTY(EditAnywhere, Category = "BR|Cannon") bool bUsableDuringPrep = false;
 	UPROPERTY(EditAnywhere, Category = "BR|Cannon") TObjectPtr<USoundBase> FireSound;
+	/** Seconds the fuse burns before BOOM (everyone sitting on the barrel goes flying). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") float FuseSeconds = 3.f;
+	/** Fuse sizzle sound (plays when it's lit). */
+	UPROPERTY(EditAnywhere, Category = "BR|Cannon") TObjectPtr<USoundBase> FuseSound;
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> BarrelPivot;
@@ -406,9 +410,19 @@ private:
 	UPROPERTY(Replicated) TObjectPtr<APVVCharacter> Loaded;
 	UPROPERTY(Replicated) FRotator Aim = FRotator(45.f, 0.f, 0.f);
 	UPROPERTY(Replicated) float PluggedUntil = 0.f;
+	/** Server time the fuse was lit (0 = not lit). */
+	UPROPERTY(Replicated) float FuseLitAt = 0.f;
 	float BoomTime = -100.f;
+	float NextSpark = 0.f;
+	int32 LastFuseCount = -1;
 
 	bool IsPlugged() const;
+	bool PhaseAllowsFiring() const;
+	/** Everyone sitting / standing on the barrel right now. */
+	void FindRiders(TArray<ABRCharacter*>& Out) const;
+	bool IsRider(const APVVCharacter* Who) const;
+	void FireRiders();
+	FVector FusePoint() const;
 	void Fire();
 	void Unload();
 };

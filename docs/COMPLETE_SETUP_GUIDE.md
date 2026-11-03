@@ -143,7 +143,7 @@ Each slot has a description of what to look for.
 |---|---|
 | Village (west) | jobs, shops (ladder, cutters, gas, tacos, **poncho**, **trumpet**, **shovel**, **cannonball suit**), coyote counter, cockfight, piñata, **chickens**, villagers |
 | Open desert by the scrapyard (south-west) | the **Lucha Libre ring** with its red challenge counters and green/blue betting counters |
-| Near bank | Human Cannon, tunnels, marina |
+| Near bank | **Human Cannon** (climb up on the barrel, a friend lights the fuse: BOOM), tunnels, marina |
 | Border Patrol side | 2 **watchtowers**, the Holding Pen and catapult, blue **GOV. SUPPLY** counters |
 
 **The Lucha Libre ring:**
