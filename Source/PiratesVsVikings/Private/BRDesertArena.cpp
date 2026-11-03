@@ -41,9 +41,9 @@
 
 namespace
 {
-	const FLinearColor Sand(0.62f, 0.48f, 0.3f);
-	const FLinearColor Adobe(0.7f, 0.5f, 0.35f);
-	const FLinearColor Concrete(0.45f, 0.44f, 0.42f);
+	const FLinearColor ArenaSand(0.62f, 0.48f, 0.3f);
+	const FLinearColor ArenaAdobe(0.7f, 0.5f, 0.35f);
+	const FLinearColor ArenaConcrete(0.45f, 0.44f, 0.42f);
 }
 
 ABRDesertArena::ABRDesertArena()
@@ -72,12 +72,12 @@ ABRDesertArena::ABRDesertArena()
 	// Desert floor on both sides, sloped banks down into the river.
 	const float BankX = RiverHalfWidth + 800.f;
 	const float FloorLen = HalfX - BankX;
-	AddBlock(TEXT("Sand_West"), FVector(-(BankX + FloorLen * 0.5f), 0.f, Ground - 200.f), FVector(FloorLen, HalfY * 2.f, 400.f), Sand);
+	AddBlock(TEXT("Sand_West"), FVector(-(BankX + FloorLen * 0.5f), 0.f, Ground - 200.f), FVector(FloorLen, HalfY * 2.f, 400.f), ArenaSand);
 	const float EastLen = EastX - BankX;
-	AddBlock(TEXT("Sand_East"), FVector(BankX + EastLen * 0.5f, 0.f, Ground - 200.f), FVector(EastLen, HalfY * 2.f, 400.f), Sand);
+	AddBlock(TEXT("Sand_East"), FVector(BankX + EastLen * 0.5f, 0.f, Ground - 200.f), FVector(EastLen, HalfY * 2.f, 400.f), ArenaSand);
 	// Banks: from the desert floor (+100) down to the river bed (-150) over 8 m.
-	AddBlock(TEXT("Sand_WestBank"), FVector(-1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), Sand, FRotator(-17.4f, 0.f, 0.f));
-	AddBlock(TEXT("Sand_EastBank"), FVector(1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), Sand, FRotator(17.4f, 0.f, 0.f));
+	AddBlock(TEXT("Sand_WestBank"), FVector(-1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), ArenaSand, FRotator(-17.4f, 0.f, 0.f));
+	AddBlock(TEXT("Sand_EastBank"), FVector(1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), ArenaSand, FRotator(17.4f, 0.f, 0.f));
 
 	// The road: town -> bridge -> checkpoint -> far side.
 	// Narrow street through town, then a wide two-lane road all the way to the safe zone.
@@ -91,13 +91,13 @@ ABRDesertArena::ABRDesertArena()
 	AddBlock(TEXT("Bridge_RailS"), FVector(0.f, RoadY - RoadHalfWidth - 60.f, Ground + 50.f), FVector(BankX * 2.f, 20.f, 100.f), FLinearColor(0.3f, 0.3f, 0.32f));
 
 	// Map edges.
-	AddBlock(TEXT("Edge_N"), FVector((EastX - HalfX) * 0.5f, HalfY + 100.f, 300.f), FVector(HalfX + EastX + 400.f, 200.f, 1000.f), Adobe);
-	AddBlock(TEXT("Edge_S"), FVector((EastX - HalfX) * 0.5f, -HalfY - 100.f, 300.f), FVector(HalfX + EastX + 400.f, 200.f, 1000.f), Adobe);
-	AddBlock(TEXT("Edge_W"), FVector(-HalfX - 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), Adobe);
-	AddBlock(TEXT("Edge_E"), FVector(EastX + 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), Adobe);
+	AddBlock(TEXT("Edge_N"), FVector((EastX - HalfX) * 0.5f, HalfY + 100.f, 300.f), FVector(HalfX + EastX + 400.f, 200.f, 1000.f), ArenaAdobe);
+	AddBlock(TEXT("Edge_S"), FVector((EastX - HalfX) * 0.5f, -HalfY - 100.f, 300.f), FVector(HalfX + EastX + 400.f, 200.f, 1000.f), ArenaAdobe);
+	AddBlock(TEXT("Edge_W"), FVector(-HalfX - 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), ArenaAdobe);
+	AddBlock(TEXT("Edge_E"), FVector(EastX + 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), ArenaAdobe);
 
 	// Town.
-	AddHut(TEXT("ToolShop"), FVector(-11500.f, -3000.f, Ground), FVector(1400.f, 1000.f, 400.f), Adobe);
+	AddHut(TEXT("ToolShop"), FVector(-11500.f, -3000.f, Ground), FVector(1400.f, 1000.f, 400.f), ArenaAdobe);
 	AddSign(TEXT("Sign_ToolShop"), TEXT("TOOL SHOP & GAS"), FVector(-10780.f, -3000.f, Ground + 480.f), 0.f, 90.f, FColor(255, 210, 120));
 	AddBlock(TEXT("Pump_1"), FVector(-10300.f, -4250.f, Ground + 90.f), FVector(60.f, 60.f, 180.f), FLinearColor(0.7f, 0.1f, 0.1f));
 	AddBlock(TEXT("Pump_2"), FVector(-10300.f, -3750.f, Ground + 90.f), FVector(60.f, 60.f, 180.f), FLinearColor(0.7f, 0.1f, 0.1f));
@@ -110,17 +110,17 @@ ABRDesertArena::ABRDesertArena()
 	AddSign(TEXT("Sign_Scrap"), TEXT("SCRAPYARD"), FVector(-13800.f, -6200.f, Ground + 300.f), 0.f, 70.f, FColor(200, 200, 200));
 	AddBlock(TEXT("Junk_1"), FVector(-14100.f, -6700.f, Ground + 60.f), FVector(300.f, 200.f, 120.f), FLinearColor(0.3f, 0.25f, 0.2f), FRotator(0.f, 20.f, 8.f));
 	AddBlock(TEXT("Junk_2"), FVector(-13500.f, -7000.f, Ground + 80.f), FVector(250.f, 250.f, 160.f), FLinearColor(0.35f, 0.3f, 0.25f), FRotator(10.f, -15.f, 0.f));
-	AddHut(TEXT("House1"), FVector(-8500.f, 4000.f, Ground), FVector(900.f, 900.f, 350.f), Adobe);
-	AddHut(TEXT("House2"), FVector(-13500.f, 3000.f, Ground), FVector(800.f, 1000.f, 350.f), Adobe);
+	AddHut(TEXT("House1"), FVector(-8500.f, 4000.f, Ground), FVector(900.f, 900.f, 350.f), ArenaAdobe);
+	AddHut(TEXT("House2"), FVector(-13500.f, 3000.f, Ground), FVector(800.f, 1000.f, 350.f), ArenaAdobe);
 	AddSign(TEXT("Sign_Town"), TEXT("WELCOME TO DUSTY GULCH"), FVector(-15000.f, 0.f, Ground + 450.f), 0.f, 150.f, FColor(255, 230, 180));
 
 	// Warden side.
-	AddBlock(TEXT("Cell_Front"), FVector(6400.f, 4000.f, Ground + 150.f), FVector(40.f, 640.f, 300.f), Concrete);
-	AddBlock(TEXT("Cell_Back"), FVector(5800.f, 4000.f, Ground + 150.f), FVector(40.f, 640.f, 300.f), Concrete);
-	AddBlock(TEXT("Cell_Left"), FVector(6100.f, 3700.f, Ground + 150.f), FVector(640.f, 40.f, 300.f), Concrete);
-	AddBlock(TEXT("Cell_Right"), FVector(6100.f, 4300.f, Ground + 150.f), FVector(640.f, 40.f, 300.f), Concrete);
+	AddBlock(TEXT("Cell_Front"), FVector(6400.f, 4000.f, Ground + 150.f), FVector(40.f, 640.f, 300.f), ArenaConcrete);
+	AddBlock(TEXT("Cell_Back"), FVector(5800.f, 4000.f, Ground + 150.f), FVector(40.f, 640.f, 300.f), ArenaConcrete);
+	AddBlock(TEXT("Cell_Left"), FVector(6100.f, 3700.f, Ground + 150.f), FVector(640.f, 40.f, 300.f), ArenaConcrete);
+	AddBlock(TEXT("Cell_Right"), FVector(6100.f, 4300.f, Ground + 150.f), FVector(640.f, 40.f, 300.f), ArenaConcrete);
 	AddSign(TEXT("Sign_Pen"), TEXT("HOLDING PEN"), FVector(6450.f, 4000.f, Ground + 380.f), 180.f, 80.f, FColor(255, 140, 40));
-	AddBlock(TEXT("Tower"), FVector(4400.f, -2400.f, Ground + 600.f), FVector(300.f, 300.f, 1200.f), Concrete);
+	AddBlock(TEXT("Tower"), FVector(4400.f, -2400.f, Ground + 600.f), FVector(300.f, 300.f, 1200.f), ArenaConcrete);
 	AddHut(TEXT("WardenHQ"), FVector(8500.f, 4000.f, Ground), FVector(1200.f, 1400.f, 400.f), FLinearColor(0.3f, 0.35f, 0.3f));
 	AddSign(TEXT("Sign_HQ"), TEXT("WARDEN HQ"), FVector(7880.f, 4000.f, Ground + 480.f), 180.f, 100.f, FColor(255, 140, 40));
 

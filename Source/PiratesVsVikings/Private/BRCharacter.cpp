@@ -3316,7 +3316,7 @@ void ABRCharacter::Server_Dive_Implementation()
 	BlowDisguise();
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	const float MaskBoost = WornHat == EBRHat::LuchaMask ? 1.4f : 1.f; // Lucha Mask: flying dives
-	const float WaterBoost = bInRiver ? 1.7f : 1.f; // belly-flop slide through water
+	const float WaterBoost = (bInDeepWater || GetCharacterMovement()->IsSwimming()) ? 1.7f : 1.f; // belly-flop slide through water
 	LaunchCharacter(Forward * DiveSpeed * MaskBoost * WaterBoost + FVector(0.f, 0.f, 350.f), true, true);
 	Multicast_DiveLunge();
 }
