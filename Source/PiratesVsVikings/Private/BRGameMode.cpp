@@ -924,7 +924,7 @@ void ABRGameMode::TickTownLife(ABRGameState* GS)
 		{
 			ABRCharacter* L = *It;
 			const float D = FVector::Dist2D(L->GetActorLocation(), Near);
-			if (L->IsNPC() && !L->bPeaceful && !L->bNoFightBack && !L->IsBrawling() && L->GetCondition() == EPVVCondition::Normal
+			if (L->IsNPC() && !L->bPeaceful && !L->bNoFightBack && !L->bCantinaRegular && !L->IsBrawling() && L->GetCondition() == EPVVCondition::Normal
 				&& !L->GetCurrentBoat() && !L->GetCarrier() && !L->Leader.IsValid() && L->ClientPay == 0 && Arena->IsInTown(L->GetActorLocation()) && D < BestDist)
 			{
 				BestDist = D;

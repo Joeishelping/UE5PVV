@@ -97,6 +97,7 @@ protected:
 	float ContestStart = 0.f;
 	float RivalRate = 0.12f;
 	float NextThink = 0.f;
+	float LastBounceTime = -10.f;
 
 	static constexpr float HalfX = 800.f;
 	static constexpr float HalfY = 600.f;

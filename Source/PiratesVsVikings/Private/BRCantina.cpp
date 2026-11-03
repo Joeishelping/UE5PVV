@@ -203,6 +203,7 @@ void ABRCantina::BeginPlay()
 		if (Bouncer)
 		{
 			Bouncer->LuchaName = TEXT("EL BOUNCER");
+			Bouncer->bCantinaRegular = true;
 			Bouncer->SetCombatStats(320.f, 40.f);
 			Bouncer->bNoFightBack = false;
 			Bouncer->SetActorScale3D(FVector(1.25f));
@@ -235,6 +236,7 @@ void ABRCantina::SpawnPatrons()
 		if (ABRCharacter* P = GM->SpawnNPC(FTransform(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At)))
 		{
 			P->bLootWad = false; // bar fight pays out the $50 drops instead
+			P->bCantinaRegular = true;
 			P->bLootDropped = true;
 			P->StartWandering(Local(0.f, 0.f, 110.f), 420.f);
 			Patrons.Add(P);
@@ -269,7 +271,7 @@ TArray<ABRCharacter*> ABRCantina::PlayersInside() const
 
 bool ABRCantina::CanUse(EBRCantinaSpot Kind, const APVVCharacter* Who) const
 {
-	if (!IsFreePlayer(Who))
+	if (!IsFreePlayer(Who) || IsBanned(Who))
 	{
 		return false;
 	}
@@ -655,31 +657,47 @@ void ABRCantina::TickContest(float Now)
 
 void ABRCantina::TickBouncer()
 {
-	if (!IsValid(Bouncer) || !IsStanding(Bouncer))
+	if (!IsValid(Bouncer))
 	{
 		return;
 	}
-	// Troublemakers aren't welcome: the bouncer goes after them and throws them out.
+	// The bouncer NEVER comes inside: he guards the door.
 	const FVector Door = Local(HalfX + 200.f, 260.f, 110.f);
-	for (ABRCharacter* P : PlayersInside())
+	if (IsInside(Bouncer->GetActorLocation()) && IsStanding(Bouncer))
 	{
-		if (IsBanned(P) && IsStanding(P) && !Bouncer->IsBrawling())
-		{
-			Bouncer->StartBrawling(P, 30.f, 1.f);
-			P->Notify(LOCTEXT("Bounced", "\"YOU AGAIN?!\" - the bouncer's throwing you out. You started too many fights."));
-		}
-		// Knocked out by the bouncer: tossed out on the street.
-		if (IsBanned(P) && P->GetCondition() == EPVVCondition::KnockedDown && Bouncer->GetBrawlTarget() == P)
-		{
-			P->TeleportTo(Local(HalfX + 600.f, 0.f, 110.f), P->GetActorRotation());
-			Bouncer->CalmDown();
-			Bouncer->StartWandering(Door, 40.f);
-		}
+		Bouncer->CalmDown();
+		Bouncer->TeleportTo(Door, GetActorRotation());
+		Bouncer->StartWandering(Door, 40.f);
+		return;
+	}
+	if (!IsStanding(Bouncer))
+	{
+		return;
 	}
 	if (!Bouncer->IsBrawling() && FVector::Dist2D(Bouncer->GetActorLocation(), Door) > 300.f)
 	{
 		Bouncer->CalmDown();
 		Bouncer->StartWandering(Door, 40.f); // back to the door
+	}
+	// Troublemakers trying to get in get shoved back out onto the street.
+	const float Now = GetWorld()->GetTimeSeconds();
+	const FVector Entrance = Local(HalfX + 120.f, 0.f, 110.f);
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* P = *It;
+		if (P->IsNPC() || !IsBanned(P) || !IsStanding(P) || IsInside(P->GetActorLocation()) || FVector::Dist2D(P->GetActorLocation(), Entrance) > 320.f)
+		{
+			continue;
+		}
+		if (Now - LastBounceTime < 1.2f)
+		{
+			continue;
+		}
+		LastBounceTime = Now;
+		const FVector Out = GetActorForwardVector().GetSafeNormal2D();
+		Bouncer->SetActorRotation(FRotator(0.f, (P->GetActorLocation() - Bouncer->GetActorLocation()).Rotation().Yaw, 0.f));
+		P->LaunchCharacter(Out * 900.f + FVector(0.f, 0.f, 250.f), true, true);
+		P->Notify(LOCTEXT("Bounced", "\"NOT TONIGHT, AMIGO.\" - you started too many fights in here. The bouncer won't let you in."));
 	}
 }
 

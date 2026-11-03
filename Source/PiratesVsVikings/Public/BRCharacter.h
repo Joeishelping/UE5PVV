@@ -134,6 +134,8 @@ public:
 	UPROPERTY(Replicated) bool bPeaceful = false;
 	/** Scripted fighters (ring luchador): don't start brawls of their own when hit. */
 	bool bNoFightBack = false;
+	/** Belongs to the cantina (patron / bouncer): town events leave them alone. */
+	bool bCantinaRegular = false;
 	/** 1 in 20 NPCs secretly carries a fat wad of cash - knock them out to find out. */
 	bool bLootWad = false;
 	bool bLootDropped = false;

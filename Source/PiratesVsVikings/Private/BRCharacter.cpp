@@ -2321,7 +2321,7 @@ void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 		BlowDisguise();
 		// Hit an NPC and they fight you back (Gang Beasts style). Starting fights is trouble.
 		ABRCharacter* BRAttacker = Cast<ABRCharacter>(Attacker);
-		if (bIsNPC && !bNoFightBack && !bPeaceful && BRAttacker && BRAttacker != this && GetCondition() == EPVVCondition::Normal)
+		if (bIsNPC && !bNoFightBack && !bPeaceful && BRAttacker && !BRAttacker->IsNPC() && BRAttacker != this && GetCondition() == EPVVCondition::Normal)
 		{
 			if (!IsBrawling() || FMath::FRand() < 0.3f)
 			{
@@ -4177,7 +4177,9 @@ void ABRCharacter::TickClimb(float DeltaSeconds)
 void ABRCharacter::TickHands(float DeltaSeconds)
 {
 	USkeletalMeshComponent* Body = GetMesh();
-	if (!Body || bPeaceful || bBlocking || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon || bOnShoulders
+	// NPCs only swing for real when they're actually in a fight (no accidental brawls from bumping into each other).
+	const bool bCalmNPC = bIsNPC && !bNoFightBack && !IsBrawling();
+	if (!Body || bPeaceful || bBlocking || bCalmNPC || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bInCannon || bOnShoulders
 		|| Body->GetBoneIndex(TEXT("hand_l")) == INDEX_NONE || DeltaSeconds <= 0.f)
 	{
 		bHandsTracked = false;
