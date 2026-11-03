@@ -135,6 +135,13 @@ public:
 	float GetGrabStruggle() const { return GrabStruggle; }
 	/** Server: let go of whoever you're holding. */
 	void ReleaseHandGrab();
+	/** Server (also used by bots / the luchador). */
+	void DoKick();
+	void DoHeadbutt();
+	bool IsClimbing() const { return bClimbing; }
+	bool IsHanging() const { return bHanging; }
+	/** Server: let go of the wall (bFall = slipped / yanked off: counts as a fall). */
+	void StopClimbing(bool bFall);
 	void BotStruggleGrab();
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsAiming() const { return bAiming; }
 	UFUNCTION(BlueprintPure, Category = "BR|Anim") bool IsReloading() const { return bReloading; }
@@ -252,6 +259,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> DiveAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> EmoteAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> CashAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> HeadbuttAction;
 
 	// --- Brawling (Gang Beasts style) ------------------------------------------------------
 	/** Flailing hands faster than this (cm/s, relative to you) smack people they hit. 0 = off. */
@@ -283,6 +291,13 @@ protected:
 	/** Seconds you can hold someone who isn't zip-tied before they wriggle free. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float GrabHoldSeconds = 3.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveSpeed = 1300.f;
+	/** Kick (R with fists out) and headbutt (middle mouse). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float KickDamage = 22.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float KickPush = 750.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HeadbuttDamage = 30.f;
+	/** Wall climbing: height gained per correct left/right click, and how far a fall has to be to knock you out. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ClimbStep = 45.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FallKnockoutHeight = 320.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveCooldown = 2.f;
 	/** How high you leap off a friend's shoulders (cm/s up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ShoulderLeap = 1100.f;
@@ -312,6 +327,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteTauntAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteBegAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteCheerAnim;
+	/** Optional: played with the physics kick / headbutt / while climbing. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> KickAnim;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> HeadbuttAnim;
 
 	// --- Cash ---------------------------------------------------------------------------
 	/** How much H drops on the ground (anyone can choose to pick it up). */
@@ -590,6 +608,34 @@ private:
 
 	void Input_AimStart();
 	void Input_LeftHandStart();
+	void Input_Headbutt();
+	UFUNCTION(Server, Reliable) void Server_Kick();
+	UFUNCTION(Server, Reliable) void Server_Headbutt();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Kick();
+	UFUNCTION(NetMulticast, Unreliable) void Multicast_Headbutt();
+	void KickHit();
+	void HeadbuttHit();
+	float LastKickTime = -100.f;
+	float LastHeadbuttTime = -100.f;
+	FTimerHandle MoveHitTimer;
+	// Wall climbing (Gang Beasts): Z at a wall, then alternate left / right click.
+	bool StartWallClimb();
+	UFUNCTION(Server, Reliable) void Server_ClimbStep(bool bLeft);
+	UFUNCTION(Server, Reliable) void Server_ClimbJump();
+	UFUNCTION() void OnRep_Climbing();
+	void TickClimb(float DeltaSeconds);
+	UPROPERTY(ReplicatedUsing = OnRep_Climbing) bool bClimbing = false;
+	UPROPERTY(Replicated) bool bHanging = false;
+	UPROPERTY(Replicated) bool bLastClimbLeft = false;
+	UPROPERTY(Replicated) FVector_NetQuantizeNormal ClimbNormal;
+	float ClimbTopZ = 0.f;
+	bool bClimbHasTop = false;
+	bool bClimbingBorderWall = false;
+	float LastClimbStepTime = 0.f;
+	float NextSensorPing = 0.f;
+	int32 ClimbSlips = 0;
+	bool bClimbStarted = false;
+	float FallFromZ = -1.f;
 	void Input_LeftHandStop();
 	void Input_RightHandStop();
 	UFUNCTION(Server, Reliable) void Server_PunchHand(bool bLeft);

@@ -445,6 +445,16 @@ void ABRHUD::DrawHUD()
 		}
 	}
 
+	// --- Climbing
+	if (Me->IsHanging())
+	{
+		Centered(TEXT("AT THE TOP!  SPACE = pull yourself up"), SY * 0.7f, Yellow, Big, 1.3f);
+	}
+	else if (Me->IsClimbing())
+	{
+		Centered(TEXT("CLIMBING:  LEFT click, RIGHT click, LEFT, RIGHT...   (same hand twice = slip)   SPACE = let go"), SY * 0.7f, Yellow, Small, 1.3f);
+	}
+
 	// --- Hand grabs
 	if (Me->GetGrabbedBy() && Me->GetCondition() == EPVVCondition::Normal)
 	{
