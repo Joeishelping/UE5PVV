@@ -1326,7 +1326,7 @@ void ABRGameMode::AddBot(EPVVFaction Team)
 	PS->SetIsABot(true);
 	PS->SetFaction(Team);
 	// Random look from the full range (same options as people get).
-	BR::RandomizeLook(PS->Look, 0.f, 1.f, 23, 15, 5, 4, 4);
+	BR::RandomizeLook(PS->Look, 0.f, 1.f, 25, 15, 5, 4, 4);
 	PS->Look.bHat = true;
 	// Spawn the body ourselves (step by step, logged) instead of the engine's RestartPlayer.
 	UE_LOG(LogTemp, Warning, TEXT("[Bots] %s: spawning body"), *PS->GetPlayerName());

@@ -738,10 +738,11 @@ Nothing to set up. Just update the code. What's new:
 
 ## Part 15p: New hairstyles and beards
 
-**23 hairstyles:**
+**25 hairstyles:**
 - **Fixed** (hair no longer comes down to the eyebrows like a helmet; real hairline, slightly higher at the temples): Afro, Buzz (now a soft short buzz), Caesar, Cornrows, LongWavy, Mullet, Pompadour, SidePart, SlickBack, Twists, Waves.
 - **Real skin fades** (the hair gets sparser down the sides until it's skin): Fade, HighAndTight, CrewCut, FlatTop (now a proper flat block), CurlyTop (now real curls on top).
 - **New:** Undercut, SoccerMohawk (the Mexican "fohawk": short faded sides, a soft ridge down the middle), ManBun, Ponytail, Spiky, Curtains (middle part), Dreads.
+- **Balding** (horseshoe ring round the sides and back, bare shiny top) and **CombOver** (the same, with a few long strands combed across, fooling nobody).
 - (The old spiky Mohawk was removed. Delete **SK_Hair_Mohawk** in Unreal if you imported it.)
 
 **15 beards and mustaches (all rebuilt to hug the face and fit around the new lips):**

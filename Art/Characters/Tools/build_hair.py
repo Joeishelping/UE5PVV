@@ -95,7 +95,7 @@ def fade_band(top, bottom, density=1., S=220, rows=18, seed=3):
         rings.append(sph(th, ph, np.full(S, HR + .0035)))
     V, F = grid(rings, None, None)
     row = (F[:, 0] // S) / (rows - 1)                                 # 0 = bottom (skin) .. 1 = top (hair)
-    tall = (y1 - y0)[F[:, 0] % S] > .015                              # no band where the lines meet (forehead)
+    tall = np.abs(y1 - y0)[F[:, 0] % S] > .015                       # no band where the lines meet (forehead)
     keep = (rng.random(len(F)) < np.clip(row ** .8 * density, 0, 1)) & tall
     return V, F[keep]
 
@@ -244,6 +244,28 @@ def fohawk(th, ph):
     return .008 + .06 * ridge * top(ph, .55, .45)
 fohawk_line = human_line(1.725, 1.56, .03)
 write_hair("SK_Hair_SoccerMohawk", [shell(fohawk, fohawk_line), fade_band(fohawk_line, fade_low, 1.1, seed=12)])
+# Balding: the classic horseshoe - hair round the sides and back, bare and shiny on top.
+def horseshoe(th, ph):
+    return .012 + .006 * (1 - front(th))
+bald_top = lambda th: 1.62 + .03 * np.clip(np.sin(th), 0, 1)        # where the bald patch starts (a bit higher in front)
+def bald_ring():
+    V, F = shell(horseshoe, low)
+    cut = V[:, 1] < bald_top(np.arctan2(V[:, 2] - HC[2], V[:, 0] - HC[0]))
+    keep = cut[F].all(1)                                                # only the ring below the bald line
+    F = F[keep]
+    used = np.unique(F); remap = -np.ones(len(V), int); remap[used] = np.arange(len(used))
+    return V[used], remap[F]
+write_hair("SK_Hair_Balding", [bald_ring(), fade_band(bald_top, lambda th: bald_top(th) + .045 * (low(th) < bald_top(th) - .01), .6, seed=17)])  # thinning just above the ring (sides/back only)
+# Comb-over: the same horseshoe, plus a few long strands combed across the bald top (it fools nobody).
+combs = [bald_ring()]
+for k, z in enumerate(np.linspace(-.12, .14, 6)):
+    pts = []
+    for x in np.linspace(.2, -.17, 9):
+        y2 = (HR + .012) ** 2 - x ** 2 - z ** 2
+        pts.append((x, HC[1] + np.sqrt(max(y2, 1e-6)), z))
+    combs.append(tube(pts, [.012, .01, .006], S=6, n=3))
+write_hair("SK_Hair_CombOver", combs)
+
 # Man bun: slicked back with a bun at the back of the head.
 slick = lambda th, ph: .016 + .012 * top(ph, .6, .5)
 write_hair("SK_Hair_ManBun", [shell(slick, std), ellipsoid((0., 1.71, -.30), (.085, .08, .08), 16, 10)])
