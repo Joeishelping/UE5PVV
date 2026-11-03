@@ -2735,6 +2735,13 @@ void ABRCharacter::Tick(float DeltaSeconds)
 			UpdateMovementSpeed();
 		}
 	}
+	// Knocked out, cuffed, carried, in a vehicle or locked up: the cardboard box falls off.
+	if (HasAuthority() && bInBox && (GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat()))
+	{
+		bInBox = false;
+		OnRep_Box();
+		ForceNetUpdate();
+	}
 	// Knocked down or cuffed: the knife goes clattering away.
 	if (HasAuthority() && bIsNPC && HeldItem == EBRItem::Knife && GetCondition() != EPVVCondition::Normal)
 	{
@@ -3932,6 +3939,11 @@ void ABRCharacter::OnRep_HiddenInSpot()
 void ABRCharacter::ToggleBox()
 {
 	if (!HasAuthority())
+	{
+		return;
+	}
+	// Can't climb into the box while zip-tied, carried, knocked out, in a vehicle or held.
+	if (!bInBox && (GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || GrabbedBy || GetCarriedCharacter()))
 	{
 		return;
 	}
