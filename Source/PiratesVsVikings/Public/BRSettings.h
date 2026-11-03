@@ -13,6 +13,7 @@
 class UStaticMeshComponent;
 class UMaterialInterface;
 class UTexture;
+class UNiagaraSystem;
 
 /** How one kind of surface on the test map looks. Give it a Material, OR a Texture (needs World Texture Material below). */
 USTRUCT(BlueprintType)
@@ -96,6 +97,22 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Sounds") TSoftObjectPtr<USoundBase> RequisitionSound;
 
 	USoundBase* GetSound(EBRSfx Sfx) const;
+
+	// --- Effects: drag in a Niagara particle system (free ones on Fab). Empty = the simple built-in look. ---------
+	/** Dust when someone lands hard, belly-flops or falls off a wall. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> DustEffect;
+	/** Splash when someone hits deep water. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SplashEffect;
+	/** Cannon smoke. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SmokeEffect;
+	/** Punch / kick / headbutt impact (where the hit lands). */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> PunchHitEffect;
+	/** Little puff from the smoking emote. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> CigaretteSmokeEffect;
+	/** Cannon fuse sparks. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SparksEffect;
+
+	UNiagaraSystem* GetEffect(EBRFX Kind) const;
 
 	// --- Test map materials (Project Settings -> Border Run -> Test Map Look) ---------------------
 	/** Your one "world texture" material (see the guide): it has a Texture Object parameter "Texture" and a scalar "TileSize". */

@@ -330,6 +330,46 @@ def climb(t, p):
         p[f"calf_{s}"] = rot(70 * max(0, S(ph + off + math.pi)))
 
 
+def smoke(t, p):
+    """4 s loop: hand up to the mouth, drag, hand down, exhale. Left hand on the hip."""
+    idle(t, p)
+    c = t % 4.0
+    if c < 1.0:
+        k = S(c / 1.0 * math.pi / 2)
+    elif c < 1.8:
+        k = 1.0
+    elif c < 2.6:
+        k = C((c - 1.8) / .8 * math.pi / 2)
+    else:
+        k = 0.0
+    p["upperarm_r"] = arm("r", -10 - 45 * k, 5 + 30 * k, 12)
+    p["lowerarm_r"] = rot(-35 - 90 * k)
+    p["upperarm_l"] = arm("l", 15, -10, 35)
+    p["lowerarm_l"] = rot(-95)
+    exhale = max(0., S((c - 2.6) / 1.4 * math.pi)) if c > 2.6 else 0.
+    p["neck_01"] = rot(-12 * exhale + 6 * k)
+
+
+def kick(t, p):
+    idle(0, p)
+    k = S(min(1., t / .5) * math.pi)
+    p["thigh_r"] = rot(-85 * k)
+    p["calf_r"] = rot(40 * (1 - k) * k * 4 if k < .5 else 10 * (1 - k))
+    p["spine_01"] = rot(-14 * k)
+    for s in "lr":
+        p[f"upperarm_{s}"] = arm(s, 10 * k, 0, 8 + 55 * k)
+
+
+def headbutt(t, p):
+    idle(0, p)
+    u = min(1., t / .45)
+    k = -S(u * math.pi * 2) * .35 + S(u * math.pi) * (1.0 if u > .3 else 0.)
+    p["spine_02"] = rot(28 * k)
+    p["neck_01"] = rot(22 * k)
+    for s in "lr":
+        p[f"upperarm_{s}"] = arm(s, 20 * max(0, k), 0, 15)
+
+
 ANIMS = [
     ("Idle", idle, 2.0, True), ("Walk", lambda t, p: walk(t, p, 1.0), 1.0, True), ("Run", lambda t, p: walk(t, p, 1.8), .62, True),
     ("CrouchIdle", crouch_idle, 2.0, True), ("CrouchWalk", lambda t, p: walk(t, p, .7, .13), 1.1, True),
@@ -340,6 +380,7 @@ ANIMS = [
     ("Dance", dance, 1.0, True), ("Trumpet", trumpet, 2.0, True), ("Climb", climb, 1.0, True),
     ("Emote_Wave", wave, 1.0, True), ("Emote_Flex", flex, 1.5, True), ("Emote_Taunt", taunt, 1.0, True),
     ("Emote_Beg", beg, 1.0, True), ("Emote_Cheer", cheer, 1.0, True),
+    ("Emote_Smoke", smoke, 4.0, True), ("Kick", kick, .5, False), ("Headbutt", headbutt, .45, False),
 ]
 
 

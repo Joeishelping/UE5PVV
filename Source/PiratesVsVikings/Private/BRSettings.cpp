@@ -1,4 +1,5 @@
 #include "BRSettings.h"
+#include "NiagaraSystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Texture.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -38,6 +39,22 @@ USoundBase* UBRSettings::GetSound(EBRSfx Sfx) const
 	case EBRSfx::Whistle:       Slot = &WhistleSound; break;
 	case EBRSfx::Landing:       Slot = &LandingSound; break;
 	case EBRSfx::Requisition:   Slot = &RequisitionSound; break;
+	default: break;
+	}
+	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;
+}
+
+UNiagaraSystem* UBRSettings::GetEffect(EBRFX Kind) const
+{
+	const TSoftObjectPtr<UNiagaraSystem>* Slot = nullptr;
+	switch (Kind)
+	{
+	case EBRFX::Dust:           Slot = &DustEffect; break;
+	case EBRFX::Splash:         Slot = &SplashEffect; break;
+	case EBRFX::Smoke:          Slot = &SmokeEffect; break;
+	case EBRFX::PunchHit:       Slot = &PunchHitEffect; break;
+	case EBRFX::CigaretteSmoke: Slot = &CigaretteSmokeEffect; break;
+	case EBRFX::Sparks:         Slot = &SparksEffect; break;
 	default: break;
 	}
 	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;

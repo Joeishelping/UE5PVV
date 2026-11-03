@@ -73,6 +73,8 @@ public:
 	static void Sfx(const UObject* Context, EBRSfx Sound, const FVector& Location, bool b2D = false);
 	/** Server: show a puff / splash / smoke / "+$150" popup for everyone. */
 	static void FX(const UObject* Context, EBRFX Kind, const FVector& Location, const FString& Text = FString());
+	/** This screen only: your Niagara effect from Project Settings, or the simple built-in one. */
+	static void SpawnLocalFX(UObject* Context, EBRFX Kind, const FVector& Location, const FString& Text = FString(), float Scale = 1.f);
 
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_Sfx(EBRSfx Sound, FVector_NetQuantize Location, bool b2D);
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_FX(EBRFX Kind, FVector_NetQuantize Location, const FString& Text);

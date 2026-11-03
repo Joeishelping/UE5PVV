@@ -96,7 +96,7 @@ enum class EBRSfx : uint8
 UENUM(BlueprintType)
 enum class EBRFX : uint8
 {
-	Dust, Splash, Smoke, MoneyText, PointsText
+	Dust, Splash, Smoke, MoneyText, PointsText, PunchHit, CigaretteSmoke, Sparks
 };
 
 /** Match settings the host picks in the M menu (kept on the host's PC between rounds). */

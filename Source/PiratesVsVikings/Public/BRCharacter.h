@@ -84,7 +84,7 @@ public:
 	EBRHat GetDefaultHat() const { return (IsWarden() && DefaultHat == EBRHat::CowboyHat) ? EBRHat::PatrolCap : DefaultHat; }
 
 	// --- Emote wheel (local) ----------------------------------------------------------------
-	static constexpr int32 NumEmotes = 6;
+	static constexpr int32 NumEmotes = 7;
 	static FString EmoteName(int32 Index);
 	bool IsEmoteWheelOpen() const { return bEmoteWheelOpen; }
 	/** Highlighted slice (-1 = none: let go to cancel). */
@@ -344,6 +344,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteTauntAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteBegAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteCheerAnim;
+	/** Smoking emote (the animation pack has Emote_Smoke). A cigarette appears in your hand and you puff smoke. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> EmoteSmokeAnim;
 	/** Optional: played with the physics kick / headbutt / while climbing. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> KickAnim;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Animations") TObjectPtr<UAnimSequenceBase> HeadbuttAnim;
@@ -594,6 +596,13 @@ private:
 	int32 EmoteChoice = -1;
 	FVector2D EmoteAim = FVector2D::ZeroVector;
 	FString EmoteBubble;
+	/** Emote playing right now (-1 = none). Loops until you move, fight or pick it again. */
+	UPROPERTY(ReplicatedUsing = OnRep_ActiveEmote) int32 ActiveEmote = -1;
+	UFUNCTION() void OnRep_ActiveEmote();
+	UAnimSequenceBase* EmoteAnimFor(int32 Index) const;
+	void StopEmote();
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> CigaretteMesh;
+	float NextSmokePuff = 0.f;
 	float EmoteBubbleUntil = -100.f;
 	float LastEmoteTime = -100.f;
 	EPVVCondition LastSoundCondition = EPVVCondition::Normal;

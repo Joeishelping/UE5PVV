@@ -20,7 +20,8 @@ public class PiratesVsVikings : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"DeveloperSettings"
+			"DeveloperSettings",
+			"Niagara"
 		});
 	}
 }

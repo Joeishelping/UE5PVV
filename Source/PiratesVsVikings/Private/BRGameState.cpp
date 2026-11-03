@@ -1,4 +1,6 @@
 #include "BRGameState.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "BRWorldActors.h"
@@ -97,11 +99,30 @@ void ABRGameState::Multicast_FX_Implementation(EBRFX Kind, FVector_NetQuantize L
 	{
 		return;
 	}
-	const FTransform At(Location);
-	if (ABRFX* Effect = GetWorld()->SpawnActorDeferred<ABRFX>(ABRFX::StaticClass(), At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	SpawnLocalFX(this, Kind, Location, Text);
+}
+
+void ABRGameState::SpawnLocalFX(UObject* Context, EBRFX Kind, const FVector& Location, const FString& Text, float Scale)
+{
+	UWorld* World = Context ? Context->GetWorld() : nullptr;
+	if (!World || World->GetNetMode() == NM_DedicatedServer)
 	{
-		Effect->Kind = Kind;
+		return;
+	}
+	if (UNiagaraSystem* System = GetDefault<UBRSettings>()->GetEffect(Kind))
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, FRotator::ZeroRotator, FVector(Scale));
+		return;
+	}
+	// Built-in look (punch hits = small dust puff).
+	const EBRFX Shown = Kind == EBRFX::PunchHit || Kind == EBRFX::Sparks ? EBRFX::Dust : (Kind == EBRFX::CigaretteSmoke ? EBRFX::Smoke : Kind);
+	const float Size = Kind == EBRFX::PunchHit ? 0.35f : (Kind == EBRFX::CigaretteSmoke ? 0.2f : (Kind == EBRFX::Sparks ? 0.25f : 1.f));
+	const FTransform At(Location);
+	if (ABRFX* Effect = World->SpawnActorDeferred<ABRFX>(ABRFX::StaticClass(), At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Effect->Kind = Shown;
 		Effect->Text = Text;
 		Effect->FinishSpawning(At);
+		Effect->SetActorScale3D(FVector(Size * Scale));
 	}
 }

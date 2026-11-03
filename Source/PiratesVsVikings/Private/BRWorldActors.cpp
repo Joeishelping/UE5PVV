@@ -1812,13 +1812,7 @@ void ABRCannon::Tick(float DeltaSeconds)
 		if (GetNetMode() != NM_DedicatedServer && Now >= NextSpark)
 		{
 			NextSpark = Now + 0.15f;
-			const FTransform At(FusePoint() + FMath::VRand() * 10.f);
-			if (ABRFX* Spark = GetWorld()->SpawnActorDeferred<ABRFX>(ABRFX::StaticClass(), At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
-			{
-				Spark->Kind = EBRFX::Dust;
-				Spark->FinishSpawning(At);
-				Spark->SetActorScale3D(FVector(0.25f));
-			}
+			ABRGameState::SpawnLocalFX(this, EBRFX::Sparks, FusePoint() + FMath::VRand() * 10.f);
 		}
 		if (HasAuthority())
 		{

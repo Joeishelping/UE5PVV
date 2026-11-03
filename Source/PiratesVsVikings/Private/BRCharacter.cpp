@@ -112,6 +112,14 @@ ABRCharacter::ABRCharacter()
 		BoxMesh->SetRelativeScale3D(FVector(0.95f, 0.95f, 1.25f));
 		BoxMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		BoxMesh->SetVisibility(false);
+		CigaretteMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CigaretteMesh"));
+		CigaretteMesh->SetupAttachment(GetMesh(), TEXT("hand_r"));
+		CigaretteMesh->SetStaticMesh(RopeCyl.Object);
+		CigaretteMesh->SetRelativeLocationAndRotation(FVector(4.f, 6.f, 2.f), FRotator(0.f, 0.f, 90.f));
+		CigaretteMesh->SetRelativeScale3D(FVector(0.012f, 0.012f, 0.08f));
+		CigaretteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CigaretteMesh->SetCastShadow(false);
+		CigaretteMesh->SetVisibility(false);
 	}
 
 	// Greybox gun (pointing along +X, grip down). Restyled per weapon at runtime.
@@ -171,6 +179,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, GrabStruggle);
 	DOREPLIFETIME(ABRCharacter, bClimbing);
 	DOREPLIFETIME(ABRCharacter, bHiddenInSpot);
+	DOREPLIFETIME(ABRCharacter, ActiveEmote);
 	DOREPLIFETIME(ABRCharacter, bInBox);
 	DOREPLIFETIME(ABRCharacter, LeashedDog);
 	DOREPLIFETIME(ABRCharacter, bHanging);
@@ -713,6 +722,10 @@ void ABRCharacter::BeginPlay()
 	if (UMaterialInstanceDynamic* RopeMID = RopeMesh ? RopeMesh->CreateDynamicMaterialInstance(0) : nullptr)
 	{
 		RopeMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.6f, 0.45f, 0.25f));
+	}
+	if (UMaterialInstanceDynamic* CigMID = CigaretteMesh ? CigaretteMesh->CreateDynamicMaterialInstance(0) : nullptr)
+	{
+		CigMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.95f, 0.93f, 0.88f));
 	}
 	if (UMaterialInstanceDynamic* BoxMID = BoxMesh ? BoxMesh->CreateDynamicMaterialInstance(0) : nullptr)
 	{
@@ -1657,6 +1670,7 @@ void ABRCharacter::TickAnimationSlots()
 	else if (Move && Move->IsFalling()) Wanted = Pick(FallAnim, Locomotion);
 	else if (GetHoldProgress() > 0.f) Wanted = Pick(WorkAnim, Locomotion);
 	else if (IsDancing() && DanceAnim) Wanted = DanceAnim.Get();
+	else if (ActiveEmote >= 0 && EmoteAnimFor(ActiveEmote)) Wanted = EmoteAnimFor(ActiveEmote);
 	else if (bAiming) Wanted = (Speed > 15.f && AimWalkAnim) ? AimWalkAnim.Get() : Pick(AimAnim, Locomotion);
 	else if (bIsCrouched) Wanted = Speed > 15.f ? Pick(CrouchWalkAnim, Locomotion) : Pick(CrouchIdleAnim, Locomotion);
 	else Wanted = Locomotion;
@@ -2141,6 +2155,18 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickFollow(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
 		TickOutfitState();
+	}
+	if (HasAuthority() && ActiveEmote >= 0 && (GetVelocity().Size2D() > 60.f || GetCondition() != EPVVCondition::Normal || GetCarrier()
+		|| GetCurrentBoat() || bClimbing || GrabbedBy || HandGrabTarget))
+	{
+		StopEmote();
+	}
+	if (ActiveEmote == 6 && GetNetMode() != NM_DedicatedServer && GetWorld()->GetTimeSeconds() >= NextSmokePuff)
+	{
+		// Exhale (matches the 4 s smoking loop).
+		NextSmokePuff = GetWorld()->GetTimeSeconds() + 4.f;
+		const FVector Mouth = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation() + FVector(0.f, 0.f, 70.f);
+		ABRGameState::SpawnLocalFX(this, EBRFX::CigaretteSmoke, Mouth + GetActorForwardVector() * 25.f + FVector(0.f, 0.f, -5.f));
 	}
 	TickShake(DeltaSeconds);
 	TickReachVisuals();
@@ -2802,6 +2828,7 @@ void ABRCharacter::Input_RightHandStop()
 
 void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 {
+	StopEmote();
 	Multicast_PunchHand(bLeft);
 	BotAttack(); // same punch as before, just with the hand you chose
 }
@@ -3744,6 +3771,7 @@ void ABRCharacter::Multicast_BodyHit_Implementation(FName Bone, FVector_NetQuant
 		return;
 	}
 	// The part that got hit snaps back; the rest of the upper body follows a bit.
+	ABRGameState::SpawnLocalFX(this, EBRFX::PunchHit, Body->GetBoneLocation(Bone));
 	Body->AddImpulse(Impulse, Bone, true);
 	Body->AddImpulseToAllBodiesBelow(Impulse * 0.35f, TEXT("spine_02"), true, true);
 	if (IsLocallyControlled())
@@ -3942,6 +3970,7 @@ FString ABRCharacter::EmoteName(int32 Index)
 	case 3: return TEXT("Beg");
 	case 4: return TEXT("Cheer");
 	case 5: return TEXT("Dance");
+	case 6: return TEXT("Smoke");
 	default: return TEXT("");
 	}
 }
@@ -4016,19 +4045,57 @@ void ABRCharacter::Server_Emote_Implementation(uint8 Index)
 		return;
 	}
 	LastEmoteTime = Now;
-	Multicast_Emote(Index);
+	// Same emote again = stop. Otherwise it loops until you move or fight.
+	ActiveEmote = (ActiveEmote == static_cast<int32>(Index)) ? -1 : static_cast<int32>(Index);
+	OnRep_ActiveEmote();
+	ForceNetUpdate();
+}
+
+UAnimSequenceBase* ABRCharacter::EmoteAnimFor(int32 Index) const
+{
+	switch (Index)
+	{
+	case 0: return EmoteWaveAnim.Get();
+	case 1: return EmoteFlexAnim.Get();
+	case 2: return EmoteTauntAnim.Get();
+	case 3: return EmoteBegAnim.Get();
+	case 4: return EmoteCheerAnim.Get();
+	case 5: return DanceAnim.Get();
+	case 6: return EmoteSmokeAnim.Get();
+	default: return nullptr;
+	}
+}
+
+void ABRCharacter::StopEmote()
+{
+	if (HasAuthority() && ActiveEmote >= 0)
+	{
+		ActiveEmote = -1;
+		OnRep_ActiveEmote();
+		ForceNetUpdate();
+	}
+}
+
+void ABRCharacter::OnRep_ActiveEmote()
+{
+	static const TCHAR* Bubbles[] = { TEXT("*waves*"), TEXT("*FLEXES*"), TEXT("*taunts*"), TEXT("*begs*"), TEXT("*cheers*"), TEXT("*dances*"), TEXT("*smokes*") };
+	if (ActiveEmote >= 0 && ActiveEmote < NumEmotes)
+	{
+		EmoteBubble = Bubbles[ActiveEmote];
+		EmoteBubbleUntil = GetWorld()->GetTimeSeconds() + 2.5f;
+	}
+	if (CigaretteMesh)
+	{
+		CigaretteMesh->SetVisibility(ActiveEmote == 6);
+	}
+	CurrentSlotAnim = nullptr; // pick the right animation next frame
+	OneShotUntil = 0.f;
 }
 
 void ABRCharacter::Multicast_Emote_Implementation(uint8 Index)
 {
-	UAnimSequenceBase* Anims[] = { EmoteWaveAnim.Get(), EmoteFlexAnim.Get(), EmoteTauntAnim.Get(), EmoteBegAnim.Get(), EmoteCheerAnim.Get(), DanceAnim.Get() };
-	const TCHAR* Bubbles[] = { TEXT("*waves*"), TEXT("*FLEXES*"), TEXT("*taunts*"), TEXT("*begs*"), TEXT("*cheers*"), TEXT("*dances*") };
-	if (Index < NumEmotes)
-	{
-		PlayOneShot(Anims[Index]);
-		EmoteBubble = Bubbles[Index];
-		EmoteBubbleUntil = GetWorld()->GetTimeSeconds() + 2.5f;
-	}
+	// (Emotes now loop through ActiveEmote; kept so old Blueprints calling this still compile.)
+	PlayOneShot(EmoteAnimFor(Index));
 }
 
 // (In the .cpp on purpose: an RPC's _Implementation name written in a header stops Unreal declaring it.)
