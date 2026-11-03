@@ -271,6 +271,11 @@ public:
 	bool bOfficer = false;
 	float OfficerUntil = 0.f;
 	float LastFriskedTime = -100.f;
+	// --- Prisoners ---
+	void OnPrisonerStateChanged(EPVVCondition Was, EPVVCondition Now);
+	void TickNPCStruggle();
+	float NPCBreakFreeAt = -1.f;
+	float NPCStruggleUntil = -1.f;
 	/** Getting up takes this long (can't walk while you push yourself up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GetUpSeconds = 1.f;
 	/** Thrown people go flying FLOPPY (ragdoll) and are down this long (unless they were already KO'd). */

@@ -799,6 +799,14 @@ Previews: **Art/Characters/Previews/Hairstyles.png** and **FacialHair.png**.
 
 ---
 
+## Part 15r: Prisoners
+
+- **Zip-tied = searched:** the moment anyone (player or NPC) is zip-tied, their contraband, guns, knives and fake passports are taken. The nearest Border Patrol agent gets the seizure points.
+- **NPCs sometimes wriggle free:** a zip-tied NPC left alone may try to break out, now and then (every few minutes at most, about 1 in 3 attempts is a real one). If it works they run for it.
+- **Free them and they follow you:** untie a zip-tied NPC as a Runner (or break them out of the pen) and they follow you like a smuggling client. Get them to the Safe Zone for **$120**. They also defend you.
+
+---
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

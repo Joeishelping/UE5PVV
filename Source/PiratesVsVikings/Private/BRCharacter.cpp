@@ -2798,6 +2798,10 @@ void ABRCharacter::OnStateEffectsRefreshed()
 	{
 		const EPVVCondition Was = LastSoundCondition;
 		LastSoundCondition = GetCondition();
+		if (HasAuthority())
+		{
+			OnPrisonerStateChanged(Was, GetCondition());
+		}
 		if (Was == EPVVCondition::KnockedDown && GetCondition() == EPVVCondition::Normal && !GetCurrentBoat() && !GetCarrier())
 		{
 			if (HasAuthority())
@@ -2945,6 +2949,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickFollow(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
 		TickThrown();
+		TickNPCStruggle();
 		TickOutfitState();
 	}
 	if (HasAuthority() && ActiveEmote >= 0 && (GetVelocity().Size2D() > 60.f || GetCondition() != EPVVCondition::Normal || GetCarrier()
@@ -5059,6 +5064,82 @@ bool ABRCharacter::FailsPapersScan() const
 	const bool bPassport = PS && PS->HasItem(EBRItem::FakePassport);
 	const bool bDirty = PS && PS->Inventory.ContainsByPredicate([](EBRItem I) { return BR::IsIllegal(I); });
 	return !bPassport || bDirty;
+}
+
+void ABRCharacter::OnPrisonerStateChanged(EPVVCondition Was, EPVVCondition Now)
+{
+	// Zip-tied: everything illegal on you is taken (the nearest agent gets the credit).
+	if (Now == EPVVCondition::Restrained && Was != EPVVCondition::Restrained)
+	{
+		const int32 Taken = Confiscate();
+		if (Taken > 0)
+		{
+			ABRCharacter* Cop = nullptr;
+			float Best = 500.f;
+			for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+			{
+				const float D = FVector::Dist(It->GetActorLocation(), GetActorLocation());
+				if (It->IsWarden() && !It->IsNPC() && D < Best)
+				{
+					Best = D;
+					Cop = *It;
+				}
+			}
+			if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>(); GM && Cop)
+			{
+				GM->OnContrabandSeized(Cop, Taken);
+				Cop->Notify(FText::Format(LOCTEXT("CuffSeized", "Zip-tied and searched: {0} thing(s) seized."), Taken));
+			}
+		}
+		NPCBreakFreeAt = GetWorld()->GetTimeSeconds() + FMath::FRandRange(60.f, 240.f);
+	}
+	// Untied (or broken out of the pen) by a Runner: an NPC follows whoever freed them, like a smuggling client.
+	if (bIsNPC && !bOfficer && Now == EPVVCondition::Normal && (Was == EPVVCondition::Restrained || Was == EPVVCondition::Detained) && !Leader.IsValid())
+	{
+		ABRCharacter* Rescuer = nullptr;
+		float Best = 600.f;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			const float D = FVector::Dist(It->GetActorLocation(), GetActorLocation());
+			if (It->IsRunner() && !It->IsNPC() && It->GetCondition() == EPVVCondition::Normal && D < Best)
+			{
+				Best = D;
+				Rescuer = *It;
+			}
+		}
+		if (Rescuer)
+		{
+			CalmDown();
+			StartFollowing(Rescuer, 120);
+			Rescuer->Notify(LOCTEXT("FreedFollows", "You freed them - they're following you now. Get them to the Safe Zone (+$120)."));
+		}
+		else
+		{
+			StartFleeing(20.f); // broke free on their own: leg it
+		}
+	}
+}
+
+void ABRCharacter::TickNPCStruggle()
+{
+	// Zip-tied NPCs very rarely manage to wriggle out (once every few minutes at most, and only if left alone).
+	if (!bIsNPC || GetCondition() != EPVVCondition::Restrained || NPCBreakFreeAt <= 0.f)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now >= NPCBreakFreeAt)
+	{
+		if (FMath::FRand() < 0.35f)
+		{
+			NPCStruggleUntil = Now + 3.f; // a real attempt
+		}
+		NPCBreakFreeAt = Now + FMath::FRandRange(90.f, 240.f);
+	}
+	if (Now < NPCStruggleUntil)
+	{
+		BotStruggle();
+	}
 }
 
 void ABRCharacter::BotDive()
