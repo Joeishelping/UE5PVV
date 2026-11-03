@@ -436,3 +436,18 @@ write_face("SK_Face_ChinStrap", [face_sheet(strap, lambda a, y: np.full_like(a, 
 # Mutton chops: big sideburns over the cheeks to the jaw, bare chin.
 chops = lambda a, y: between(np.abs(a), 1.02 - 2.2 * np.maximum(0, 1.5 - y), 1.3, .05) * between(y, jaw_bottom(a) + .01, 1.54, .015)  # narrow sideburns widening down the cheeks
 write_face("SK_Face_MuttonChops", [face_sheet(chops, lambda a, y: np.full_like(a, .016))])
+
+# ---------------- connected beards & goatees (mustache joined down to the chin)
+def corners(width=.07, lo=1.27):
+    """The two strips down the corners of the mouth (just outside the lips) joining the mustache to the chin."""
+    return lambda a, y: between(np.abs(a), LIP_A + .03, LIP_A + .03 + width, .015) * between(y, lo, 1.458, .008)
+chin_piece = lambda w, lo, hi: (lambda a, y: between(np.abs(a), -1, LIP_A + .03 + w, .02) * between(y, lo, hi, .008) * lips_hole(a, y))
+circle = lambda a, y: np.maximum.reduce([stache_mask()(a, y), corners(.08)(a, y), chin_piece(.08, 1.25, LIP_BOT - .006)(a, y)])
+write_face("SK_Face_CircleBeard", [face_sheet(circle, lambda a, y: .016 + .006 * _sm((1.33 - y) / .06))])
+ext = lambda a, y: np.maximum(circle(a, y), between(y, jaw_bottom(a), jaw_bottom(a) + .07, .012) * between(np.abs(a), -1, .8, .06))
+write_face("SK_Face_ExtendedGoatee", [face_sheet(ext, lambda a, y: .015 + .006 * _sm((1.33 - y) / .06))])
+strapc = lambda a, y: np.maximum.reduce([strap(a, y), stache_mask()(a, y), corners(.045, jaw_bottom(LIP_A))(a, y)])
+write_face("SK_Face_ChinStrapConnected", [face_sheet(strapc, lambda a, y: np.full_like(a, .011))])
+thin = lambda a, y: np.maximum.reduce([stache_mask(width=LIP_A + .07, lo=1.446)(a, y), corners(.035, 1.29)(a, y),
+                                       between(np.abs(a), -1, LIP_A + .065, .015) * between(y, 1.29, 1.318, .006)])
+write_face("SK_Face_ThinGoatee", [face_sheet(thin, lambda a, y: np.full_like(a, .007), y_lo=1.22, y_hi=1.5, cols=360, rows=170)])

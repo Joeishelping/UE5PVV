@@ -745,9 +745,10 @@ Nothing to set up. Just update the code. What's new:
 - **Balding** (horseshoe ring round the sides and back, bare shiny top) and **CombOver** (the same, with a few long strands combed across, fooling nobody).
 - (The old spiky Mohawk was removed. Delete **SK_Hair_Mohawk** in Unreal if you imported it.)
 
-**15 beards and mustaches (all rebuilt to hug the face and fit around the new lips):**
+**19 beards and mustaches (all rebuilt to hug the face and fit around the new lips):**
 - Stubble (speckled, not a solid block), BoxedBeard, FullBeard, LongBeard, Goatee, VanDyke, SoulPatch, ChinStrap, MuttonChops.
 - Mustache, Pencil, Walrus, Handlebar (the tips curl UP properly now), Horseshoe, FuManchu.
+- **Connected** (mustache joined down to the chin): CircleBeard, ExtendedGoatee (runs out along the jaw), ChinStrapConnected, ThinGoatee (a neat thin outline).
 
 **Import:**
 1. Drag **all** `Art/Characters/SK_Hair_*.glb` and `SK_Face_*.glb` into your hair folder in Unreal:
