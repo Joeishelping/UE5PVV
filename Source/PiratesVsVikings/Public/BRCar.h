@@ -61,6 +61,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BR|Car") bool bHiddenCargo = false;
 	bool bCargoSearched = false;
 	bool WantsCargoSearch(const APVVCharacter* Interactor) const;
+	/** Spike strip: flat tyres for a while (crawls along). */
+	void PopTyres(float Seconds);
+	bool HasFlatTyres() const;
+	UPROPERTY(Replicated) float FlatTyresUntil = 0.f;
 	/** Server: beep beep. */
 	void HonkHorn() { Multicast_Horn(); }
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;

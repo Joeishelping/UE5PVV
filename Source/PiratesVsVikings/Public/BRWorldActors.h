@@ -144,9 +144,11 @@ class PIRATESVSVIKINGS_API ABRWall : public ABRGreyboxActor, public IPVVInteract
 
 public:
 	ABRWall();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
 
 	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
-	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 2.f; }
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override;
 	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
@@ -158,6 +160,25 @@ public:
 	/** Border Patrol's locked side door (a gap in the wall the BR Wall Door fills). */
 	static constexpr float DoorY = 500.f;
 	static constexpr float DoorHalfWidth = 90.f;
+	/** Width of one wall panel (TNT blows out one or two). */
+	static constexpr float PanelWidth = 400.f;
+	/** What Border Patrol pays (from the budget) to rebuild a blown-out section. */
+	UPROPERTY(EditAnywhere, Category = "BR|Wall") int32 RebuildCost = 400;
+
+	/** Server: TNT went off here. Blows out the panels nearby (reinforced ones just lose their reinforcement). True if it breached. */
+	bool Blast(const FVector& WorldLocation, float Radius);
+	/** Panel index at a world location (-1 = none / a gap). */
+	int32 PanelAt(const FVector& WorldLocation) const;
+	bool IsBreachedAt(const FVector& WorldLocation) const;
+
+protected:
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Panels;
+	TArray<float> PanelY;
+	/** Per panel: 0 = intact, 1 = reinforced (survives one blast), 2 = blown out. */
+	UPROPERTY(ReplicatedUsing = OnRep_Panels) TArray<uint8> PanelState;
+	UFUNCTION() void OnRep_Panels();
+	enum class EWallJob : uint8 { None, Ladder, Rebuild, Reinforce };
+	EWallJob JobFor(const APVVCharacter* Interactor, int32& OutPanel) const;
 };
 
 // ===========================================================================================
@@ -321,6 +342,8 @@ public:
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
 	UPROPERTY(Replicated) EBRTrap Type = EBRTrap::Bear;
+	/** Mesh-name prefix for each trap type. */
+	static FString TrapPrefix(EBRTrap InType);
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USphereComponent> Trigger;

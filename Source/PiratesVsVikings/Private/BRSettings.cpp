@@ -175,6 +175,9 @@ namespace BR
 		case EBRItem::GrappleHook: return TEXT("Grappling Hook");
 		case EBRItem::Lockpick: return TEXT("Lockpick");
 		case EBRItem::FakeUniform: return TEXT("Fake BP Uniform");
+		case EBRItem::TNT: return TEXT("TNT");
+		case EBRItem::FuseKit: return TEXT("Fuse Kit");
+		case EBRItem::WallReinforcement: return TEXT("Wall Reinforcement");
 		default:                   return TEXT("");
 		}
 	}
@@ -216,6 +219,7 @@ namespace BR
 		case EBRWardenGear::DroneRecharge: return TEXT("Drone Recharge");
 		case EBRWardenGear::PatrolDog:     return TEXT("Patrol Dog");
 		case EBRWardenGear::Reinforcements: return TEXT("Reinforcements (2 officers)");
+		case EBRWardenGear::ElectricFences: return TEXT("Electrify the fences (90 s)");
 		default:                           return ItemName(Item);
 		}
 	}

@@ -45,7 +45,10 @@ enum class EBRItem : uint8
 	SmokeBomb		UMETA(DisplayName = "Smoke Bomb"),
 	GrappleHook		UMETA(DisplayName = "Grappling Hook"),
 	Lockpick		UMETA(DisplayName = "Lockpick"),
-	FakeUniform		UMETA(DisplayName = "Fake BP Uniform")
+	FakeUniform		UMETA(DisplayName = "Fake BP Uniform"),
+	TNT				UMETA(DisplayName = "TNT"),
+	FuseKit			UMETA(DisplayName = "Fuse Kit"),
+	WallReinforcement UMETA(DisplayName = "Wall Reinforcement")
 };
 
 /** Hats: each one gives a skill. Get knocked out and it may fly off - anyone can pick it up. */
@@ -144,7 +147,8 @@ enum class EBRWardenGear : uint8
 	HardHat,		// wear a Hard Hat
 	DroneRecharge,	// your drone is ready again right now
 	PatrolDog,		// a new patrol dog appears next to the counter
-	Reinforcements	// two NPC officers show up and go after Runners who crossed the Line
+	Reinforcements,	// two NPC officers show up and go after Runners who crossed the Line
+	ElectricFences	// switch on the power: fences zap anyone who touches or cuts them (for a while)
 };
 
 UENUM(BlueprintType)
@@ -152,7 +156,8 @@ enum class EBRTrap : uint8
 {
 	Bear,	// roots the Runner for a few seconds
 	Glue,	// slows them a lot
-	Alarm	// pings and tags them for the Wardens
+	Alarm,	// pings and tags them for the Wardens
+	SpikeStrip	// across a road: pops the tyres of any vehicle that drives over it
 };
 
 namespace BR

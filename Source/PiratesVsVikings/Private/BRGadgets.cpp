@@ -194,4 +194,143 @@ void ABRCharacter::TakeOffFakeUniform(bool bBlown)
 	ForceNetUpdate();
 }
 
+// ===========================================================================================
+// TNT
+
+ABRTNTCharge::ABRTNTCharge()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	const FLinearColor Red(0.75f, 0.1f, 0.08f);
+	for (int32 i = 0; i < 3; ++i)
+	{
+		AddMesh(*FString::Printf(TEXT("Stick%d"), i), CylinderMesh, FVector(0.f, -12.f + i * 12.f, 25.f), FVector(11.f, 11.f, 50.f), Red, FRotator::ZeroRotator, false);
+	}
+	AddMesh(TEXT("Timer"), CubeMesh, FVector(8.f, 0.f, 30.f), FVector(6.f, 22.f, 14.f), FLinearColor(0.1f, 0.1f, 0.1f), FRotator::ZeroRotator, false);
+}
+
+void ABRTNTCharge::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	Age += DeltaSeconds;
+	if (GetNetMode() != NM_DedicatedServer && FMath::Fmod(Age, 0.5f) < DeltaSeconds)
+	{
+		ABRGameState::SpawnLocalFX(this, EBRFX::Sparks, GetActorLocation() + FVector(0.f, 0.f, 55.f));
+	}
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const int32 Left = FMath::CeilToInt(FuseSeconds - Age);
+	if (Left != LastBeep && Left > 0)
+	{
+		LastBeep = Left;
+		ABRGameState::Sfx(this, EBRSfx::Countdown, GetActorLocation());
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 90.f), FString::FromInt(Left));
+	}
+	if (Age >= FuseSeconds)
+	{
+		Explode();
+	}
+}
+
+void ABRTNTCharge::Explode()
+{
+	const FVector At = GetActorLocation();
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	ABRCharacter* By = PlantedBy.Get();
+	for (int32 i = 0; i < 4; ++i)
+	{
+		ABRGameState::FX(this, EBRFX::Smoke, At + FMath::VRand() * 120.f + FVector(0.f, 0.f, 100.f));
+	}
+	ABRGameState::FX(this, EBRFX::Sparks, At + FVector(0.f, 0.f, 60.f));
+	ABRGameState::Sfx(this, EBRSfx::GateSmash, At, false);
+	// Everyone nearby goes flying (Gang Beasts ragdolls everywhere).
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		ABRCharacter* C = *It;
+		const FVector To = C->GetActorLocation() - At;
+		const float D = To.Size();
+		if (D > BlastRadius || C->GetCurrentBoat() || C->GetCarrier())
+		{
+			continue;
+		}
+		const float K = 1.f - D / BlastRadius;
+		C->ApplyKnockdown(By, To.GetSafeNormal2D() * 500.f * K + FVector(0.f, 0.f, 350.f * K + 100.f));
+		C->AddKO(0.5f * K, By);
+	}
+	// The Wall: blow out the panels it was against.
+	bool bBreach = false;
+	for (TActorIterator<ABRWall> It(GetWorld()); It; ++It)
+	{
+		bBreach |= It->Blast(At, BlastRadius * 0.6f);
+	}
+	// Fences nearby are wrecked.
+	TArray<AActor*> Wrecked;
+	for (TActorIterator<ABRSpikeFence> It(GetWorld()); It; ++It)
+	{
+		if (FVector::Dist(It->GetActorLocation(), At) < BlastRadius * 0.7f)
+		{
+			Wrecked.Add(*It);
+		}
+	}
+	for (AActor* F : Wrecked)
+	{
+		F->Destroy();
+	}
+	if (GM)
+	{
+		GM->TriggerBorderAlarm(At, bBreach ? TEXT("EXPLOSION - the Wall is BREACHED") : TEXT("An explosion at the border"));
+		if (bBreach)
+		{
+			GM->Feed(FString::Printf(TEXT("%s blew a hole in the Wall!"), By ? *By->GetPlayerDisplayName() : TEXT("Someone")));
+		}
+	}
+	if (ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>())
+	{
+		GS->Multicast_NoisePing(At);
+	}
+	Destroy();
+}
+
+void ABRCharacter::PlantTNT()
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	if (!HasAuthority() || !PS || !PS->HasItem(EBRItem::TNT) || GetCurrentBoat() || GetCondition() != EPVVCondition::Normal || bClimbing)
+	{
+		return;
+	}
+	const FVector Feet = GetActorLocation() + GetActorForwardVector() * 70.f - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	FActorSpawnParameters SP;
+	SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (ABRTNTCharge* Charge = GetWorld()->SpawnActor<ABRTNTCharge>(ABRTNTCharge::StaticClass(), Feet, GetActorRotation(), SP))
+	{
+		Charge->PlantedBy = this;
+		PS->RemoveItem(EBRItem::TNT);
+		BlowDisguise();
+		Notify(LOCTEXT("TNTPlanted", "TNT planted - 5 seconds - RUN!"));
+	}
+}
+
+void ABRCharacter::UseFuseKit()
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	ABRGameState* GS = GetBRGameState();
+	if (!HasAuthority() || !PS || !GS || !PS->HasItem(EBRItem::FuseKit))
+	{
+		return;
+	}
+	if (GS->GetServerWorldTimeSeconds() >= GS->FencePowerUntil)
+	{
+		Notify(LOCTEXT("FuseNotLive", "The fences aren't electrified right now - save the fuse kit."));
+		return;
+	}
+	PS->RemoveItem(EBRItem::FuseKit);
+	GS->FencePowerCutUntil = GS->GetServerWorldTimeSeconds() + 45.f;
+	GS->ForceNetUpdate();
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->Feed(TEXT("Someone blew the fuses - the fence power is OFF for 45 s! (the spikes still hurt)"));
+	}
+}
+
 #undef LOCTEXT_NAMESPACE

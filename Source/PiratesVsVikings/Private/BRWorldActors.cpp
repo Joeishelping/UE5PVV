@@ -1,4 +1,5 @@
 #include "BRWorldActors.h"
+#include "BRCar.h"
 #include "BRAudio.h"
 #include "Components/CapsuleComponent.h"
 #include "BRSettings.h"
@@ -556,6 +557,11 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		case EBRWardenGear::Reinforcements:
 			GM->CallReinforcements(GetActorLocation() + GetActorForwardVector() * 300.f, Warden);
 			break;
+		case EBRWardenGear::ElectricFences:
+			GS->FencePowerUntil = GS->GetServerWorldTimeSeconds() + 90.f;
+			GS->ForceNetUpdate();
+			GM->Feed(TEXT("Border Patrol switched on the fence power - the fences are LIVE!"));
+			break;
 		default: PS->AddItem(Item); break;
 		}
 		NextUseServerTime = GS->GetServerWorldTimeSeconds() + CooldownSeconds;
@@ -605,6 +611,20 @@ void ABRSpikeFence::OnHurtOverlap(UPrimitiveComponent* OverlappedComp, AActor* O
 	}
 	const FVector Across = GetActorForwardVector().GetSafeNormal2D();
 	const float Side = FMath::Sign(FVector::DotProduct(Victim->GetActorLocation() - GetActorLocation(), Across));
+	const ABRGameState* GS = BRGame(this);
+	if (GS && GS->AreFencesLive())
+	{
+		// ZZZAP: electrified - you're stunned flat for a moment.
+		Victim->ApplyKnockdown(nullptr, Across * Side * 350.f + FVector(0.f, 0.f, 200.f));
+		if (ABRCharacter* BRV = Cast<ABRCharacter>(Victim); BRV && BRV->GetCondition() == EPVVCondition::KnockedDown)
+		{
+			BRV->SetKnockdownTimeLeft(3.f);
+		}
+		ABRGameState::FX(this, EBRFX::Sparks, Victim->GetActorLocation());
+		ABRGameState::FX(this, EBRFX::PointsText, Victim->GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("ZZZAP!"));
+		Tell(Victim, LOCTEXT("Zapped", "ZZZAP! The fence is ELECTRIFIED. Cut the power with a fuse kit, or wait it out."));
+		return;
+	}
 	Victim->ReceiveMeleeHit(nullptr, 35.f, Across * Side * 700.f + FVector(0.f, 0.f, 300.f));
 	Tell(Victim, LOCTEXT("Ouch", "OUCH! Razor wire. Use wire cutters (or go around)."));
 }
@@ -627,6 +647,14 @@ void ABRSpikeFence::OnInteract_Implementation(APVVCharacter* Interactor)
 	ABRPlayerState* PS = BRState(Interactor);
 	if (!HasAuthority() || !PS)
 	{
+		return;
+	}
+	if (const ABRGameState* LiveGS = BRGame(this); LiveGS && LiveGS->AreFencesLive())
+	{
+		// Cutting a live fence: you get the shock of your life.
+		Interactor->ApplyKnockdown(nullptr, FVector(0.f, 0.f, 250.f) - GetActorForwardVector() * 200.f);
+		ABRGameState::FX(this, EBRFX::Sparks, Interactor->GetActorLocation());
+		Tell(Interactor, LOCTEXT("ZappedCut", "ZZZAP! You can't cut a live fence - kill the power first (fuse kit)."));
 		return;
 	}
 	if (ABRGameState* GS = BRGame(this))
@@ -656,18 +684,224 @@ void ABRSpikeFence::OnInteract_Implementation(APVVCharacter* Interactor)
 ABRWall::ABRWall()
 {
 	const FLinearColor Concrete(0.42f, 0.38f, 0.33f);
+	// Gaps: the road gate, and Border Patrol's side door just north of it. Everything else is 4 m panels (TNT blows them out).
 	const float SouthEnd = GateY - GateHalfWidth;
 	const float NorthStart = GateY + GateHalfWidth;
-	const float SouthLen = SouthEnd + HalfLength;
-	// Gaps: the road gate, and Border Patrol's side door just north of it.
 	const float MidEnd = DoorY - DoorHalfWidth;
-	const float MidLen = MidEnd - NorthStart;
 	const float NorthFrom = DoorY + DoorHalfWidth;
-	const float NorthLen = HalfLength - NorthFrom;
-	AddMesh(TEXT("WallSouth"), CubeMesh, FVector(0.f, -HalfLength + SouthLen * 0.5f, Height * 0.5f), FVector(100.f, SouthLen, Height), Concrete);
-	AddMesh(TEXT("WallMid"), CubeMesh, FVector(0.f, NorthStart + MidLen * 0.5f, Height * 0.5f), FVector(100.f, MidLen, Height), Concrete);
-	AddMesh(TEXT("WallNorth"), CubeMesh, FVector(0.f, NorthFrom + NorthLen * 0.5f, Height * 0.5f), FVector(100.f, NorthLen, Height), Concrete);
+	const FVector2D Runs[] = { { -HalfLength, SouthEnd }, { NorthStart, MidEnd }, { NorthFrom, HalfLength } };
+	int32 Index = 0;
+	for (const FVector2D& Run : Runs)
+	{
+		const int32 Count = FMath::Max(1, FMath::RoundToInt((Run.Y - Run.X) / PanelWidth));
+		const float W = (Run.Y - Run.X) / Count;
+		for (int32 i = 0; i < Count; ++i)
+		{
+			const float Y = Run.X + W * (i + 0.5f);
+			UStaticMeshComponent* P = AddMesh(*FString::Printf(TEXT("WallPanel%d"), Index++), CubeMesh, FVector(0.f, Y, Height * 0.5f), FVector(100.f, W + 2.f, Height), Concrete);
+			Panels.Add(P);
+			PanelY.Add(Y);
+		}
+	}
 	AddLabel(TEXT("SignWest"), FVector(-60.f, 2500.f, Height + 60.f), 160.f, FColor(255, 200, 80))->SetText(FText::FromString(TEXT("THE WALL")));
+}
+
+void ABRWall::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRWall, PanelState);
+}
+
+void ABRWall::BeginPlay()
+{
+	Super::BeginPlay();
+	if (HasAuthority())
+	{
+		PanelState.Init(0, Panels.Num());
+	}
+	OnRep_Panels();
+}
+
+void ABRWall::OnRep_Panels()
+{
+	for (int32 i = 0; i < Panels.Num() && i < PanelState.Num(); ++i)
+	{
+		UStaticMeshComponent* P = Panels[i];
+		if (!P)
+		{
+			continue;
+		}
+		const bool bGone = PanelState[i] == 2;
+		P->SetVisibility(!bGone);
+		P->SetCollisionEnabled(bGone ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
+		if (UMaterialInstanceDynamic* MID = P->CreateDynamicMaterialInstance(0))
+		{
+			MID->SetVectorParameterValue(TEXT("Color"), PanelState[i] == 1 ? FLinearColor(0.22f, 0.24f, 0.28f) : FLinearColor(0.42f, 0.38f, 0.33f));
+		}
+	}
+}
+
+int32 ABRWall::PanelAt(const FVector& WorldLocation) const
+{
+	const FVector L = GetActorTransform().InverseTransformPositionNoScale(WorldLocation);
+	int32 Best = -1;
+	float BestD = PanelWidth * 0.6f;
+	for (int32 i = 0; i < PanelY.Num(); ++i)
+	{
+		const float D = FMath::Abs(L.Y - PanelY[i]);
+		if (D < BestD)
+		{
+			BestD = D;
+			Best = i;
+		}
+	}
+	return Best;
+}
+
+bool ABRWall::IsBreachedAt(const FVector& WorldLocation) const
+{
+	const int32 I = PanelAt(WorldLocation);
+	return PanelState.IsValidIndex(I) && PanelState[I] == 2;
+}
+
+bool ABRWall::Blast(const FVector& WorldLocation, float Radius)
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+	const FVector L = GetActorTransform().InverseTransformPositionNoScale(WorldLocation);
+	if (FMath::Abs(L.X) > 300.f)
+	{
+		return false;
+	}
+	bool bBreached = false;
+	for (int32 i = 0; i < PanelY.Num() && i < PanelState.Num(); ++i)
+	{
+		if (FMath::Abs(L.Y - PanelY[i]) > Radius)
+		{
+			continue;
+		}
+		if (PanelState[i] == 1)
+		{
+			PanelState[i] = 0; // reinforced: it holds (but the reinforcement is spent)
+		}
+		else if (PanelState[i] == 0)
+		{
+			PanelState[i] = 2; // BOOM - a hole in the Wall
+			bBreached = true;
+		}
+	}
+	OnRep_Panels();
+	ForceNetUpdate();
+	return bBreached;
+}
+
+ABRWall::EWallJob ABRWall::JobFor(const APVVCharacter* Interactor, int32& OutPanel) const
+{
+	OutPanel = -1;
+	if (!Interactor)
+	{
+		return EWallJob::None;
+	}
+	const FVector Local = Interactor->GetActorLocation() - GetActorLocation();
+	if (FMath::Abs(Local.X) > 300.f)
+	{
+		return EWallJob::None;
+	}
+	OutPanel = PanelAt(Interactor->GetActorLocation());
+	const ABRPlayerState* PS = BRState(Interactor);
+	const ABRGameState* GS = BRGame(this);
+	if (IsFreeWarden(Interactor) && PanelState.IsValidIndex(OutPanel))
+	{
+		if (PanelState[OutPanel] == 2)
+		{
+			return EWallJob::Rebuild;
+		}
+		if (PanelState[OutPanel] == 0 && PS && PS->HasItem(EBRItem::WallReinforcement))
+		{
+			return EWallJob::Reinforce;
+		}
+	}
+	if (IsFreeRunner(Interactor) && PS && PS->HasItem(EBRItem::Ladder) && GS && GS->Phase == EBRPhase::Invasion
+		&& FMath::Abs(Local.Y - GateY) > GateHalfWidth + 100.f)
+	{
+		return EWallJob::Ladder;
+	}
+	return EWallJob::None;
+}
+
+bool ABRWall::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	int32 Panel;
+	return JobFor(Interactor, Panel) != EWallJob::None;
+}
+
+float ABRWall::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
+{
+	int32 Panel;
+	switch (JobFor(Interactor, Panel))
+	{
+	case EWallJob::Rebuild: return 5.f;
+	case EWallJob::Reinforce: return 4.f;
+	default: return 2.f;
+	}
+}
+
+FText ABRWall::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	int32 Panel;
+	switch (JobFor(Interactor, Panel))
+	{
+	case EWallJob::Rebuild: return FText::Format(LOCTEXT("WallRebuild", "REBUILD this section (${0} from the budget, hold)"), RebuildCost);
+	case EWallJob::Reinforce: return LOCTEXT("WallReinforce", "REINFORCE this section (survives one blast, hold)");
+	default: return LOCTEXT("PlaceLadder", "Lean your ladder on the wall (hold)");
+	}
+}
+
+void ABRWall::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	int32 Panel = -1;
+	const EWallJob Job = JobFor(Interactor, Panel);
+	ABRPlayerState* PS = BRState(Interactor);
+	if (!HasAuthority() || !PS || Job == EWallJob::None)
+	{
+		return;
+	}
+	if (Job == EWallJob::Rebuild)
+	{
+		ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+		if (!GM || !GM->SpendBudget(RebuildCost))
+		{
+			Tell(Interactor, LOCTEXT("WallNoBudget", "Not enough budget to rebuild."));
+			return;
+		}
+		PanelState[Panel] = 0;
+		OnRep_Panels();
+		ForceNetUpdate();
+		ABRGameState::Sfx(this, EBRSfx::Requisition, Interactor->GetActorLocation());
+		GM->Feed(FString::Printf(TEXT("%s rebuilt a blown-out section of the Wall"), *Interactor->GetPlayerDisplayName()));
+		return;
+	}
+	if (Job == EWallJob::Reinforce)
+	{
+		if (PS->RemoveItem(EBRItem::WallReinforcement))
+		{
+			PanelState[Panel] = 1;
+			OnRep_Panels();
+			ForceNetUpdate();
+			Tell(Interactor, LOCTEXT("WallReinforced", "Section reinforced: it'll take one TNT blast."));
+		}
+		return;
+	}
+	if (!PS->RemoveItem(EBRItem::Ladder))
+	{
+		return;
+	}
+	const FVector At(GetActorLocation().X, Interactor->GetActorLocation().Y, GetActorLocation().Z);
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	GetWorld()->SpawnActor<ABRLadder>(ABRLadder::StaticClass(), At, FRotator::ZeroRotator, Params);
 }
 
 // ===========================================================================================
@@ -780,33 +1014,6 @@ void ABRWallDoor::Tick(float DeltaSeconds)
 		AppliedOpen = Want;
 		Slab->SetCollisionEnabled(bOpenNow ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
 	}
-}
-
-bool ABRWall::CanInteract_Implementation(APVVCharacter* Interactor) const
-{
-	const ABRPlayerState* PS = BRState(Interactor);
-	const ABRGameState* GS = BRGame(this);
-	const FVector Local = Interactor ? Interactor->GetActorLocation() - GetActorLocation() : FVector::ZeroVector;
-	return IsFreeRunner(Interactor) && PS && PS->HasItem(EBRItem::Ladder) && GS && GS->Phase == EBRPhase::Invasion
-		&& FMath::Abs(Local.X) < 300.f && FMath::Abs(Local.Y - GateY) > GateHalfWidth + 100.f;
-}
-
-FText ABRWall::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
-{
-	return LOCTEXT("PlaceLadder", "Lean your ladder on the wall (hold)");
-}
-
-void ABRWall::OnInteract_Implementation(APVVCharacter* Interactor)
-{
-	ABRPlayerState* PS = BRState(Interactor);
-	if (!HasAuthority() || !PS || !PS->RemoveItem(EBRItem::Ladder))
-	{
-		return;
-	}
-	const FVector At(GetActorLocation().X, Interactor->GetActorLocation().Y, GetActorLocation().Z);
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	GetWorld()->SpawnActor<ABRLadder>(ABRLadder::StaticClass(), At, FRotator::ZeroRotator, Params);
 }
 
 // ===========================================================================================
@@ -1227,6 +1434,12 @@ ABRTrap::ABRTrap()
 	AddMesh(TEXT("Bear_JawB"), CylinderMesh, FVector(0.f, 22.f, 14.f), FVector(70.f, 10.f, 16.f), Metal, FRotator(0.f, 0.f, 35.f), false);
 	// Glue pad.
 	AddMesh(TEXT("Glue_Pad"), CylinderMesh, FVector(0.f, 0.f, 1.5f), FVector(140.f, 140.f, 3.f), FLinearColor(0.2f, 0.45f, 0.1f), FRotator::ZeroRotator, false);
+	// Spike strip: a long row of spikes across the road.
+	AddMesh(TEXT("Spike_Strip"), CubeMesh, FVector(0.f, 0.f, 3.f), FVector(30.f, 420.f, 6.f), FLinearColor(0.15f, 0.15f, 0.15f), FRotator::ZeroRotator, false);
+	for (int32 i = 0; i < 9; ++i)
+	{
+		AddMesh(*FString::Printf(TEXT("Spike_Tooth%d"), i), ConeMesh, FVector(0.f, -190.f + i * 47.5f, 10.f), FVector(14.f, 14.f, 16.f), FLinearColor(0.7f, 0.7f, 0.72f), FRotator::ZeroRotator, false);
+	}
 	// Alarm tripwire.
 	AddMesh(TEXT("Alarm_Box"), CubeMesh, FVector(0.f, -80.f, 12.f), FVector(20.f, 20.f, 24.f), FLinearColor(0.7f, 0.1f, 0.1f), FRotator::ZeroRotator, false);
 	AddMesh(TEXT("Alarm_Wire"), CubeMesh, FVector(0.f, 0.f, 10.f), FVector(2.f, 160.f, 2.f), FLinearColor(0.8f, 0.8f, 0.8f), FRotator::ZeroRotator, false);
@@ -1245,10 +1458,21 @@ void ABRTrap::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeP
 	DOREPLIFETIME(ABRTrap, Type);
 }
 
+FString ABRTrap::TrapPrefix(EBRTrap InType)
+{
+	switch (InType)
+	{
+	case EBRTrap::Bear: return TEXT("Bear");
+	case EBRTrap::Glue: return TEXT("Glue");
+	case EBRTrap::SpikeStrip: return TEXT("Spike");
+	default: return TEXT("Alarm");
+	}
+}
+
 void ABRTrap::BeginPlay()
 {
 	Super::BeginPlay();
-	const FString Prefix = Type == EBRTrap::Bear ? TEXT("Bear") : (Type == EBRTrap::Glue ? TEXT("Glue") : TEXT("Alarm"));
+	const FString Prefix = TrapPrefix(Type);
 	TArray<UStaticMeshComponent*> Meshes;
 	GetComponents<UStaticMeshComponent>(Meshes);
 	for (UStaticMeshComponent* Mesh : Meshes)
@@ -1264,6 +1488,25 @@ void ABRTrap::BeginPlay()
 void ABRTrap::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// Spike strip: any vehicle that rolls over it gets its tyres popped.
+	if (Type == EBRTrap::SpikeStrip && HasAuthority())
+	{
+		for (TActorIterator<ABRCar> It(GetWorld()); It; ++It)
+		{
+			const FVector L = GetActorTransform().InverseTransformPositionNoScale(It->GetActorLocation());
+			if (FMath::Abs(L.X) < 220.f && FMath::Abs(L.Y) < 260.f && It->GetVelocity().Size() > 150.f && !It->HasFlatTyres())
+			{
+				It->PopTyres(25.f);
+				ABRGameState::Sfx(this, EBRSfx::TrapSnap, GetActorLocation());
+				if (ABRGameState* SGS = BRGame(this))
+				{
+					SGS->Multicast_NoisePing(GetActorLocation());
+				}
+				Destroy();
+				return;
+			}
+		}
+	}
 	// Runners only spot traps up close; Wardens always see their own.
 	const UWorld* World = GetWorld();
 	const APlayerController* PC = World->GetFirstPlayerController();
@@ -1278,7 +1521,7 @@ void ABRTrap::Tick(float DeltaSeconds)
 		bHiddenLocally = bHide;
 		TArray<UStaticMeshComponent*> Meshes;
 		GetComponents<UStaticMeshComponent>(Meshes);
-		const FString Prefix = Type == EBRTrap::Bear ? TEXT("Bear") : (Type == EBRTrap::Glue ? TEXT("Glue") : TEXT("Alarm"));
+		const FString Prefix = TrapPrefix(Type);
 		for (UStaticMeshComponent* Mesh : Meshes)
 		{
 			Mesh->SetVisibility(!bHide && Mesh->GetName().StartsWith(Prefix));
@@ -1292,6 +1535,10 @@ void ABRTrap::OnTriggered(UPrimitiveComponent* OverlappedComp, AActor* OtherActo
 	if (!Victim || !Victim->IsRunner() || Victim->IsNPC() || Victim->GetCurrentBoat() || Victim->GetCarrier() || Victim->GetCondition() != EPVVCondition::Normal)
 	{
 		return;
+	}
+	if (Type == EBRTrap::SpikeStrip)
+	{
+		return; // spike strips are for tyres, not feet
 	}
 	ABRGameState* GS = BRGame(this);
 	switch (Type)
@@ -1311,6 +1558,8 @@ void ABRTrap::OnTriggered(UPrimitiveComponent* OverlappedComp, AActor* OtherActo
 		Victim->Spot(8.f);
 		ABRGameState::Sfx(this, EBRSfx::TripwireAlarm, GetActorLocation());
 		Victim->Notify(LOCTEXT("Alarm", "You tripped an alarm wire! Wardens can see you."));
+		break;
+	default:
 		break;
 	}
 	if (GS)

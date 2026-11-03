@@ -186,6 +186,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bKnockedOut);
 	DOREPLIFETIME(ABRCharacter, bDropKicking);
 	DOREPLIFETIME(ABRCharacter, bFakeUniform);
+	DOREPLIFETIME_CONDITION(ABRCharacter, SelectedTrap, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SprintStamina, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
 	DOREPLIFETIME(ABRCharacter, DragBone);
@@ -1376,6 +1377,7 @@ void ABRCharacter::EnsureDefaultInput()
 	WeaponModeAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	ScanAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrapAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	TrapCycleAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrumpetAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	NextItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	PrevItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
@@ -1404,6 +1406,7 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, ScanAction, EKeys::V);
 	PVVInput::Map(IMC, ScanAction, EKeys::Gamepad_DPad_Left);
 	PVVInput::Map(IMC, TrapAction, EKeys::B);
+	PVVInput::Map(IMC, TrapCycleAction, EKeys::N);
 	PVVInput::Map(IMC, TrapAction, EKeys::Gamepad_LeftShoulder);
 	PVVInput::Map(IMC, NextItemAction, EKeys::MouseScrollDown);
 	PVVInput::Map(IMC, NextItemAction, EKeys::Gamepad_RightShoulder);
@@ -1461,6 +1464,7 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (WeaponModeAction) Input->BindAction(WeaponModeAction, ETriggerEvent::Started, this, &ABRCharacter::Input_WeaponMode);
 	if (ScanAction) Input->BindAction(ScanAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Scan);
 	if (TrapAction) Input->BindAction(TrapAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Trap);
+	if (TrapCycleAction) Input->BindAction(TrapCycleAction, ETriggerEvent::Started, this, &ABRCharacter::Input_TrapCycle);
 	if (EmoteAction)
 	{
 		Input->BindAction(EmoteAction, ETriggerEvent::Started, this, &ABRCharacter::Input_EmoteStart);
@@ -1557,6 +1561,9 @@ void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
 	case EBRItem::CardboardBox: ToggleBox(); break;
 	case EBRItem::SecurityCamera: PlaceSecurityCamera(); break;
 	case EBRItem::SmokeBomb: ThrowSmokeBomb(); break;
+	case EBRItem::TNT: PlantTNT(); break;
+	case EBRItem::FuseKit: UseFuseKit(); break;
+	case EBRItem::WallReinforcement: Notify(LOCTEXT("UseReinforce", "Walk up to a section of the Wall and hold E to reinforce it (it'll survive one TNT blast).")); break;
 	case EBRItem::GrappleHook: UseGrapple(); break;
 	case EBRItem::FakeUniform: ToggleFakeUniform(); break;
 	case EBRItem::Lockpick: Notify(LOCTEXT("UseLockpick", "Lockpick: hold E on the Border Patrol door in the Wall, or on the holding pen door (much faster jailbreak).")); break;
@@ -1760,6 +1767,18 @@ void ABRCharacter::Server_CoyoteWhistle_Implementation()
 }
 void ABRCharacter::Input_WeaponMode() { Server_ToggleWeaponMode(); }
 void ABRCharacter::Input_Trap() { Server_PlaceTrap(); }
+void ABRCharacter::Input_TrapCycle() { Server_CycleTrap(); }
+
+void ABRCharacter::Server_CycleTrap_Implementation()
+{
+	if (!IsWarden())
+	{
+		return;
+	}
+	SelectedTrap = static_cast<uint8>((SelectedTrap + 1) % 4);
+	static const TCHAR* Names[] = { TEXT("BEAR TRAP (roots them)"), TEXT("GLUE (slows them)"), TEXT("ALARM WIRE (tags them)"), TEXT("SPIKE STRIP (pops tyres - put it across a road)") };
+	Notify(FText::FromString(FString::Printf(TEXT("Trap (B): %s   - N to change"), Names[SelectedTrap])));
+}
 
 void ABRCharacter::Input_Scan()
 {
@@ -2541,8 +2560,7 @@ void ABRCharacter::Server_PlaceTrap_Implementation()
 		return;
 	}
 
-	const EBRTrap Type = static_cast<EBRTrap>(NextTrapType % 3);
-	NextTrapType++;
+	const EBRTrap Type = static_cast<EBRTrap>(SelectedTrap % 4); // pick with N
 	const FVector Feet = GetActorLocation() + GetActorForwardVector() * 90.f - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 	const FTransform Where(FRotator(0.f, GetActorRotation().Yaw, 0.f), Feet);
 	if (ABRTrap* Trap = GetWorld()->SpawnActorDeferred<ABRTrap>(ABRTrap::StaticClass(), Where, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))

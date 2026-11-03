@@ -93,6 +93,7 @@ ABRCar::ABRCar()
 void ABRCar::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRCar, FlatTyresUntil);
 	DOREPLIFETIME(ABRCar, Fuel);
 	DOREPLIFETIME(ABRCar, RadioStation);
 	DOREPLIFETIME(ABRCar, RadioStartTime);
@@ -257,8 +258,28 @@ bool ABRCar::IsFlooded() const
 	return BRMap::IsDeepWater(GetWorld(), GetActorLocation());
 }
 
+void ABRCar::PopTyres(float Seconds)
+{
+	if (const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>())
+	{
+		FlatTyresUntil = GS->GetServerWorldTimeSeconds() + Seconds;
+		ForceNetUpdate();
+	}
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 220.f), TEXT("FLAT TYRES!"));
+}
+
+bool ABRCar::HasFlatTyres() const
+{
+	const ABRGameState* GS = GetWorld() ? GetWorld()->GetGameState<ABRGameState>() : nullptr;
+	return GS && GS->GetServerWorldTimeSeconds() < FlatTyresUntil;
+}
+
 float ABRCar::GetDriveScale() const
 {
+	if (HasFlatTyres())
+	{
+		return IsFlooded() ? 0.f : 0.25f; // limping along on the rims
+	}
 	if (IsFlooded())
 	{
 		return 0.f; // engine drowned - you needed a boat

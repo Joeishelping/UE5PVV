@@ -58,6 +58,11 @@ public:
 	/** Extra traps the team bought on top of each Warden's Max Team Traps. */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 BonusTraps = 0;
+	/** Fences are electrified until this server time (Border Patrol pays for it)... */
+	UPROPERTY(Replicated) float FencePowerUntil = 0.f;
+	/** ...unless a Runner's fuse kit has cut the power until this time. */
+	UPROPERTY(Replicated) float FencePowerCutUntil = 0.f;
+	bool AreFencesLive() const { return GetServerWorldTimeSeconds() < FencePowerUntil && GetServerWorldTimeSeconds() >= FencePowerCutUntil; }
 
 	/** The top Runner with a price on their head (catch them for bonus points). Null = no bounty. */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")

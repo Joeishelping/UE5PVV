@@ -287,6 +287,11 @@ public:
 	FBRLook SavedLook;
 	EBRHat SavedHat = EBRHat::None;
 	float LastGrappleTime = -100.f;
+	void Input_TrapCycle();
+	UFUNCTION(Server, Reliable) void Server_CycleTrap();
+	UPROPERTY(Replicated) uint8 SelectedTrap = 0;
+	void PlantTNT();
+	void UseFuseKit();
 	/** Getting up takes this long (can't walk while you push yourself up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GetUpSeconds = 1.f;
 	/** Thrown people go flying FLOPPY (ragdoll) and are down this long (unless they were already KO'd). */
@@ -574,6 +579,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> WeaponModeAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> ScanAction;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrapAction;
+	/** Border Patrol: pick which trap B places (N cycles bear / glue / alarm / spike strip). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrapCycleAction;
 	/** (Unused - the trumpet is played with F when selected.) */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrumpetAction;
 	/** Mouse wheel: pick an inventory slot. G: drop it. F: use it. */

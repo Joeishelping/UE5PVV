@@ -710,8 +710,8 @@ Nothing to set up. Just update the code. What's new:
 - **Punches are straight jabs:** the arm pulls back, then the fist is driven out at their head and stays out for a moment (no instant snap back). Keep holding the button and the arm stays out, grabbing whatever it touches.
 - **Swing attacks:** with your arms out, move the mouse and your arms swing round with it. Swing them into people to hit them (fast swings hurt).
 - **Kicks (R)** are physical now: the leg goes loose and is driven out through the kick, then eases back.
-- **Drop kick:** press R while in the air (jump first), or press **Alt without clicking**. You fly feet-first, knock down whoever you hit, and land on your back (up again after about 1.3 s).
-- **Dive punch:** press **Alt while holding a mouse button**. Superman dive, fists first. The body goes flat out like a real dive.
+- **Drop kick:** press R while in the air (jump first), or press the **dive key (Left Ctrl / mouse thumb button) without clicking**. You fly feet-first, knock down whoever you hit, and land on your back (up again after about 1.3 s).
+- **Dive punch:** press the **dive key (Left Ctrl) while holding a mouse button**. Superman dive, fists first. The body goes flat out like a real dive.
 - **Hands grab walls at more heights** (reach up for ledges).
 - **Climb animation** is now used while climbing (it's "Climb" in the animation pack; it fills itself in).
 - **Tune:** Class Defaults -> search **GangBeasts** (Punch Extend Seconds, Kick Extend Seconds, Swing Attacks, Drop Kick Speed / Down Seconds, Max Fling Speed).
@@ -827,6 +827,32 @@ All of these are sold in the Runner town by the other shops; the smoke bomb is a
   - **Fighting** (punch, kick, dive, headbutt...) or **sprinting near Border Patrol** blows your cover: the uniform is gone and you're spotted.
 
 (The wheelbarrow comes with the vehicles in the next batch.)
+
+---
+
+## Part 15t: Breaching & defenses
+
+**The Wall is made of 4 m sections now** (about 37 of them).
+
+**TNT ($900, Runner shop):**
+1. Use it (F) to plant it at your feet. It beeps for 5 s.
+2. BOOM:
+   - Everyone within about 5 m goes flying and gets rocked.
+   - Wall sections it was against are **blown out**: a hole you can walk through.
+   - Fences nearby are wrecked.
+   - A border alarm goes off.
+
+**Border Patrol:**
+- **Rebuild:** walk up to a hole in the Wall and **hold E** (5 s, $400 from the budget).
+- **Wall reinforcement ($500, supply counter):** walk up to a section and **hold E** (4 s). It turns darker and survives **one** TNT blast (then it's normal again).
+
+**Electric fences:**
+- Border Patrol: **"Electrify the fences" ($800, supply counter, 90 s, then a 90 s cooldown)**. While live, touching a fence = **ZZZAP**: you're stunned flat for about 3 s. Trying to cut a live fence zaps you too.
+- Runners: **Fuse kit ($300)** kills the power for **45 s** (the razor wire still hurts, so cut it or climb carefully).
+
+**Spike strips + trap picker (Border Patrol):**
+- Press **N** to choose which trap **B** places: Bear trap, Glue, Alarm wire, or **Spike strip**.
+- Put a spike strip across a road: any vehicle that drives over it gets **flat tyres** for 25 s and crawls along at a quarter speed.
 
 ---
 
