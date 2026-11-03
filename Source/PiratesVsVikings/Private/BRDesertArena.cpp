@@ -1,4 +1,5 @@
 #include "BRDesertArena.h"
+#include "BRTunnels.h"
 #include "BRAirWater.h"
 #include "BRSettings.h"
 #include "BRAudio.h"
@@ -1085,6 +1086,17 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	// --- Watchtowers with spotlights, looking back over Mexico
 	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, -4800.f, Ground, 180.f), Params);
 	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, 4200.f, Ground, 180.f), Params);
+	// Real dig-and-walk tunnels: two starts on the Mexican side, each aims straight east and comes out past the Wall.
+	for (const float TY : { -4200.f, 3600.f })
+	{
+		const float StartX = LineX + 900.f;
+		if (ABRDigTunnel* Dig = World->SpawnActorDeferred<ABRDigTunnel>(ABRDigTunnel::StaticClass(), At(StartX, TY, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			Dig->ExitDistance = (WallX + 1200.f) - StartX;
+			Dig->DetectAfter = (-RiverHalfWidth) - StartX;
+			Dig->FinishSpawning(At(StartX, TY, Ground));
+		}
+	}
 	// Anti-air guns by the watchtowers (shoot down balloons and rafts).
 	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, -4300.f, Ground, 180.f), Params);
 	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, 3700.f, Ground, 180.f), Params);

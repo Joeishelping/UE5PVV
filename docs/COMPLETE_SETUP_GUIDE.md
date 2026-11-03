@@ -891,6 +891,23 @@ The **Skin slider** in the Customize menu now covers *only* that range: all the 
 3. You push them around a little slower than walking.
 - **E** again to let go. If you get knocked down, it tips over.
 
+## Part 15w: Dig tunnels (walk under the border)
+
+There are two tunnel spots on the Mexican side, marked by a dirt mound with a **TUNNEL** sign, just inside the Mexican side of the line. Everything is built by code; you don't need to place anything.
+
+**Runners:**
+1. Buy a **Shovel** ($80 at the town shop), then stand at the frame and **hold E** to break ground.
+2. **E** at the hole to climb down. You're now in a lit tunnel about 12 m underground.
+3. Walk to the end of the tunnel and **hold E (3 s)** to dig another 5 m section. It takes about 18 sections to get past the Wall.
+4. Once it's finished, an exit mound pops up past the Wall. **E** at the end of the tunnel climbs you out there.
+- Anyone (including NPCs and teammates without a shovel) can use a tunnel that's already dug. **E** at the start end climbs you back out.
+- While you're underground, Border Patrol can't spot you.
+
+**Border Patrol:**
+- When the dig passes under the river, the ground shakes: a **border alarm** goes off and a noise ping shows where.
+- Look for the **pile of fresh dirt** on the surface above the digging, or the exit mound.
+- **Hold E for 6 s** on the dirt pile or the exit to **collapse the tunnel**. Everyone inside gets thrown back out at the start, knocked down. The tunnel has to be dug again from scratch, and Border Patrol get seizure points.
+
 ---
 
 ## Part 16: Checklist: everything you can plug in

@@ -2,6 +2,7 @@
 #include "BRAudio.h"
 #include "BRGadgets.h"
 #include "BRAirWater.h"
+#include "BRTunnels.h"
 #include "Components/AudioComponent.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "PVVDetentionZone.h"
@@ -4897,7 +4898,8 @@ ABRDog* ABRCharacter::GetLeashedDog() const
 
 bool ABRCharacter::IsHiddenFromPatrol() const
 {
-	return bHiddenInSpot || (bInBox && GetVelocity().Size2D() < 30.f) || ABRSmokeCloud::IsInSmoke(GetWorld(), GetActorLocation());
+	return bHiddenInSpot || (bInBox && GetVelocity().Size2D() < 30.f) || ABRSmokeCloud::IsInSmoke(GetWorld(), GetActorLocation())
+		|| ABRDigTunnel::IsUnderground(GetWorld(), GetActorLocation());
 }
 
 void ABRCharacter::SetHiddenInSpot(bool bHide, const FVector& ExitAt)
