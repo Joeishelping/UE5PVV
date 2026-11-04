@@ -528,6 +528,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Prop") float MassKg = 15.f;
 
 	bool IsHeld() const { return Holder != nullptr; }
+	/** A smuggling package (box truck jobs). Border Patrol picking it up = CONFISCATED. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Prop") bool bContraband = false;
+	/** Runner who's paid for delivering it (and fined if it's seized). */
+	TWeakObjectPtr<class ABRPlayerState> ContrabandOwner;
+	/** Server: ride along in a moving truck's cargo hold (no physics while frozen), or tumble about again. */
+	void SetCargoFrozen(bool bFrozen, USceneComponent* Floor);
+	bool IsCargoFrozen() const { return bCargoFrozen; }
+	UStaticMeshComponent* GetPropMesh() const { return Mesh; }
 	/** Server. */
 	void PickUp(class ABRCharacter* By);
 	void Throw(const FVector& Velocity);
@@ -537,6 +545,8 @@ protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Mesh;
 
 	UFUNCTION() void OnRep_Holder();
+	UPROPERTY(ReplicatedUsing = OnRep_CargoFrozen) bool bCargoFrozen = false;
+	UFUNCTION() void OnRep_CargoFrozen();
 	UFUNCTION() void OnPropHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
 private:

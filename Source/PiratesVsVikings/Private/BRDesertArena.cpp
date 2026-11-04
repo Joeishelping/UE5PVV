@@ -1,5 +1,8 @@
 #include "BRDesertArena.h"
 #include "BRPatrolDuty.h"
+#include "BRPolice.h"
+#include "BRBoxTruck.h"
+#include "BRDuel.h"
 #include "BRTunnels.h"
 #include "BRDoors.h"
 #include "BRAirWater.h"
@@ -1176,6 +1179,22 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	}
 	World->SpawnActor<ABRWall>(ABRWall::StaticClass(), At(WallX, 0.f, Ground), Params);
 	Gate = World->SpawnActor<ABRCheckpointGate>(ABRCheckpointGate::StaticClass(), At(WallX, RoadY, Ground), Params);
+	// Two security cameras watching the checkpoint lane, panning side to side (Border Patrol can look through them with L).
+	// Take a bribe while one is pointed at you and it's a SCANDAL.
+	{
+		const FVector Stop(WallX - 1000.f, RoadY, 0.f);
+		for (const FVector2D CamXY : { FVector2D(WallX - 1600.f, RoadY - 1150.f), FVector2D(WallX - 400.f, RoadY + 1150.f) })
+		{
+			const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Stop.Y - CamXY.Y, Stop.X - CamXY.X));
+			const FTransform T = At(CamXY.X, CamXY.Y, Ground, Yaw);
+			if (ABRSurveillanceCamera* Cam = World->SpawnActorDeferred<ABRSurveillanceCamera>(ABRSurveillanceCamera::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+			{
+				Cam->SweepAngle = 60.f;
+				Cam->SweepSpeed = 0.45f;
+				Cam->FinishSpawning(T);
+			}
+		}
+	}
 	World->SpawnActor<ABRWallDoor>(ABRWallDoor::StaticClass(), At(WallX, ABRWall::DoorY, Ground), Params); // Border Patrol's key door
 
 	// --- Cockfight pit + betting counters
@@ -1360,6 +1379,17 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Car(5200.f, -5000.f, 0.f, true, FLinearColor(0.85f, 0.88f, 0.85f));
 	Car(-9500.f, -2400.f, 0.f, false, FLinearColor(0.5f, 0.2f, 0.1f));
 
+	// --- High-noon duel post (west end of town, past the welcome sign): the two marks are 15 m apart.
+	World->SpawnActor<ABRDuelSpot>(ABRDuelSpot::StaticClass(), At(-16750.f, 1000.f, Ground, 0.f), Params);
+	// --- Smuggling truck job board (south edge of town): box truck parks just east of it.
+	{
+		const FTransform T = At(-7000.f, -3600.f, Ground, 0.f);
+		if (ABRTruckJobBoard* Board = World->SpawnActorDeferred<ABRTruckJobBoard>(ABRTruckJobBoard::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			Board->TruckSpot = FVector(1400.f, 0.f, 0.f);
+			Board->FinishSpawning(T);
+		}
+	}
 	// --- Car lot: buy your own ride (hold E on a car)
 	{
 		struct FLotCar { float X; EBRCarModel Model; int32 Price; FLinearColor Paint; };

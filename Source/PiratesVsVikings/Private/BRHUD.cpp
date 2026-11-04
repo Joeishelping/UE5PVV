@@ -476,6 +476,20 @@ void ABRHUD::DrawHUD()
 		}
 		DrawText(Hint, Yellow, 20.f, SY - 60.f, Small, 1.1f);
 	}
+	// Bribe on offer: are the gate cameras looking at you right now?
+	if (bWarden && !Me->GetCurrentBoat())
+	{
+		for (TActorIterator<ABRTruck> It(GetWorld()); It; ++It)
+		{
+			if (It->BribeOffer > 0 && FVector::Dist(It->GetActorLocation(), Me->GetActorLocation()) < 900.f)
+			{
+				const bool bSeen = ABRSurveillanceCamera::AnyCameraSees(GetWorld(), Me->GetActorLocation() + FVector(0.f, 0.f, 60.f), *It);
+				Centered(FString::Printf(TEXT("BRIBE OFFERED: $%d   -   %s"), It->BribeOffer, bSeen ? TEXT("ON CAMERA! wait...") : TEXT("cameras looking away: hold E NOW")),
+					SY * 0.62f, bSeen ? Red : Green, Big, 1.3f);
+				break;
+			}
+		}
+	}
 	if (Me->GetCameraViewIndex() >= 0)
 	{
 		const float Blink = FMath::Fmod(Now, 1.f) < 0.5f ? 1.f : 0.3f;

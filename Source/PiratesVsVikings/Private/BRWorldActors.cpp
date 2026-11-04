@@ -2498,6 +2498,8 @@ void ABRPhysicsProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPhysicsProp, Holder);
 	DOREPLIFETIME(ABRPhysicsProp, Color);
 	DOREPLIFETIME(ABRPhysicsProp, PropShape);
+	DOREPLIFETIME(ABRPhysicsProp, bContraband);
+	DOREPLIFETIME(ABRPhysicsProp, bCargoFrozen);
 }
 
 void ABRPhysicsProp::OnConstruction(const FTransform& Transform)
@@ -2531,6 +2533,13 @@ void ABRPhysicsProp::BeginPlay()
 		Mesh->SetWorldScale3D(PropShape == 2 ? FVector(0.7f, 0.7f, 0.95f) : (PropShape == 3 ? FVector(0.55f, 0.55f, 0.65f) : FVector(0.8f, 0.5f, 0.35f)));
 		Mesh->SetMassOverrideInKg(NAME_None, PropShape == 2 ? 35.f : (PropShape == 3 ? 6.f : 22.f), true);
 	}
+	// 5 = smuggling package (taped brown brick).
+	if (!PropMesh && PropShape == 5)
+	{
+		Mesh->SetWorldScale3D(FVector(0.5f, 0.35f, 0.25f));
+		Mesh->SetMassOverrideInKg(NAME_None, 12.f, true);
+	}
+	Mesh->SetUseCCD(true); // doesn't tunnel through truck floors
 	if (!PropMesh)
 	{
 		if (UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(0))
@@ -2542,6 +2551,38 @@ void ABRPhysicsProp::BeginPlay()
 	{
 		Mesh->OnComponentHit.AddDynamic(this, &ABRPhysicsProp::OnPropHit);
 	}
+}
+
+void ABRPhysicsProp::SetCargoFrozen(bool bFrozen, USceneComponent* Floor)
+{
+	if (!HasAuthority() || Holder || bCargoFrozen == bFrozen)
+	{
+		return;
+	}
+	bCargoFrozen = bFrozen;
+	if (bFrozen && Floor)
+	{
+		Mesh->SetSimulatePhysics(false);
+		AttachToComponent(Floor, FAttachmentTransformRules::KeepWorldTransform);
+	}
+	else
+	{
+		const FVector CarryOn = GetAttachParentActor() ? GetAttachParentActor()->GetVelocity() : FVector::ZeroVector;
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		Mesh->SetSimulatePhysics(true);
+		Mesh->SetPhysicsLinearVelocity(CarryOn);
+	}
+	ForceNetUpdate();
+}
+
+void ABRPhysicsProp::OnRep_CargoFrozen()
+{
+	if (Holder)
+	{
+		return;
+	}
+	// Clients: match the server (the attachment itself replicates).
+	Mesh->SetSimulatePhysics(!bCargoFrozen);
 }
 
 void ABRPhysicsProp::ApplyHeldState()
@@ -2574,6 +2615,29 @@ void ABRPhysicsProp::PickUp(ABRCharacter* By)
 {
 	if (!HasAuthority() || !By || Holder)
 	{
+		return;
+	}
+	if (bCargoFrozen)
+	{
+		bCargoFrozen = false;
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	}
+	// Border Patrol got their hands on a smuggling package: SEIZED.
+	if (bContraband && By->IsWarden())
+	{
+		if (ABRPlayerState* OwnerPS = ContrabandOwner.Get())
+		{
+			OwnerPS->AddMoney(-300);
+		}
+		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			GM->AddBudget(200);
+			GM->ChangeApproval(2.f);
+			GM->Feed(FString::Printf(TEXT("%s seized a smuggling package!"), *By->GetPlayerDisplayName()));
+		}
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 60.f), TEXT("CONFISCATED"));
+		ABRGameState::FX(this, EBRFX::MoneyText, GetActorLocation() + FVector(0.f, 0.f, 110.f), TEXT("+$200 BUDGET"));
+		Destroy();
 		return;
 	}
 	Holder = By;

@@ -26,6 +26,13 @@ public:
 	/** How far it sees (cm) and how wide (degrees either side). */
 	UPROPERTY(EditAnywhere, Category = "BR|Camera") float Range = 3200.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Camera") float HalfAngle = 38.f;
+	/** How far it pans left and right (degrees either side) and how fast. Same on every screen. */
+	UPROPERTY(EditAnywhere, Category = "BR|Camera") float SweepAngle = 25.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Camera") float SweepSpeed = 0.5f;
+	/** Can this camera see Point right now (in its cone, in range, nothing in the way)? Works on every machine. */
+	bool SeesPoint(const FVector& Point, const AActor* IgnoreActor = nullptr) const;
+	/** Is anyone's camera looking at Point right now? */
+	static bool AnyCameraSees(const UWorld* World, const FVector& Point, const AActor* IgnoreActor = nullptr);
 
 	/** Border Patrol press L to look through this camera (live view). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Camera") TObjectPtr<class UCameraComponent> ViewCamera;

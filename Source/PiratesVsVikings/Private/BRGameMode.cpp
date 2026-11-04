@@ -1,4 +1,5 @@
 #include "BRGameMode.h"
+#include "BRBoxTruck.h"
 #include "BRGameInstance.h"
 #include "BRBotController.h"
 #include "BRCar.h"
@@ -740,6 +741,12 @@ void ABRGameMode::SpawnNPCTruck()
 		}
 	}
 	UClass* TruckClass = NPCTruckClass ? NPCTruckClass.Get() : ABRTruck::StaticClass();
+	// Some traffic is box trucks: crates in the back, sometimes packages or people hidden under them.
+	const bool bBoxTruck = FMath::FRand() < BoxTruckChance;
+	if (bBoxTruck)
+	{
+		TruckClass = ABRBoxTruck::StaticClass();
+	}
 	ABRTruck* Truck = GetWorld()->SpawnActorDeferred<ABRTruck>(TruckClass, Spawn, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!Truck)
 	{
@@ -747,13 +754,13 @@ void ABRGameMode::SpawnNPCTruck()
 	}
 	const FLinearColor Paints[] = { {0.8f, 0.8f, 0.75f}, {0.2f, 0.35f, 0.6f}, {0.35f, 0.5f, 0.2f}, {0.6f, 0.55f, 0.1f}, {0.3f, 0.3f, 0.3f},
 		{0.7f, 0.1f, 0.1f}, {0.1f, 0.1f, 0.12f}, {0.9f, 0.5f, 0.1f}, {0.5f, 0.2f, 0.6f}, {0.1f, 0.5f, 0.5f} };
-	if (TruckClass == ABRTruck::StaticClass())
+	if (TruckClass == ABRTruck::StaticClass() || bBoxTruck)
 	{
-		Truck->PaintColor = Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Paints)) - 1)];
+		Truck->PaintColor = bBoxTruck ? FLinearColor(0.85f, 0.85f, 0.82f) : Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Paints)) - 1)];
 	}
 	// Same car models the players can buy, so you can't tell who's a player by the car.
 	const float ModelRoll = FMath::FRand();
-	Truck->Model = ModelRoll < 0.35f ? EBRCarModel::Pickup : ModelRoll < 0.65f ? EBRCarModel::Sedan : ModelRoll < 0.8f ? EBRCarModel::Lowrider : EBRCarModel::Van;
+	Truck->Model = bBoxTruck ? EBRCarModel::Pickup : ModelRoll < 0.35f ? EBRCarModel::Pickup : ModelRoll < 0.65f ? EBRCarModel::Sedan : ModelRoll < 0.8f ? EBRCarModel::Lowrider : EBRCarModel::Van;
 	Truck->bRequiresKey = true;	// players can hide in the back but can't steal it
 	Truck->bHiddenCargo = FMath::FRand() < 0.18f; // some have a stash hidden in the vehicle (search it once it's empty)
 	Truck->bInfiniteFuel = true;
@@ -770,8 +777,15 @@ void ABRGameMode::SpawnNPCTruck()
 			NPC->bIllegal = FMath::FRand() < IllegalNPCChance;
 			NPC->bCarriesContraband = FMath::FRand() < ContrabandNPCChance;
 			NPC->ContrabandItem = FMath::FRand() < NPCGunChance ? EBRItem::IllegalGun : EBRItem::Drugs; // guns are rare-ish (and show on a scan)
-			Truck->AddNPC(NPC);
+			if (!Truck->AddNPC(NPC))
+			{
+				NPC->Destroy(); // no seat left (box trucks only have two)
+			}
 		}
+	}
+	if (ABRBoxTruck* Box = Cast<ABRBoxTruck>(Truck))
+	{
+		Box->LoadNPCCargo();
 	}
 	// Only ONE NPC truck plays music at a time (the others are quiet).
 	bool bSomeoneBlasting = false;
@@ -1688,6 +1702,14 @@ void ABRGameMode::ChangeApproval(float Delta)
 		bAnnouncedGunLoss = true;
 		Announce(LOCTEXT("Guns", "BREAKING: Wardens' guns CONFISCATED. Tasers only!"));
 	}
+}
+
+void ABRGameMode::OnBribeFilmed(APVVCharacter* Warden, int32 Amount)
+{
+	ChangeApproval(-BribeScandalPenalty);
+	AddBudget(-Amount); // the fine eats the bribe and then some
+	Announce(FText::Format(LOCTEXT("BribeFilmed", "SCANDAL: {0} was CAUGHT ON CAMERA taking a ${1} bribe! Approval -{2}"),
+		FText::FromString(NameOf(Warden)), Amount, FMath::RoundToInt(BribeScandalPenalty)));
 }
 
 #undef LOCTEXT_NAMESPACE

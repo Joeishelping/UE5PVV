@@ -1,5 +1,7 @@
 #include "BRCharacter.h"
 #include "BRPatrolDuty.h"
+#include "BRBoxTruck.h"
+#include "BRDuel.h"
 #include "BRAudio.h"
 #include "BRGadgets.h"
 #include "BRAirWater.h"
@@ -191,6 +193,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bFakeUniform);
 	DOREPLIFETIME(ABRCharacter, bOnRide);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SelectedTrap, COND_OwnerOnly);
+	DOREPLIFETIME(ABRCharacter, bDuelGun);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SprintStamina, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
 	DOREPLIFETIME(ABRCharacter, DragBone);
@@ -524,8 +527,7 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 	if (HasAuthority() && bDiving)
 	{
 		bDiving = false;
-		BalanceGraceUntil = GetWorld()->GetTimeSeconds() + 1.2f; // landing from a dive doesn't topple you
-		ABRGameState::FX(this, EBRFX::Dust, GetActorLocation() - FVector(0.f, 0.f, 80.f));
+		BalanceGraceUntil = GetWorld()->GetTimeSeconds() + 1.2f; // landing from a dive doesn't topple you (no dust cloud for a plain dive)
 		// BODY SPLASH: landed on someone who's already down = they stay down longer.
 		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 		{
@@ -1010,6 +1012,32 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 	}
 	if (MyRide)
 	{
+		return;
+	}
+	// Riding hidden in the back of the coyote's box truck: stay put.
+	if (Cast<ABRBoxTruck>(GetAttachParentActor()))
+	{
+		return;
+	}
+	// The coyote opened the back of their box truck: climb in and hide.
+	if (ABRBoxTruck* Hold = ABRBoxTruck::FindHoldForClient(this))
+	{
+		if (Hold->IsInHold(GetActorLocation()))
+		{
+			GetCharacterMovement()->MaxWalkSpeed = 150.f;
+			const FVector ToMid = (Hold->GetHoldCenter() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			if (ToMid.Size() > 60.f)
+			{
+				AddMovementInput(ToMid.GetSafeNormal(), 0.5f); // shuffle up toward the front
+			}
+			return;
+		}
+		// Walk round to the back doors first, then up the ramp and in.
+		const FVector Step = Hold->GetDoorStep();
+		const bool bAtStep = FVector::Dist2D(Step, GetActorLocation()) < 120.f;
+		const FVector Goal = bAtStep ? Hold->GetHoldCenter() : Step;
+		GetCharacterMovement()->MaxWalkSpeed = 420.f;
+		AddMovementInput(((Goal - GetActorLocation()) * FVector(1.f, 1.f, 0.f)).GetSafeNormal(), 1.f);
 		return;
 	}
 	// Somebody's going after our coyote? The clients jump in and fight for them.
@@ -1953,7 +1981,7 @@ bool ABRCharacter::OwnsWeapon() const
 	{
 		return false;
 	}
-	if (IsWarden())
+	if (IsWarden() || bDuelGun)
 	{
 		return true;
 	}
@@ -2235,6 +2263,10 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 	const bool bHit = GetWorld()->LineTraceSingleByObjectType(Hit, Start, End, Objects, Params);
 	APVVCharacter* Victim = bHit ? Cast<APVVCharacter>(Hit.GetActor()) : nullptr;
 	const bool bHostileHit = Victim && PVV::IsHostile(GetFaction(), Victim->GetFaction());
+	if (ABRDuelSpot* MyDuel = Duel.Get())
+	{
+		MyDuel->OnShotFired(this, Victim); // high noon: early = foul, hit him = you win
+	}
 	if (bHit && (bLethal || bRunnerGun) && !Victim)
 	{
 		BRAir::TryPop(Hit.GetActor(), this); // shot a balloon or a raft: POP
@@ -3877,8 +3909,11 @@ void ABRCharacter::Server_Grab_Implementation()
 	if (ABRPhysicsProp* Prop = Cast<ABRPhysicsProp>(Best))
 	{
 		Prop->PickUp(this);
-		SetHeldProp(Prop);
-		Notify(LOCTEXT("PropGrabbed", "Got it! Left click to swing, Z to throw."));
+		if (Prop->IsHeld()) // (Border Patrol grabbing a smuggling package confiscates it on the spot)
+		{
+			SetHeldProp(Prop);
+			Notify(LOCTEXT("PropGrabbed", "Got it! Left click to swing, Z to throw."));
+		}
 		return;
 	}
 	ABRCharacter* Target = Cast<ABRCharacter>(Best);
@@ -4700,6 +4735,10 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 			if (ABRPhysicsProp* Prop = Cast<ABRPhysicsProp>(O.GetActor()); Prop && !Prop->IsHeld())
 			{
 				Prop->PickUp(this);
+				if (!Prop->IsHeld())
+				{
+					return true; // confiscated (Border Patrol + smuggling package)
+				}
 				SetHeldProp(Prop);
 				bPropInHands = true;
 				Multicast_Sfx(5);
@@ -5556,7 +5595,10 @@ void ABRCharacter::TickSprintStamina(float DeltaSeconds)
 	const bool bRunning = IsSprinting() && !bWinded && Move && Move->IsMovingOnGround() && GetVelocity().Size2D() > 250.f;
 	if (bRunning)
 	{
-		SprintStamina = FMath::Max(0.f, SprintStamina - DeltaSeconds / FMath::Max(1.f, SprintSeconds));
+		// Treadmill training: +15% sprint time per SPEED level (up to +75%).
+		const ABRPlayerState* StaminaPS = GetBRPlayerState();
+		const float Endurance = 1.f + 0.15f * (StaminaPS ? StaminaPS->GymSpeed : 0);
+		SprintStamina = FMath::Max(0.f, SprintStamina - DeltaSeconds / FMath::Max(1.f, SprintSeconds * Endurance));
 		LastSprintDrainTime = Now;
 		if (SprintStamina <= 0.f)
 		{

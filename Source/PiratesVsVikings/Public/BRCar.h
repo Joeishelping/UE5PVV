@@ -159,6 +159,18 @@ public:
 	bool AddNPC(APVVCharacter* NPC);
 
 	bool IsNPCTruck() const { return bNPCDriven; }
+	/** Dirty NPC drivers sometimes slip Border Patrol a bribe at the checkpoint (0 = no offer). Take it = budget, but a camera seeing it = SCANDAL. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Truck") int32 BribeOffer = 0;
+	/** Chance a truck with someone dirty aboard offers a bribe. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float BribeChance = 0.35f;
+	bool WantsBribe(const APVVCharacter* Interactor) const;
+	/** Box trucks: an NPC driver won't pull away while the back doors are open. */
+	virtual bool HoldsAtCheckpoint() const { return false; }
+	bool HasReachedFarSide() const { return bReachedFarSide; }
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override;
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 	/** NPC truck that hasn't been through the checkpoint yet (it's in the line). */
 	bool IsInBorderLine() const { return bNPCDriven && !bCheckpointDone && !bRunningGate; }
 	/** NPC truck deliberately flooring it through the checkpoint. */
@@ -213,6 +225,7 @@ private:
 	float FedUpFrom = -1.f;
 	void StepOutForSearch(ABRCharacter* Inspector);
 	bool bRunningGate = false;
+	bool bBribeRolled = false;
 
 	void DriveNPC(float DeltaSeconds);
 	/** Show/hide the body parts and set seats + handling for Model. */

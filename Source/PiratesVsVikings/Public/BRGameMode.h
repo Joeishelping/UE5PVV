@@ -36,6 +36,9 @@ public:
 	/** A Warden ordered everyone out of a vehicle. Finding no Runners = harassing citizens. */
 	void OnVehicleSearched(APVVCharacter* Warden, int32 RunnersFound);
 	void ChangeApproval(float Delta);
+	/** A Border Patrol agent took a bribe on camera: scandal. */
+	void OnBribeFilmed(APVVCharacter* Warden, int32 Amount);
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float BribeScandalPenalty = 20.f;
 
 	// --- Points race ----------------------------------------------------------------------
 	void AwardPoints(APVVCharacter* Who, int32 Amount);
@@ -169,6 +172,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxNPCTrucks = 6;
 	/** No new truck spawns while this many are already waiting in the line for the checkpoint. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxTrucksInLine = 3;
+	/** Chance an NPC truck is a box truck (cargo hold to search). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") float BoxTruckChance = 0.25f;
 	/** NPCs per truck (driver included). Up to 4 seats - empty seats are where Runners hide. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FIntPoint NPCsPerTruck = FIntPoint(1, 3);
 	/**

@@ -197,6 +197,13 @@ public:
 	bool bNoFightBack = false;
 	/** A Border Patrol sparring recruit (no trouble for hitting him, dogs leave him alone). */
 	bool bSparring = false;
+	/** In a high-noon duel: a loaner revolver, and which duel. */
+	UPROPERTY(Replicated) bool bDuelGun = false;
+	TWeakObjectPtr<class ABRDuelSpot> Duel;
+	/** Server: fire a shot at Target (duel pistolero) - visuals only, the duel decides who dies. */
+	void DuelShoot(ABRCharacter* Target, bool bHit);
+	void SetWeaponDrawn(bool bDrawn) { bWeaponDrawn = bDrawn; }
+	void FillRunnerAmmo() { AmmoRunnerGun = 6; }
 	/** Server (NPC): become a sparring recruit and square up to Opponent. Level = wins in a row (tougher each time). */
 	void MakeSparringPartner(ABRCharacter* Opponent, int32 Level);
 	/** Belongs to the cantina (patron / bouncer): town events leave them alone. */

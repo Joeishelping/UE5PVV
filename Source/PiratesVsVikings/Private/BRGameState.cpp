@@ -173,9 +173,13 @@ void ABRGameState::SpawnLocalFX(UObject* Context, EBRFX Kind, const FVector& Loc
 			return;
 		}
 	}
+	if (Kind == EBRFX::Dust && !GetDefault<UBRSettings>()->bDustEffects)
+	{
+		return;
+	}
 	if (UNiagaraSystem* System = GetDefault<UBRSettings>()->GetEffect(Kind))
 	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, FRotator::ZeroRotator, FVector(Scale));
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, FRotator::ZeroRotator, FVector(Scale * GetDefault<UBRSettings>()->GetEffectSize(Kind)));
 		return;
 	}
 	// No cigarette effect of its own: use your Smoke Effect, shrunk way down (a cigarette puff, not a cannon blast).

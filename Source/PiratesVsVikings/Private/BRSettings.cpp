@@ -72,6 +72,20 @@ UNiagaraSystem* UBRSettings::GetEffect(EBRFX Kind) const
 	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;
 }
 
+float UBRSettings::GetEffectSize(EBRFX Kind) const
+{
+	switch (Kind)
+	{
+	case EBRFX::Dust:     return DustEffectSize;
+	case EBRFX::Splash:   return SplashEffectSize;
+	case EBRFX::Smoke:    return SmokeEffectSize;
+	case EBRFX::PunchHit: return PunchHitEffectSize;
+	case EBRFX::Sparks:   return SparksEffectSize;
+	case EBRFX::Blood:    return BloodEffectSize;
+	default:              return 1.f;
+	}
+}
+
 bool UBRSettings::ApplySurface(UStaticMeshComponent* Mesh, const FString& Kind, const FString& Piece) const
 {
 	if (!Mesh)

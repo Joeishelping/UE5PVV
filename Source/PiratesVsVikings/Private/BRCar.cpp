@@ -1,4 +1,5 @@
 #include "BRCar.h"
+#include "BRPolice.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "BRAudio.h"
 #include "BRCharacter.h"
@@ -215,9 +216,10 @@ void ABRCar::TickRunOver()
 	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 	{
 		ABRCharacter* C = *It;
-		if (C->GetCurrentBoat() || C->GetCarrier() || C->IsInCannon() || C->GetCondition() == EPVVCondition::Detained)
+		if (C->GetCurrentBoat() || C->GetCarrier() || C->IsInCannon() || C->GetCondition() == EPVVCondition::Detained
+			|| C->GetAttachParentActor() == this || (C->GetMovementBase() && C->GetMovementBase()->GetOwner() == this))
 		{
-			continue;
+			continue; // riding in / on this vehicle (box truck cargo hold)
 		}
 		const FVector Rel = Body->GetComponentQuat().UnrotateVector(C->GetActorLocation() - Center);
 		if (FMath::Abs(Rel.X) > Extent.X || FMath::Abs(Rel.Y) > Extent.Y || FMath::Abs(Rel.Z) > Extent.Z)
@@ -953,6 +955,7 @@ void ABRTruck::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ABRTruck, Model);
+	DOREPLIFETIME(ABRTruck, BribeOffer);
 }
 
 FString ABRTruck::GetModelName() const
@@ -1209,6 +1212,27 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 				bAnySuspect |= BRC->IsSuspect();
 			}
 		}
+		// A dirty driver might try to buy their way through (not always).
+		if (!bBribeRolled && Now - CheckpointArrivalTime > 1.5f)
+		{
+			bBribeRolled = true;
+			bool bDirtyAboard = false;
+			for (APVVCharacter* Occupant : Occupants)
+			{
+				const ABRCharacter* BRC = Cast<ABRCharacter>(Occupant);
+				bDirtyAboard |= BRC && BRC->IsNPC() && BRC->IsSuspect();
+			}
+			if (bDirtyAboard && FMath::FRand() < BribeChance)
+			{
+				BribeOffer = FMath::RandRange(4, 12) * 50;
+				ForceNetUpdate();
+				ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(150.f, 0.f, 260.f), FString::Printf(TEXT("psst... $%d?"), BribeOffer));
+			}
+		}
+		if (BribeOffer > 0 && (bSteppedOut || bReacted || bRunningGate))
+		{
+			BribeOffer = 0; // too late for that now
+		}
 		// Everybody scanned: they ALL step out and wait by the van to be searched (hold E on each).
 		// Clean people get back in once searched; anyone with no papers reacts (fight, run or hands up).
 		if (bAllScanned && !bSteppedOut && !bRunningGate)
@@ -1218,9 +1242,9 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 			StepOutForSearch(Inspector);
 			return;
 		}
-		if (WaitingOutside.Num() > 0)
+		if (WaitingOutside.Num() > 0 || HoldsAtCheckpoint())
 		{
-			FedUpFrom = Now; // nobody gets fed up while they're being searched
+			FedUpFrom = Now; // nobody gets fed up while they're being searched (or the back is open)
 			return;
 		}
 		const bool bCleared = bAllScanned && !bAnySuspect;
@@ -1256,6 +1280,7 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 		}
 		if (bCheckpointDone)
 		{
+			BribeOffer = 0;
 			if (CheckGate && !CheckGate->IsOpen())
 			{
 				CheckGate->OpenFor(8.f);
@@ -1568,6 +1593,69 @@ void ABRTruck::ReturnFromSearch(APVVCharacter* Passenger, int32 Seat)
 	{
 		SeatCharacter(Passenger, Free);
 	}
+	ForceNetUpdate();
+}
+
+// ===========================================================================================
+// Bribes at the checkpoint
+
+bool ABRTruck::WantsBribe(const APVVCharacter* Interactor) const
+{
+	return BribeOffer > 0 && bNPCDriven && !bCheckpointDone && Interactor && Interactor->GetFaction() == BR::Wardens
+		&& Interactor->GetCondition() == EPVVCondition::Normal && !Interactor->GetCurrentBoat() && !Interactor->GetCarriedCharacter()
+		&& FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) < 520.f;
+}
+
+bool ABRTruck::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	return WantsBribe(Interactor) || Super::CanInteract_Implementation(Interactor);
+}
+
+float ABRTruck::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
+{
+	return WantsBribe(Interactor) ? 1.5f : Super::GetInteractDuration_Implementation(Interactor);
+}
+
+FText ABRTruck::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	if (WantsBribe(Interactor))
+	{
+		return FText::Format(LOCTEXT("Bribe", "TAKE the ${0} bribe and wave them through (hold) - watch the cameras! | O = order them out"), BribeOffer);
+	}
+	return Super::GetInteractPrompt_Implementation(Interactor);
+}
+
+void ABRTruck::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	if (!WantsBribe(Interactor))
+	{
+		Super::OnInteract_Implementation(Interactor);
+		return;
+	}
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const int32 Amount = BribeOffer;
+	BribeOffer = 0;
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	// Caught on tape? Cameras look at your head (and ignore this truck).
+	const bool bFilmed = ABRSurveillanceCamera::AnyCameraSees(GetWorld(), Interactor->GetActorLocation() + FVector(0.f, 0.f, 60.f), this);
+	if (GM)
+	{
+		if (bFilmed)
+		{
+			GM->OnBribeFilmed(Interactor, Amount);
+		}
+		else
+		{
+			GM->AddBudget(Amount);
+			ABRGameState::FX(this, EBRFX::MoneyText, Interactor->GetActorLocation() + FVector(0.f, 0.f, 80.f), FString::Printf(TEXT("+$%d (shh)"), Amount));
+		}
+	}
+	// Waved through: no catch, no approval - whoever is aboard rides on into the US.
+	bCheckpointDone = true;
+	bReacted = true;
 	ForceNetUpdate();
 }
 

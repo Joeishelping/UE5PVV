@@ -148,6 +148,16 @@ public:
 	// --- Effects: drag in a Niagara particle system (free ones on Fab). Empty = the simple built-in look. ---------
 	/** Dust when someone lands hard, belly-flops or falls off a wall. */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> DustEffect;
+	/** Size of each effect you plugged in (1 = as the asset was made). Many free effects are HUGE - turn them down here. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (ClampMin = "0.05", ClampMax = "3")) float DustEffectSize = 0.3f;
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (ClampMin = "0.05", ClampMax = "3")) float SplashEffectSize = 1.f;
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (ClampMin = "0.05", ClampMax = "3")) float SmokeEffectSize = 1.f;
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (ClampMin = "0.05", ClampMax = "3")) float PunchHitEffectSize = 1.f;
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (ClampMin = "0.05", ClampMax = "3")) float SparksEffectSize = 1.f;
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (ClampMin = "0.05", ClampMax = "3")) float BloodEffectSize = 1.f;
+	/** Untick to never show dust at all. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") bool bDustEffects = true;
+	float GetEffectSize(EBRFX Kind) const;
 	/** Splash when someone hits deep water. */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SplashEffect;
 	/** Cannon smoke. */

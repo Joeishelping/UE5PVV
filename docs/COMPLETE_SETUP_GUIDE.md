@@ -1129,6 +1129,49 @@ Everything pays the **government budget**. Full pay during prep, half once the L
 
 If your **BP_BRGameMode** has its own values for *NPC Truck Every Seconds* or *Max NPC Trucks*, those win. Reset them with the yellow arrow to get the new defaults.
 
+## Part 15ac: Bribes, box trucks, duels, effect sizes
+
+Nothing to plug in.
+
+### Effects too big? (the giant sand swirl)
+**Edit → Project Settings → Border Run → Effects** now has a size slider for every effect, for example **Dust Effect Size** (default 0.3). Lots of free effects are made huge, so turn them down there. Untick **Dust Effects** to turn dust off completely. A normal dive landing doesn't make dust any more, only big falls and landings do.
+
+### Treadmill
+Each SPEED level also gives you 15% more sprint.
+
+### Bribes at the checkpoint (Border Patrol)
+- Sometimes a truck with someone dirty aboard offers a bribe ("psst... $350?"). It doesn't happen every time.
+- Hold **E** at the truck to take it. The money goes to the budget, and the truck drives through with whoever's aboard, so the Runners can still score off them.
+- Two **security cameras by the gate** pan side to side. If one is pointed at you when you take the money, it's a **SCANDAL**: you lose 20 approval and the bribe money as a fine.
+- The middle of the screen tells you **ON CAMERA** or **looking away: hold E NOW**. Time it.
+- Runners can smash those cameras.
+
+### Box trucks
+- **Mexicans:** the **SMUGGLING TRUCK JOB** board is on the south edge of town. Hold E and you get:
+  - a box truck with its back doors open,
+  - 4 smuggling packages,
+  - 5 crates,
+  - 2 clients.
+- **Loading it:**
+  1. Grab the packages (**Z**) and throw them in the back.
+  2. Pile the crates in front of them.
+  3. Your clients walk up the ramp and hide in the back by themselves.
+  4. Close the doors (**E** at the back) and drive to the Safe Zone.
+- **Pay:** $400 per package that arrives in the back, plus what the clients pay. Each package Border Patrol seize costs you $300.
+- **Doors:** the two back doors swing on real hinges. They flap open further when you speed up, swing toward shut when you brake, and swing apart when you turn. People walking into them push them. Once you close them they stay latched until somebody opens them.
+- **Cargo:** while the truck is moving, everything in the back is locked down. When it stops it tumbles loose, so you can dig through it.
+- **Border Patrol:** about 1 in 4 NPC trucks is a box truck. The driver will scan clean, so open the back (**E**), climb up the ramp, shove the crates around and grab the packages. Grabbing one **seizes** it for +$200 budget. Anyone hiding back there jumps out to fight, run or give up. The NPC driver won't leave while the back is open.
+
+### High-noon duel (west end of town, past the welcome sign)
+1. Hold E at the duel post. You need at least $200.
+2. You both stand on your marks for 3... 2... 1... then a random pause... **DRAW!**
+3. Your revolver comes out: **right mouse** to aim, **left click** to fire. One hit kills.
+
+- **Win:** your money is doubled, plus $1,500. Every pistolero after that draws faster.
+- **Lose:** you're dead, and he takes ALL your money and everything in your pockets.
+- **Fire before DRAW:** you're shot.
+- **Walk off your mark:** you're a coward and he takes your money.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

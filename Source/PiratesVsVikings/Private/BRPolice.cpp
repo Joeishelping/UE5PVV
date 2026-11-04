@@ -50,9 +50,12 @@ ABRSurveillanceCamera::ABRSurveillanceCamera()
 void ABRSurveillanceCamera::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	// Slowly pans left and right (on every screen).
+	// Slowly pans left and right - in step on every screen (server clock), so you can time things like bribes.
 	Sweep += DeltaSeconds;
-	Head->SetRelativeRotation(FRotator(-8.f, 25.f * FMath::Sin(Sweep * 0.5f), 0.f));
+	const ABRGameState* ClockGS = GetWorld()->GetGameState<ABRGameState>();
+	const float Clock = ClockGS ? ClockGS->GetServerWorldTimeSeconds() : Sweep;
+	const float Phase = FMath::Fmod(FMath::Abs(GetActorLocation().X * 0.013f + GetActorLocation().Y * 0.007f), 6.283f);
+	Head->SetRelativeRotation(FRotator(-8.f, SweepAngle * FMath::Sin(Clock * SweepSpeed + Phase), 0.f));
 	Lamp->SetVisibility(FMath::Fmod(Sweep, 1.f) < 0.5f); // blinking REC light
 	if (!HasAuthority() || Sweep < NextLook)
 	{
@@ -95,6 +98,40 @@ void ABRSurveillanceCamera::Tick(float DeltaSeconds)
 			}
 		}
 	}
+}
+
+bool ABRSurveillanceCamera::SeesPoint(const FVector& Point, const AActor* IgnoreActor) const
+{
+	const FVector Eye = Head->GetComponentLocation();
+	const FVector To = Point - Eye;
+	if (To.Size() > Range)
+	{
+		return false;
+	}
+	const FVector Look = Head->GetForwardVector().GetSafeNormal2D();
+	if (FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(To.GetSafeNormal2D(), Look), -1.f, 1.f))) > HalfAngle)
+	{
+		return false;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRCameraSees), false, this);
+	if (IgnoreActor)
+	{
+		Params.AddIgnoredActor(IgnoreActor);
+	}
+	FHitResult Block;
+	return !GetWorld()->LineTraceSingleByChannel(Block, Eye, Point, ECC_Visibility, Params);
+}
+
+bool ABRSurveillanceCamera::AnyCameraSees(const UWorld* World, const FVector& Point, const AActor* IgnoreActor)
+{
+	for (TActorIterator<ABRSurveillanceCamera> It(World); It; ++It)
+	{
+		if (It->SeesPoint(Point, IgnoreActor))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool ABRSurveillanceCamera::CanInteract_Implementation(APVVCharacter* Interactor) const
