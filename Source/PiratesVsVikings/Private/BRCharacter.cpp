@@ -1081,7 +1081,7 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 		const bool bAtStep = FVector::Dist2D(Step, GetActorLocation()) < 120.f;
 		const FVector Goal = bAtStep ? Hold->GetHoldCenter() : Step;
 		GetCharacterMovement()->MaxWalkSpeed = 420.f;
-		AddMovementInput(((Goal - GetActorLocation()) * FVector(1.f, 1.f, 0.f)).GetSafeNormal(), 1.f);
+		AddMovementInput(NPCSteer(((Goal - GetActorLocation()) * FVector(1.f, 1.f, 0.f)).GetSafeNormal()), 1.f);
 		return;
 	}
 	// Somebody's going after our coyote? The clients jump in and fight for them.
@@ -1124,7 +1124,7 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 			GetCharacterMovement()->MaxWalkSpeed = 620.f;
 			if (ToThreat.Size() > 130.f)
 			{
-				AddMovementInput(ToThreat.GetSafeNormal(), 1.f);
+				AddMovementInput(NPCSteer(ToThreat.GetSafeNormal()), 1.f);
 			}
 			BrawlerAct(Threat, 0.8f, DeltaSeconds);
 			return;
@@ -1160,8 +1160,78 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 		}
 		const bool bWhistled = GetWorld()->GetTimeSeconds() < WhistleRunUntil;
 		GetCharacterMovement()->MaxWalkSpeed = bWhistled ? 760.f : (Dist > 900.f ? 650.f : 420.f);
-		AddMovementInput(ToLeader.GetSafeNormal(), 1.f);
+		AddMovementInput(NPCSteer(ToLeader.GetSafeNormal(), true), 1.f);
 	}
+}
+
+FVector ABRCharacter::NPCSteer(const FVector& Desired, bool bWallOK)
+{
+	// Feel ahead like a person would: if something solid is in the way (a building, a berm, a truck, a fence),
+	// turn to the side until the way is clear - and stick with that side for a moment so you go round it.
+	const FVector Dir = Desired.GetSafeNormal2D();
+	if (Dir.IsNearlyZero() || !GetWorld())
+	{
+		return Desired;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextSteerTime && FVector::DotProduct(Dir, SteerWanted) > 0.95f)
+	{
+		return SteerResult;
+	}
+	NextSteerTime = Now + 0.15f;
+	SteerWanted = Dir;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRNPCSteer), false, this);
+	if (GetCurrentBoat())
+	{
+		Params.AddIgnoredActor(GetCurrentBoat());
+	}
+	const float Look = 230.f;
+	auto Blocked = [&](const FVector& D) -> bool
+	{
+		for (const float Z : { -40.f, 40.f })
+		{
+			FHitResult Hit;
+			const FVector From = GetActorLocation() + FVector(0.f, 0.f, Z);
+			if (GetWorld()->SweepSingleByChannel(Hit, From, From + D * Look, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(22.f), Params))
+			{
+				AActor* A = Hit.GetActor();
+				const bool bPerson = Cast<APawn>(A) != nullptr && !Cast<APVVBoat>(A);
+				const bool bClimbable = bWallOK && A && (A->IsA<ABRWall>() || A->IsA<ABRWallSegment>());
+				const bool bSlope = Hit.ImpactNormal.Z > 0.7f;
+				if (!bPerson && !bClimbable && !bSlope)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+	if (!Blocked(Dir))
+	{
+		if (Now > SteerSideUntil)
+		{
+			SteerSide = 0;
+		}
+		SteerResult = Dir;
+		return Dir;
+	}
+	const int32 First = SteerSide != 0 ? SteerSide : (FMath::RandBool() ? 1 : -1);
+	for (const float Angle : { 35.f, 70.f, 100.f, 135.f })
+	{
+		for (const int32 S : { First, -First })
+		{
+			const FVector Try = Dir.RotateAngleAxis(Angle * S, FVector::UpVector);
+			if (!Blocked(Try))
+			{
+				SteerSide = S;
+				SteerSideUntil = Now + 1.5f;
+				SteerResult = Try;
+				return Try;
+			}
+		}
+	}
+	SteerResult = -Dir; // boxed in: back out
+	return SteerResult;
 }
 
 void ABRCharacter::TickWander(float DeltaSeconds)
@@ -1222,7 +1292,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			}
 			if (ToFoe.Size() > 170.f) // fighting distance, not nose to nose
 			{
-				AddMovementInput(ToFoe.GetSafeNormal(), 1.f);
+				AddMovementInput(NPCSteer(ToFoe.GetSafeNormal()), 1.f);
 			}
 			BrawlerAct(Foe, BrawlAggression, DeltaSeconds);
 			return;
@@ -1271,7 +1341,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 				const float Weave = FMath::Sin(GetWorld()->GetTimeSeconds() * 1.7f + GetActorLocation().Y * 0.01f) * 0.35f;
 				const FVector Side = FVector::CrossProduct(ToWall, FVector::UpVector);
 				GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
-				AddMovementInput((ToWall + Side * Weave + Dodge * 1.2f).GetSafeNormal(), 1.f);
+				AddMovementInput(NPCSteer((ToWall + Side * Weave + Dodge * 1.2f).GetSafeNormal(), true), 1.f);
 				return;
 			}
 		}
@@ -1296,7 +1366,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			{
 				Server_Dive_Implementation(); // dive away from the grab
 			}
-			AddMovementInput(Run.IsNearlyZero() ? Goal.GetSafeNormal() : Run, 1.f);
+			AddMovementInput(NPCSteer(Run.IsNearlyZero() ? Goal.GetSafeNormal() : Run), 1.f);
 			return;
 		}
 	}
@@ -1346,7 +1416,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			Server_Dive_Implementation(); // dive away from the grab
 		}
 		GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
-		AddMovementInput((Away.GetSafeNormal() + Wiggle).GetSafeNormal(), 1.f);
+		AddMovementInput(NPCSteer((Away.GetSafeNormal() + Wiggle).GetSafeNormal(), true), 1.f);
 		return;
 	}
 	if (Now < WanderPauseUntil)
@@ -1405,7 +1475,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		const float Pace = WanderSpeed * (1.25f + 0.25f * FMath::Sin(GetUniqueID() * 1.7f));
 		GetCharacterMovement()->MaxWalkSpeed = Pace;
 	}
-	AddMovementInput(ToTarget.GetSafeNormal(), 1.f);
+	AddMovementInput(NPCSteer(ToTarget.GetSafeNormal()), 1.f);
 }
 
 void ABRCharacter::BeginPlay()
@@ -6003,7 +6073,7 @@ void ABRCharacter::BrawlerFinish(ABRCharacter* Foe)
 	GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
 	if (ToFoe.Size() > 110.f)
 	{
-		AddMovementInput(ToFoe.GetSafeNormal(), 1.f);
+		AddMovementInput(NPCSteer(ToFoe.GetSafeNormal()), 1.f);
 		return;
 	}
 	SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw, 0.f));
@@ -6128,7 +6198,7 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 	}
 	if (bBrawlIn && Dist > 150.f && Dist < 900.f)
 	{
-		AddMovementInput(ToFoe.GetSafeNormal(), 1.f); // close the distance
+		AddMovementInput(NPCSteer(ToFoe.GetSafeNormal()), 1.f); // close the distance
 		GetCharacterMovement()->MaxWalkSpeed = FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 520.f);
 	}
 	float Pace = FMath::Lerp(0.8f, 0.35f, FMath::Clamp(Aggression, 0.f, 1.f)); // in range: keep swinging
@@ -6208,7 +6278,7 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 			if (ToHazard.Size() > 250.f && Now < BrawlHoldUntil)
 			{
 				// Walk backwards towards the drop, hauling them along (they'll go in first).
-				AddMovementInput(ToHazard.GetSafeNormal(), FightStyle == 1 ? 0.9f : 0.5f);
+				AddMovementInput(NPCSteer(ToHazard.GetSafeNormal()), FightStyle == 1 ? 0.9f : 0.5f);
 			}
 			else if (Now >= BrawlHoldUntil)
 			{

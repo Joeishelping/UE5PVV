@@ -1066,6 +1066,13 @@ private:
 	float NextTripCheck = 0.f;
 	float TripCooldownUntil = 0.f;
 	void TickTrip();
+	/** NPC walking: go AROUND solid things in the way (bWallOK = the border Wall isn't an obstacle, they mean to climb it). */
+	FVector NPCSteer(const FVector& Desired, bool bWallOK = false);
+	float NextSteerTime = 0.f;
+	FVector SteerWanted = FVector::ZeroVector;
+	FVector SteerResult = FVector::ZeroVector;
+	int32 SteerSide = 0;
+	float SteerSideUntil = 0.f;
 	int32 CameraViewCount = 0;
 	TWeakObjectPtr<AActor> ViewingCamera;
 	FVector CameraViewFrom = FVector::ZeroVector;
