@@ -7032,8 +7032,6 @@ void ABRCharacter::TickHeadTag()
 	}
 }
 
-#undef LOCTEXT_NAMESPACE
-
 bool ABRCharacter::MusclesSafe() const
 {
 	const USkeletalMeshComponent* MeshComp = GetMesh();
@@ -7286,7 +7284,8 @@ void ABRCharacter::Die(APVVCharacter* By, bool bGun)
 	if (GM)
 	{
 		const FString Killer = By ? By->GetPlayerDisplayName() : FString(TEXT("Someone"));
-		GM->Feed(FString::Printf(bGun ? TEXT("%s SHOT %s DEAD") : TEXT("%s STABBED %s TO DEATH"), *Killer, *GetPlayerDisplayName()));
+		GM->Feed(bGun ? FString::Printf(TEXT("%s SHOT %s DEAD"), *Killer, *GetPlayerDisplayName())
+			: FString::Printf(TEXT("%s STABBED %s TO DEATH"), *Killer, *GetPlayerDisplayName()));
 	}
 	if (bIsNPC)
 	{
@@ -7339,3 +7338,5 @@ void ABRCharacter::TickWounds(float DeltaSeconds)
 		Health = FMath::Min(100.f, Health + 3.f * DeltaSeconds);
 	}
 }
+
+#undef LOCTEXT_NAMESPACE

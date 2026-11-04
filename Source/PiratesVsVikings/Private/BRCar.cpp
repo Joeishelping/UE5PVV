@@ -1492,8 +1492,6 @@ void ABRTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 }
 
-#undef LOCTEXT_NAMESPACE
-
 void ABRTruck::StepOutForSearch(ABRCharacter* Inspector)
 {
 	TArray<TPair<ABRCharacter*, int32>> Out;
@@ -1535,3 +1533,5 @@ void ABRTruck::ReturnFromSearch(APVVCharacter* Passenger, int32 Seat)
 	}
 	ForceNetUpdate();
 }
+
+#undef LOCTEXT_NAMESPACE

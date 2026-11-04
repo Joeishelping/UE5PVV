@@ -331,8 +331,6 @@ void ABRCharacter::TickOfficer(float DeltaSeconds)
 	BrawlerAct(Target, 0.85f, DeltaSeconds);
 }
 
-#undef LOCTEXT_NAMESPACE
-
 // -------------------------------------------------------------------------------------------
 // NPCs searched at the checkpoint: out of the van, wait to be searched, back in
 
@@ -399,3 +397,5 @@ void ABRCharacter::TickSearchWait()
 		AddMovementInput(ToTruck.GetSafeNormal(), 1.f);
 	}
 }
+
+#undef LOCTEXT_NAMESPACE
