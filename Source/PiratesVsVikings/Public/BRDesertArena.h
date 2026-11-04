@@ -83,7 +83,7 @@ public:
 
 	static constexpr float Ground = 100.f;
 	static constexpr float HalfY = 8000.f;
-	static constexpr float HalfX = 16000.f;
+	static constexpr float HalfX = 19000.f; // (town extends west to the gun shop)
 	static constexpr float RiverHalfWidth = 1500.f;
 	static constexpr float LineX = -5000.f;
 	static constexpr float FenceX = -3500.f;

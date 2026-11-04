@@ -169,13 +169,14 @@ Empty slots use simple built-in puffs.
 ## Part 6: What's on the test map (built automatically)
 | Where | What |
 |---|---|
-| Village (west) | jobs, shops (ladder, cutters, gas, tacos, **poncho**, **trumpet**, **shovel**, **cannonball suit**), coyote counter, cockfight, piñata, **chickens**, villagers |
+| Village (west) | jobs, tacos, coyote counter, cockfight, piñata, **chickens**, villagers |
+| **FERRETERIA** (big tool shop, south side of town, by the gas pumps) | ladders, cutters, gas, shovel, lasso, cardboard box, poncho, trumpet, cannonball suit, scrap buyer, register job, and **boats & rafts** (they wait for you at the river **BOAT DOCK**) |
+| **ARMAS DON CHUY** (big gun shop, far west end of town) | knife, pistol, fake passport, fake uniform, TNT, smoke bombs, grappling hook, lockpick, fuse kit, and the **black market back room** (the cheap gun only at night) |
 | Open desert by the scrapyard (south-west) | the **Lucha Libre ring** with its red challenge counters and green/blue betting counters |
-| Near bank | **Human Cannon** (climb up on the barrel, a friend lights the fuse: BOOM), tunnels, marina |
+| Near bank | **Human Cannon** (climb up on the barrel, a friend lights the fuse: BOOM), tunnels, the boat dock |
 | Border Patrol side | 2 **watchtowers**, the Holding Pen and catapult, blue **GOV. SUPPLY** counters (now with a **Lasso**) |
 | North of the plaza | the **mariachi band stage** |
 | Around both sides | **hiding spots**: dumpsters, porta-potties, hay bales |
-| Tool shop | new counters: **LASSO $150**, **CARDBOARD BOX $30** |
 
 **The mariachi band:**
 1. Buy a trumpet, walk onto the stage, and press **E** to join the band.

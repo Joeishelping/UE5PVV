@@ -155,16 +155,23 @@ ABRDesertArena::ABRDesertArena()
 	AddBlock(TEXT("Edge_E"), FVector(EastX + 100.f, 0.f, 300.f), FVector(200.f, HalfY * 2.f, 1000.f), ArenaAdobe);
 
 	// Town.
-	AddHut(TEXT("ToolShop"), FVector(-11500.f, -3000.f, Ground), FVector(1400.f, 1000.f, 400.f), ArenaAdobe);
-	AddSign(TEXT("Sign_ToolShop"), TEXT("TOOL SHOP & GAS"), FVector(-10780.f, -3000.f, Ground + 480.f), 0.f, 90.f, FColor(255, 210, 120));
-	AddBlock(TEXT("Pump_1"), FVector(-10300.f, -4250.f, Ground + 90.f), FVector(60.f, 60.f, 180.f), FLinearColor(0.7f, 0.1f, 0.1f));
-	AddBlock(TEXT("Pump_2"), FVector(-10300.f, -3750.f, Ground + 90.f), FVector(60.f, 60.f, 180.f), FLinearColor(0.7f, 0.1f, 0.1f));
+	// Big general store: tools, gas, gear AND boats (they launch at the river dock).
+	AddHut(TEXT("ToolShop"), FVector(-11500.f, -3100.f, Ground), FVector(2400.f, 1500.f, 600.f), ArenaAdobe);
+	AddBlock(TEXT("ToolShop_Roof"), FVector(-11500.f, -3100.f, Ground + 620.f), FVector(2480.f, 1580.f, 40.f), FLinearColor(0.45f, 0.3f, 0.2f));
+	AddSign(TEXT("Sign_ToolShop"), TEXT("FERRETERIA - TOOLS, GAS & BOATS"), FVector(-10260.f, -3100.f, Ground + 700.f), 0.f, 110.f, FColor(255, 210, 120));
+	AddBlock(TEXT("Pump_1"), FVector(-9800.f, -4250.f, Ground + 90.f), FVector(60.f, 60.f, 180.f), FLinearColor(0.7f, 0.1f, 0.1f));
+	AddBlock(TEXT("Pump_2"), FVector(-9800.f, -3750.f, Ground + 90.f), FVector(60.f, 60.f, 180.f), FLinearColor(0.7f, 0.1f, 0.1f));
+	// Big gun shop out on the west edge of town: weapons, fake papers, gadgets - and the black market in the back room.
+	AddHut(TEXT("GunShop"), FVector(-17300.f, -3200.f, Ground), FVector(2200.f, 1600.f, 600.f), FLinearColor(0.32f, 0.3f, 0.3f));
+	AddBlock(TEXT("GunShop_Roof"), FVector(-17300.f, -3200.f, Ground + 620.f), FVector(2280.f, 1680.f, 40.f), FLinearColor(0.2f, 0.18f, 0.18f));
+	AddBlock(TEXT("GunShop_BackRoom"), FVector(-17700.f, -3200.f, Ground + 300.f), FVector(30.f, 900.f, 600.f), FLinearColor(0.2f, 0.15f, 0.15f));
+	AddSign(TEXT("Sign_GunShop"), TEXT("ARMAS DON CHUY\nGUNS - PAPERS - GADGETS"), FVector(-16160.f, -3200.f, Ground + 720.f), 0.f, 110.f, FColor(255, 200, 90));
+	AddSign(TEXT("Sign_BackRoom"), TEXT("BACK ROOM (nights only)"), FVector(-17680.f, -3200.f, Ground + 520.f), 0.f, 40.f, FColor(200, 40, 40));
 	AddHut(TEXT("Taco"), FVector(-11500.f, 1800.f, Ground), FVector(800.f, 800.f, 300.f), FLinearColor(0.85f, 0.6f, 0.2f));
 	AddSign(TEXT("Sign_Taco"), TEXT("TACOS"), FVector(-11080.f, 1800.f, Ground + 380.f), 0.f, 120.f, FColor(255, 180, 40));
-	AddHut(TEXT("BlackMarket"), FVector(-14600.f, 5600.f, Ground), FVector(700.f, 600.f, 300.f), FLinearColor(0.12f, 0.1f, 0.1f));
-	AddSign(TEXT("Sign_Black"), TEXT("BLACK MARKET (opens at night)"), FVector(-14230.f, 5600.f, Ground + 360.f), 0.f, 50.f, FColor(200, 40, 40));
-	AddHut(TEXT("Marina"), FVector(-6400.f, -6300.f, Ground), FVector(600.f, 600.f, 300.f), FLinearColor(0.2f, 0.4f, 0.7f));
-	AddSign(TEXT("Sign_Marina"), TEXT("MARINA (boats)"), FVector(-6080.f, -6300.f, Ground + 360.f), 0.f, 60.f, FColor(120, 190, 255));
+	// The boat dock on the river (boats bought at the tool shop launch here).
+	AddBlock(TEXT("Dock_Deck"), FVector(-2550.f, -6000.f, Ground + 10.f), FVector(500.f, 900.f, 30.f), FLinearColor(0.4f, 0.28f, 0.15f));
+	AddSign(TEXT("Sign_Dock"), TEXT("BOAT DOCK"), FVector(-2800.f, -6000.f, Ground + 300.f), 0.f, 60.f, FColor(120, 190, 255));
 	AddSign(TEXT("Sign_Scrap"), TEXT("SCRAPYARD"), FVector(-13800.f, -6200.f, Ground + 300.f), 0.f, 70.f, FColor(200, 200, 200));
 	AddBlock(TEXT("Junk_1"), FVector(-14100.f, -6700.f, Ground + 60.f), FVector(300.f, 200.f, 120.f), FLinearColor(0.3f, 0.25f, 0.2f), FRotator(0.f, 20.f, 8.f));
 	AddBlock(TEXT("Junk_2"), FVector(-13500.f, -7000.f, Ground + 80.f), FVector(250.f, 250.f, 160.f), FLinearColor(0.35f, 0.3f, 0.25f), FRotator(10.f, -15.f, 0.f));
@@ -1015,54 +1022,55 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 
 	// --- Shops & jobs (Runner side)
 	const FLinearColor Shop(0.8f, 0.7f, 0.4f), Job(0.3f, 0.7f, 0.3f), Shady(0.5f, 0.1f, 0.1f);
-	Station(-12000.f, -3400.f, EBRStationKind::BuyItem, EBRItem::Ladder, 60, TEXT("LADDERS $60"), Shop);
-	Station(-12000.f, -3000.f, EBRStationKind::BuyItem, EBRItem::WireCutters, 50, TEXT("WIRE CUTTERS $50"), Shop);
-	Station(-12000.f, -2600.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS $25"), Shop);
-	Station(-11000.f, -3400.f, EBRStationKind::SellItem, EBRItem::Scrap, 25, TEXT("WE BUY SCRAP"), Shop);
-	Station(-11000.f, -3000.f, EBRStationKind::BuyItem, EBRItem::CannonSuit, 500, TEXT("CANNONBALL SUIT $500"), FLinearColor(0.8f, 0.15f, 0.1f));
-	Station(-11500.f, -3300.f, EBRStationKind::BuyItem, EBRItem::Shovel, 80, TEXT("SHOVEL $80"), Shop);
-	// Weapon store (expensive): a knife doubles your punch damage; a gun is contraband (shows up on a scan!).
-	{
-		const FLinearColor Armas(0.25f, 0.25f, 0.28f);
-		Station(-12600.f, -3400.f, EBRStationKind::BuyItem, EBRItem::Knife, 600, TEXT("ARMAS DON CHUY\nKNIFE $600"), Armas);
-		Station(-12600.f, -3000.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 1800, TEXT("ARMAS DON CHUY\nPISTOL $1800 (contraband!)"), Armas);
-		// Forger: a fake passport passes the papers scan (but not if you're carrying contraband).
-		Station(-12600.f, -2600.f, EBRStationKind::BuyItem, EBRItem::FakePassport, 1000, TEXT("PAPELES CHUCHO\nFAKE PASSPORT $1000"), FLinearColor(0.35f, 0.2f, 0.45f));
-		// Gadgets.
-		const FLinearColor Gadget(0.3f, 0.35f, 0.3f);
-		Station(-13200.f, -3400.f, EBRStationKind::BuyItem, EBRItem::SmokeBomb, 150, TEXT("SMOKE BOMB $150"), Gadget);
-		Station(-13200.f, -3000.f, EBRStationKind::BuyItem, EBRItem::GrappleHook, 350, TEXT("GRAPPLING HOOK $350"), Gadget);
-		Station(-13200.f, -2600.f, EBRStationKind::BuyItem, EBRItem::Lockpick, 250, TEXT("LOCKPICK $250"), Gadget);
-		Station(-13800.f, -3000.f, EBRStationKind::BuyItem, EBRItem::FakeUniform, 1500, TEXT("FAKE BORDER PATROL UNIFORM $1500"), FLinearColor(0.15f, 0.25f, 0.55f));
-		Station(-13800.f, -3400.f, EBRStationKind::BuyItem, EBRItem::TNT, 900, TEXT("TNT $900\n(blows a hole in the Wall)"), FLinearColor(0.75f, 0.12f, 0.1f));
-		Station(-13800.f, -2600.f, EBRStationKind::BuyItem, EBRItem::FuseKit, 300, TEXT("FUSE KIT $300\n(kills the fence power)"), Gadget);
-	}
-	Station(-11500.f, -2700.f, EBRStationKind::BuyItem, EBRItem::Trumpet, 120, TEXT("MARIACHI TRUMPET $120"), FLinearColor(0.9f, 0.6f, 0.1f));
-	Station(-12000.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Poncho, 200, TEXT("PONCHO DISGUISE $200"), FLinearColor(0.75f, 0.25f, 0.15f));
-	Station(-11600.f, -2200.f, EBRStationKind::BuyItem, EBRItem::Lasso, 150, TEXT("LASSO $150"), Shop);
-	Station(-11200.f, -2200.f, EBRStationKind::BuyItem, EBRItem::CardboardBox, 30, TEXT("CARDBOARD BOX $30"), Shop);
-	Station(-11000.f, -2600.f, EBRStationKind::Job, EBRItem::None, 20, TEXT("Work the register"), Job, 5.f, 3.f);
-	Station(-10300.f, -4000.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS PUMP $25"), Shop);
-	Station(-11700.f, 1550.f, EBRStationKind::Job, EBRItem::None, 15, TEXT("Cook & sell tacos"), Job, 4.f, 2.f);
-	Station(-11700.f, 2050.f, EBRStationKind::BuyItem, EBRItem::Taco, 8, TEXT("TACO $8"), Shop);
-	Station(-11300.f, 2050.f, EBRStationKind::BuyItem, EBRItem::TacoPlatter, 40, TEXT("TACO PLATTER $40 (feeds 8)"), Shop);
-	Station(-13000.f, 1500.f, EBRStationKind::HireClient, EBRItem::None, 250, TEXT(""), FLinearColor(0.3f, 0.25f, 0.2f), 0.f, 10.f);
-	Station(-14600.f, 4900.f, EBRStationKind::BuyItem, EBRItem::Drugs, 150, TEXT("??? PACKAGE $150"), Shady);
-	Station(-14600.f, 5600.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 150, TEXT("??? $150"), Shady, 0.f, 0.f, true);
-	if (ABRStation* Marina = Station(-6400.f, -6300.f, EBRStationKind::BuyBoat, EBRItem::None, 120, TEXT("BOATS $120"), FLinearColor(0.3f, 0.5f, 0.9f)))
+	// FERRETERIA (big tool shop, door faces east): counters in rows inside.
+	Station(-12450.f, -3600.f, EBRStationKind::BuyItem, EBRItem::Ladder, 60, TEXT("LADDERS $60"), Shop);
+	Station(-12450.f, -3100.f, EBRStationKind::BuyItem, EBRItem::WireCutters, 50, TEXT("WIRE CUTTERS $50"), Shop);
+	Station(-12450.f, -2600.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS $25"), Shop);
+	Station(-11950.f, -3600.f, EBRStationKind::BuyItem, EBRItem::Shovel, 80, TEXT("SHOVEL $80\n(breaks after 6 digs)"), Shop);
+	Station(-11950.f, -3100.f, EBRStationKind::BuyItem, EBRItem::Lasso, 150, TEXT("LASSO $150"), Shop);
+	Station(-11950.f, -2600.f, EBRStationKind::BuyItem, EBRItem::CardboardBox, 30, TEXT("CARDBOARD BOX $30"), Shop);
+	Station(-11450.f, -3600.f, EBRStationKind::BuyItem, EBRItem::Poncho, 200, TEXT("PONCHO DISGUISE $200"), FLinearColor(0.75f, 0.25f, 0.15f));
+	Station(-11450.f, -3100.f, EBRStationKind::BuyItem, EBRItem::Trumpet, 120, TEXT("MARIACHI TRUMPET $120"), FLinearColor(0.9f, 0.6f, 0.1f));
+	Station(-11450.f, -2600.f, EBRStationKind::BuyItem, EBRItem::CannonSuit, 500, TEXT("CANNONBALL SUIT $500"), FLinearColor(0.8f, 0.15f, 0.1f));
+	Station(-10950.f, -3600.f, EBRStationKind::SellItem, EBRItem::Scrap, 25, TEXT("WE BUY SCRAP"), Shop);
+	Station(-10950.f, -2600.f, EBRStationKind::Job, EBRItem::None, 20, TEXT("Work the register"), Job, 5.f, 3.f);
+	// Boats and rafts are sold here too - they're waiting for you at the river dock.
+	if (ABRStation* Marina = Station(-10650.f, -3650.f, EBRStationKind::BuyBoat, EBRItem::None, 120, TEXT("BOAT $120\n(at the river dock)"), FLinearColor(0.3f, 0.5f, 0.9f)))
 	{
 		Marina->BoatSpawn = O + FVector(-900.f, -6300.f, 40.f);
 	}
 	// Inflatable rafts: cheaper and lighter than a boat, but a bullet or anti-air round pops them.
-	if (ABRStation* RaftShop = Station(-6400.f, -5800.f, EBRStationKind::BuyBoat, EBRItem::None, 80, TEXT("INFLATABLE RAFT $80\n(pops if shot!)"), FLinearColor(0.95f, 0.45f, 0.08f)))
+	if (ABRStation* RaftShop = Station(-10650.f, -2550.f, EBRStationKind::BuyBoat, EBRItem::None, 80, TEXT("INFLATABLE RAFT $80\n(at the dock - pops if shot!)"), FLinearColor(0.95f, 0.45f, 0.08f)))
 	{
 		RaftShop->BoatSpawn = O + FVector(-900.f, -5600.f, 40.f);
 		RaftShop->BoatClass = ABRRaft::StaticClass();
 	}
+	Station(-9800.f, -4000.f, EBRStationKind::BuyItem, EBRItem::GasCan, 25, TEXT("GAS PUMP $25"), Shop);
+	// ARMAS DON CHUY (big gun shop, west edge of town, door faces east). A knife doubles your punch damage;
+	// a gun is contraband (shows up when searched!). Papers, gadgets, and the black market in the back room.
+	{
+		const FLinearColor Armas(0.25f, 0.25f, 0.28f), Gadget(0.3f, 0.35f, 0.3f);
+		Station(-16650.f, -3750.f, EBRStationKind::BuyItem, EBRItem::Knife, 600, TEXT("KNIFE $600"), Armas);
+		Station(-16650.f, -2650.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 1800, TEXT("PISTOL $1800\n(contraband!)"), Armas);
+		Station(-17150.f, -3750.f, EBRStationKind::BuyItem, EBRItem::FakePassport, 1000, TEXT("PAPELES CHUCHO\nFAKE PASSPORT $1000"), FLinearColor(0.35f, 0.2f, 0.45f));
+		Station(-17150.f, -3200.f, EBRStationKind::BuyItem, EBRItem::FakeUniform, 1500, TEXT("FAKE BORDER PATROL UNIFORM $1500"), FLinearColor(0.15f, 0.25f, 0.55f));
+		Station(-17150.f, -2650.f, EBRStationKind::BuyItem, EBRItem::TNT, 900, TEXT("TNT $900\n(blows a hole in the Wall)"), FLinearColor(0.75f, 0.12f, 0.1f));
+		Station(-17550.f, -3750.f, EBRStationKind::BuyItem, EBRItem::SmokeBomb, 150, TEXT("SMOKE BOMB $150"), Gadget);
+		Station(-17550.f, -3200.f, EBRStationKind::BuyItem, EBRItem::GrappleHook, 350, TEXT("GRAPPLING HOOK $350"), Gadget);
+		Station(-17550.f, -2650.f, EBRStationKind::BuyItem, EBRItem::Lockpick, 250, TEXT("LOCKPICK $250"), Gadget);
+		Station(-16650.f, -3250.f, EBRStationKind::BuyItem, EBRItem::FuseKit, 300, TEXT("FUSE KIT $300\n(kills the fence power)"), Gadget);
+		// Back room (behind the partition): the black market - cheap, no questions asked, nights only for the gun.
+		Station(-18100.f, -3550.f, EBRStationKind::BuyItem, EBRItem::Drugs, 150, TEXT("??? PACKAGE $150"), Shady);
+		Station(-18100.f, -2850.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 150, TEXT("??? $150 (nights)"), Shady, 0.f, 0.f, true);
+	}
+	Station(-11700.f, 1550.f, EBRStationKind::Job, EBRItem::None, 15, TEXT("Cook & sell tacos"), Job, 4.f, 2.f);
+	Station(-11700.f, 2050.f, EBRStationKind::BuyItem, EBRItem::Taco, 8, TEXT("TACO $8"), Shop);
+	Station(-11300.f, 2050.f, EBRStationKind::BuyItem, EBRItem::TacoPlatter, 40, TEXT("TACO PLATTER $40 (feeds 8)"), Shop);
+	Station(-13000.f, 1500.f, EBRStationKind::HireClient, EBRItem::None, 250, TEXT(""), FLinearColor(0.3f, 0.25f, 0.2f), 0.f, 10.f);
 	// Hot air balloon launch pad (north-west of town) and two wheelbarrows by the shops.
 	World->SpawnActor<ABRBalloon>(ABRBalloon::StaticClass(), At(-13600.f, 4300.f, Ground), Params);
-	World->SpawnActor<ABRWheelbarrow>(ABRWheelbarrow::StaticClass(), At(-11800.f, -2200.f, Ground), Params);
-	World->SpawnActor<ABRWheelbarrow>(ABRWheelbarrow::StaticClass(), At(-11400.f, -2200.f, Ground), Params);
+	World->SpawnActor<ABRWheelbarrow>(ABRWheelbarrow::StaticClass(), At(-10000.f, -2300.f, Ground), Params);
+	World->SpawnActor<ABRWheelbarrow>(ABRWheelbarrow::StaticClass(), At(-10000.f, -1950.f, Ground), Params);
 	const FVector2D ScrapSpots[] = { {-13800.f, -6200.f}, {-15200.f, -500.f}, {-8200.f, 6600.f}, {-9000.f, -6800.f}, {-6600.f, 3000.f} };
 	for (const FVector2D& Spot : ScrapSpots)
 	{
