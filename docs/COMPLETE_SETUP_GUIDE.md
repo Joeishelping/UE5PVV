@@ -1271,6 +1271,18 @@ Nothing drives through the checkpoint on its own any more. At the truck:
 - **Trip:** running flat out into something low (a crate, a sack, a low wall, someone lying on the floor) sends you over it ("TRIP!"). You're back up in about a second.
 - **Recruits** at the sparring mat now wear the Border Patrol uniform and cap.
 
+## Part 15ai: Fighting out of holds, swinging, vehicle cameras
+
+- **Grabbed by someone?** Fight your way out:
+  - Punching them, kicking, or (best) **headbutting** them loosens their grip.
+  - Mashing Space still works too.
+  - Break free and they stagger back ("BROKE FREE!").
+- **Hanging by your hands:**
+  - Press **A / D** (or **W / S**) to swing.
+  - Build up a swing and let go to leap, or kick someone while you swing.
+  - Kicking while you're hanging is a normal kick; it doesn't drop-kick you off the ledge.
+- **Vehicle cameras** (raft, boats, trucks, and passengers too): the people riding with you no longer pull the camera into the back of their heads.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

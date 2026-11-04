@@ -1286,6 +1286,8 @@ private:
 	/** Punched while hanging: lose grip, and Mask's hands (1 = left, 2 = right) come off. Server calls it; it reaches the owner too. */
 	void KnockHandsLoose(uint8 Mask, float GripLoss);
 	UFUNCTION(Client, Reliable) void Client_KnockHandsLoose(uint8 Mask, float GripLoss);
+	/** Server: you're held - hitting / headbutting / kicking the holder adds to breaking free. */
+	void FightOutOfGrab(float Amount);
 	float NoStickUntil[2] = { 0.f, 0.f };
 	/** Holding SPACE while your hands are stuck above you: heave yourself up (owner + server copy). */
 	bool bHangPullHeld = false;

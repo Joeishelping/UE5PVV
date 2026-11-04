@@ -64,6 +64,8 @@ APVVBoat::APVVBoat()
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bEnableCameraLag = true;
 	CameraBoom->CameraLagSpeed = 6.f;
+	// The people sitting in it (and the vehicle itself) must never shove the camera into the back of someone's head.
+	CameraBoom->bDoCollisionTest = false;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);

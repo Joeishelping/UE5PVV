@@ -2192,6 +2192,7 @@ void ABRCharacter::UpdateAimCamera(float DeltaSeconds)
 	const bool bLiftCam = bLiftOverhead && !bZoom;
 	// Riding as a passenger: pull the camera back and up so you see the vehicle and the road, not the inside of the cab.
 	const bool bRideCam = GetCurrentBoat() != nullptr && !bZoom;
+	CameraBoom->bDoCollisionTest = GetCurrentBoat() == nullptr; // riding: the other passengers don't pull your camera in
 	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, (bZoom ? AimArmLength : DefaultArmLength) + (bLiftCam ? 170.f : 0.f) + (bRideCam ? 550.f : 0.f), DeltaSeconds, Speed * 0.5f);
 	CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, (bZoom ? FVector(0.f, 55.f, 65.f) : DefaultSocketOffset) + (bLiftCam ? FVector(0.f, 0.f, 120.f) : FVector::ZeroVector)
 		+ (bRideCam ? FVector(0.f, 0.f, 220.f) : FVector::ZeroVector), DeltaSeconds, Speed * 0.5f);
@@ -6309,10 +6310,15 @@ void ABRCharacter::Server_Headbutt_Implementation() { DoHeadbutt(); }
 void ABRCharacter::DoKick()
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (HasAuthority() && GetCondition() == EPVVCondition::Normal && GetCharacterMovement()->IsFalling() && !bClimbing && !GetCurrentBoat() && !GetCarrier())
+	if (HasAuthority() && GetCondition() == EPVVCondition::Normal && GetCharacterMovement()->IsFalling() && !bClimbing && !GetCurrentBoat() && !GetCarrier()
+		&& !bHandHanging && !GrabbedBy)
 	{
-		DoDropKick(); // kick in the air: DROP KICK
+		DoDropKick(); // kick in the air: DROP KICK (hanging off a ledge you just kick your legs instead)
 		return;
+	}
+	if (HasAuthority() && GrabbedBy)
+	{
+		FightOutOfGrab(0.25f); // kicking and flailing in their arms
 	}
 	if (!HasAuthority() || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bClimbing || bInCannon || Now - LastKickTime < 0.7f)
 	{
@@ -6586,6 +6592,13 @@ void ABRCharacter::HeadbuttHit()
 	}
 	const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
 	const FVector Head = GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head")) : GetActorLocation() + FVector(0.f, 0.f, 70.f);
+	if (ABRCharacter* Holder = GrabbedBy.Get(); Holder && FVector::Dist(Holder->GetActorLocation(), GetActorLocation()) < 220.f)
+	{
+		// Headbutt the one holding you: the best way out of a hold.
+		Holder->AddKO(Holder->HeadHitKO * 0.6f, this);
+		Holder->Multicast_BodyHit(TEXT("head"), (Holder->GetActorLocation() - GetActorLocation()).GetSafeNormal() * HitReaction);
+		FightOutOfGrab(0.45f);
+	}
 	TArray<FOverlapResult> Hits;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRHeadbutt), false, this);
 	GetWorld()->OverlapMultiByObjectType(Hits, Head + Fwd * 40.f, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(50.f), Params);
@@ -7044,6 +7057,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			{
 				LastMeleeVictim = KOVictim;
 				LastMeleeTime = Now;
+				if (GrabbedBy.Get() == KOVictim)
+				{
+					FightOutOfGrab(0.18f + 0.3f * Curve); // punching the one holding you
+				}
 			}
 			// A clean hit knocks their own punch off course and they need a beat before they can throw again.
 			if (KOVictim)
@@ -7953,6 +7970,14 @@ void ABRCharacter::TickHandHang(float DeltaSeconds)
 			return;
 		}
 	}
+	// Swing on your arms (A / D, or W / S towards / away from the wall): build up a swing to kick people or to leap off.
+	{
+		const FVector SwingWish = Move->GetCurrentAcceleration().GetSafeNormal2D();
+		if (!SwingWish.IsNearlyZero())
+		{
+			V += SwingWish * 520.f * DeltaSeconds;
+		}
+	}
 	// One hand: you slowly slip. Grip wears out the longer you hang (faster while pulling, much faster on one hand).
 	if (Holding == 1 && !bPulling)
 	{
@@ -8054,6 +8079,28 @@ void ABRCharacter::KnockHandsLoose(uint8 Mask, float GripLoss)
 void ABRCharacter::Client_KnockHandsLoose_Implementation(uint8 Mask, float GripLoss)
 {
 	KnockHandsLoose(Mask, GripLoss);
+}
+
+void ABRCharacter::FightOutOfGrab(float Amount)
+{
+	// Grabbed: punching / headbutting / kicking the one holding you loosens their grip (Gang Beasts).
+	ABRCharacter* Holder = GrabbedBy.Get();
+	if (!HasAuthority() || !Holder)
+	{
+		return;
+	}
+	GrabStruggle += Amount;
+	if (GrabStruggle >= 1.f)
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		Holder->NoRegrabTarget = this;
+		Holder->NoRegrabUntil = Now + 1.2f;
+		Holder->ReleaseHandGrab();
+		Holder->LaunchCharacter((Holder->GetActorLocation() - GetActorLocation()).GetSafeNormal2D() * 260.f, true, false);
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("BROKE FREE!"));
+		Notify(LOCTEXT("FoughtFree", "You fought your way free!"));
+	}
+	ForceNetUpdate();
 }
 
 void ABRCharacter::Server_SetHangPull_Implementation(bool bHeld)
