@@ -4328,12 +4328,28 @@ void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 	{
 		// Gang Beasts pacing: no machine-gun fists - each arm needs a moment to come back.
 		const float NowP = GetWorld()->GetTimeSeconds();
-		float& Ready = NextPunchAt[bLeft ? 0 : 1];
+		const int32 Idx = bLeft ? 0 : 1;
+		float& Ready = NextPunchAt[Idx];
 		if (NowP < Ready)
 		{
+			// Mashing: don't drop the click - throw it the moment this arm is ready (one in the queue per arm).
+			if (!bPunchQueued[Idx])
+			{
+				bPunchQueued[Idx] = true;
+				TWeakObjectPtr<ABRCharacter> WeakSelf(this);
+				GetWorldTimerManager().SetTimer(QueuedPunchTimer[Idx], FTimerDelegate::CreateWeakLambda(this, [WeakSelf, Idx, bLeft]()
+				{
+					if (ABRCharacter* Self = WeakSelf.Get())
+					{
+						Self->bPunchQueued[Idx] = false;
+						Self->Server_PunchHand_Implementation(bLeft);
+					}
+				}), FMath::Max(0.01f, Ready - NowP), false);
+			}
 			return;
 		}
 		Ready = NowP + PunchCooldown;
+		ResetAttackCooldown(); // (our per-hand timing replaces the shared one - alternating hands flows)
 	}
 	if (bBlocking)
 	{
@@ -4379,7 +4395,28 @@ void ABRCharacter::Server_HandHold_Implementation(uint8 Hand, bool bDown)
 	}
 	if (HandGrabMask == 0 && HandGrabTarget)
 	{
+		// Let go while you're SPINNING (or charging forward) with them: they keep the momentum and go FLYING (Gang Beasts throw).
+		ABRCharacter* Flung = HandGrabTarget.Get();
+		const FVector ToThem = (Flung->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+		const float Spin = FMath::DegreesToRadians(YawRate); // rad/s (sign = direction)
+		const FVector Tangent = FVector::CrossProduct(FVector::UpVector, ToThem.GetSafeNormal()) * FMath::Sign(Spin);
+		const FVector Fling = Tangent * FMath::Abs(Spin) * FMath::Max(ToThem.Size(), 90.f) * 1.3f + GetVelocity() * FVector(1.f, 1.f, 0.f);
 		ReleaseHandGrab();
+		if (Fling.Size() > 450.f && Flung->GetCondition() != EPVVCondition::Detained)
+		{
+			const FVector Launch = Fling.GetClampedToMaxSize(1300.f) + FVector(0.f, 0.f, 200.f);
+			Flung->MarkThrown(this);
+			if (Launch.Size() > 800.f && Flung->GetCondition() == EPVVCondition::Normal)
+			{
+				Flung->ApplyKnockdown(this, Launch / FMath::Max(0.1f, Flung->KnockbackScale)); // flies off as a ragdoll
+			}
+			else
+			{
+				Flung->LaunchCharacter(Launch, true, true);
+			}
+			ABRGameState::FX(this, EBRFX::PointsText, Flung->GetActorLocation() + FVector(0.f, 0.f, 90.f), TEXT("SPIN THROW!"));
+			Multicast_Sfx(2);
+		}
 	}
 }
 
@@ -6481,6 +6518,14 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			const FVector Dir = HandVel.GetSafeNormal();
 			const FVector Push = Dir.GetSafeNormal2D() * FMath::Lerp(90.f, bHeadHit ? 420.f : 600.f, Curve) + FVector(0.f, 0.f, 60.f + 120.f * Curve);
 			Victim->ReceiveMeleeHit(this, Damage, Push);
+			// A clean hit knocks their own punch off course and they need a beat before they can throw again.
+			if (KOVictim)
+			{
+				KOVictim->PunchUntil = -1.f;
+				const float Stun = 0.2f + 0.35f * Curve;
+				KOVictim->NextPunchAt[0] = FMath::Max(KOVictim->NextPunchAt[0], Now + Stun);
+				KOVictim->NextPunchAt[1] = FMath::Max(KOVictim->NextPunchAt[1], Now + Stun);
+			}
 			// A KNIFE that lands actually cuts: blood, and enough stabs kill.
 			if (HeldItem == EBRItem::Knife && KOVictim && !bGuarded)
 			{
@@ -7363,6 +7408,13 @@ void ABRCharacter::TickBodyPartGrab(float DeltaSeconds)
 	if (!HasAuthority())
 	{
 		return;
+	}
+	if (DeltaSeconds > 0.f)
+	{
+		const float Yaw = GetActorRotation().Yaw;
+		const float Rate = FMath::FindDeltaAngleDegrees(LastYaw, Yaw) / DeltaSeconds;
+		LastYaw = Yaw;
+		YawRate = FMath::FInterpTo(YawRate, FMath::Clamp(Rate, -1500.f, 1500.f), DeltaSeconds, 12.f);
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
 	// Rocked (KO meter high) but still standing: you stumble about - a little shove here and there.

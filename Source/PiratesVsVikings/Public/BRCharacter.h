@@ -1162,6 +1162,12 @@ private:
 	/** Where the nearest drop / water is to drag someone into (or ZeroVector). */
 	FVector HazardPoint() const;
 	float NextPunchAt[2] = { 0.f, 0.f };
+	/** Mashing: a click during the cooldown is remembered and thrown the moment that arm is ready (never lost). */
+	bool bPunchQueued[2] = { false, false };
+	FTimerHandle QueuedPunchTimer[2];
+	/** How fast you're turning (deg/s) - spin around holding someone and let go to FLING them. */
+	float YawRate = 0.f;
+	float LastYaw = 0.f;
 	float NextBumpTime = 0.f;
 	/** NPC fight rhythm: stepping in to attack vs backing out to reset. */
 	bool bBrawlIn = true;

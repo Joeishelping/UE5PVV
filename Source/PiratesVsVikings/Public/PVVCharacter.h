@@ -113,6 +113,8 @@ public:
 	void Recover(float BalanceFraction = 0.5f);
 	/** Dead (stabbed / shot to death): stays down until respawned. */
 	virtual bool IsDead() const { return false; }
+	/** Subclasses with their own per-hand punch timing skip the shared attack cooldown. */
+	void ResetAttackCooldown() { LastAttackTime = -100.f; }
 	void Restrain(APVVCharacter* Captor);
 	/** Back to Normal from Restrained. Rescuer null = struggled free. */
 	void Release(APVVCharacter* Rescuer);
