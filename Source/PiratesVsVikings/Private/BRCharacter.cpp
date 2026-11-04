@@ -4233,6 +4233,7 @@ float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVe
 {
 	// Gang Beasts pacing: hits wear you down slowly, push you less, and the "knockout" hit dazes you first.
 	Damage /= FMath::Max(0.1f, FightToughness);
+	Damage *= VsComputerScale(Attacker); // NPCs hit players softer; players hit NPCs harder
 	Impulse *= HitPushScale;
 	// Remember how hard this person has been hitting us lately (NPCs only fight back once it's real).
 	if (ABRCharacter* Hitter = Cast<ABRCharacter>(Attacker))
@@ -6532,7 +6533,9 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 				KOVictim->Wound(KnifeWound * FMath::Lerp(0.5f, 1.2f, Curve) * (bHeadHit ? HeadWoundMultiplier : 1.f), this, HitPoint, Dir, false);
 			}
 			// A HARD clean shot to the head drops them on the spot (wobbly bodies fold).
-			if (bHeadHit && !bGuarded && Power >= HeadKnockdownPower && Victim->GetCondition() == EPVVCondition::Normal)
+			// (vs the computer: an NPC needs a near-perfect shot to drop a player in one; a player drops an NPC a bit more easily)
+			const float OneShotPower = HeadKnockdownPower + (bIsNPC && KOVictim && !KOVictim->bIsNPC ? 0.15f : 0.f) - (!bIsNPC && KOVictim && KOVictim->bIsNPC ? 0.1f : 0.f);
+			if (bHeadHit && !bGuarded && Power >= OneShotPower && Victim->GetCondition() == EPVVCondition::Normal)
 			{
 				Victim->ApplyKnockdown(this, Dir.GetSafeNormal2D() * 450.f + FVector(0.f, 0.f, 150.f));
 				ABRGameState::FX(this, EBRFX::PointsText, HitPoint + FVector(0.f, 0.f, 40.f), TEXT("CRACK!"));
@@ -7644,6 +7647,16 @@ void ABRCharacter::GuardAbsorb(float Power, const FVector& Dir, FName Bone, ABRC
 		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("BLOCKED"));
 	}
 	ForceNetUpdate();
+}
+
+float ABRCharacter::VsComputerScale(const APVVCharacter* By) const
+{
+	const ABRCharacter* Hitter = Cast<ABRCharacter>(By);
+	if (!Hitter || Hitter->bIsNPC == bIsNPC)
+	{
+		return 1.f;
+	}
+	return Hitter->bIsNPC ? NPCHitsOnPlayersScale : PlayerHitsOnNPCsScale;
 }
 
 #undef LOCTEXT_NAMESPACE

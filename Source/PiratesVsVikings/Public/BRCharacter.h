@@ -228,6 +228,12 @@ public:
 	float ApplyBlock(APVVCharacter* Attacker, float Damage, FVector& Impulse);
 	/** Gang Beasts pacing: every hit is divided by this (higher = longer fights). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FightToughness = 1.9f;
+	/** Balance vs the computer: NPC hits on a PLAYER count this much (damage + KO meter). Lower = NPCs knock you out less easily. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float NPCHitsOnPlayersScale = 0.55f;
+	/** Balance vs the computer: a PLAYER's hits on an NPC count this much. Higher = NPCs go down easier. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PlayerHitsOnNPCsScale = 1.45f;
+	/** NPC vs player / player vs NPC scale for a hit from By on me (1 for player-player / NPC-NPC). */
+	float VsComputerScale(const APVVCharacter* By) const;
 	/** Gang Beasts pacing: hits push you this much (lower = you stay in the fight instead of flying off). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HitPushScale = 0.55f;
 	/** Rocked: the hit that WOULD knock you out dazes you instead (staggering, can't punch). The next good hit knocks you out. */

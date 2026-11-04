@@ -76,6 +76,12 @@ How each core Gang Beasts mechanic maps to Border Run right now. I checked this 
 | Bots space out, attack, back off and gang up | Step-in / step-out rhythm, circling, guard reactions, counter slips; personalities: brawler, grappler (drags you to the river), sneak, coward | ✅ |
 | Bots grab ledges / protect themselves near edges | Back off when rattled; no edge awareness yet | 🟡 |
 
+## Balance vs NPCs
+- NPC hits on players count **55%** (damage and KO meter), and an NPC needs a near-perfect head shot to drop you in one punch.
+- Player hits on NPCs count **145%**, and a slightly less perfect head shot drops an NPC in one.
+- Player vs player and NPC vs NPC are unchanged.
+- Tune it in BP_Runner / BP_Warden and your NPC Blueprint under **BR | Brawl**: **NPC Hits On Players Scale** and **Player Hits On NPCs Scale**.
+
 ## Next on the list (in order)
 1. **Crouch / duck** (a key, and NPCs ducking punches).
 2. **Edge-aware NPCs** that grab railings and walls when they're shoved near a drop.

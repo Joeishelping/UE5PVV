@@ -410,7 +410,7 @@ void ABRCharacter::AddKO(float Amount, ABRCharacter* By)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
-	KOMeter = FMath::Clamp(KOMeter + Amount / FMath::Max(0.25f, FightToughness / 1.9f), 0.f, 1.f);
+	KOMeter = FMath::Clamp(KOMeter + Amount * VsComputerScale(By) / FMath::Max(0.25f, FightToughness / 1.9f), 0.f, 1.f);
 	LastKOHitTime = Now;
 	if (KOMeter >= 1.f)
 	{
