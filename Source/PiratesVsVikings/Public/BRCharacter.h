@@ -1183,6 +1183,15 @@ private:
 	/** Hands actually gripping HandGrabTarget. */
 	UPROPERTY(Replicated) uint8 HandGrabMask = 0;
 	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> HandGrabTarget;
+	/** Which part of them you've got hold of (head, arm, leg, collar...). Grab a leg and walk away = trip them. */
+	UPROPERTY(Replicated) FName HandGrabBone;
+	float LegPullTime = 0.f;
+	void TickBodyPartGrab(float DeltaSeconds);
+	float LastShoveTime = -10.f;
+	/** NPC haymaker: arms out, body whips round so the hands sweep through whoever's in front. */
+	float BrawlSwingUntil = -1.f;
+	float BrawlSwingDir = 1.f;
+	float NextStumbleTime = 0.f;
 	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> GrabbedBy;
 	UPROPERTY(Replicated) float GrabStruggle = 0.f;
 	bool bLeftDown = false;

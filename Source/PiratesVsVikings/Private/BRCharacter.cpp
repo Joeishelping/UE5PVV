@@ -194,6 +194,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
 	DOREPLIFETIME(ABRCharacter, DragBone);
 	DOREPLIFETIME(ABRCharacter, HandGrabTarget);
+	DOREPLIFETIME(ABRCharacter, HandGrabBone);
 	DOREPLIFETIME(ABRCharacter, GrabbedBy);
 	DOREPLIFETIME(ABRCharacter, GrabStruggle);
 	DOREPLIFETIME(ABRCharacter, bClimbing);
@@ -3895,6 +3896,7 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 
 	TickHands(DeltaSeconds);
 	TickKickContact(DeltaSeconds);
+	TickBodyPartGrab(DeltaSeconds);
 	TickHandHang(DeltaSeconds);
 	TickHandGrab(DeltaSeconds);
 	TickKOMeter(DeltaSeconds);
@@ -4402,6 +4404,28 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 	const bool bNew = HandGrabTarget.Get() != Best;
 	HandGrabTarget = Best;
 	HandGrabMask = static_cast<uint8>(HandGrabMask | HandMask);
+	if (bNew && GetMesh() && Best->GetMesh())
+	{
+		// Grab whatever part your hand actually closed on.
+		const FName MyHand = (HandMask & 1) ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
+		const FVector HandAt = GetMesh()->GetBoneIndex(MyHand) != INDEX_NONE ? GetMesh()->GetBoneLocation(MyHand) : GetActorLocation() + GetActorForwardVector() * 60.f;
+		HandGrabBone = TEXT("spine_03");
+		float BestBone = 1.e9f;
+		for (const TCHAR* BoneName : { TEXT("head"), TEXT("neck_01"), TEXT("spine_03"), TEXT("spine_02"), TEXT("pelvis"), TEXT("upperarm_l"), TEXT("upperarm_r"),
+			TEXT("lowerarm_l"), TEXT("lowerarm_r"), TEXT("hand_l"), TEXT("hand_r"), TEXT("thigh_l"), TEXT("thigh_r"), TEXT("calf_l"), TEXT("calf_r"), TEXT("foot_l"), TEXT("foot_r") })
+		{
+			if (Best->GetMesh()->GetBoneIndex(BoneName) != INDEX_NONE)
+			{
+				const float D = FVector::Dist(Best->GetMesh()->GetBoneLocation(BoneName), HandAt);
+				if (D < BestBone)
+				{
+					BestBone = D;
+					HandGrabBone = BoneName;
+				}
+			}
+		}
+		LegPullTime = 0.f;
+	}
 	if (bNew)
 	{
 		Best->GrabbedBy = this;
@@ -5357,6 +5381,18 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 	const float Now = GetWorld()->GetTimeSeconds();
 	const FVector ToFoe = (Foe->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	const float Dist = ToFoe.Size();
+	// Haymaker: arms out, the whole body whips round so the fists sweep through them (hits only if they land).
+	if (BrawlSwingUntil > 0.f)
+	{
+		if (Now < BrawlSwingUntil)
+		{
+			AddActorWorldRotation(FRotator(0.f, 520.f * BrawlSwingDir * DeltaSeconds, 0.f));
+			AddMovementInput(ToFoe.GetSafeNormal(), 0.6f);
+			return;
+		}
+		BrawlSwingUntil = -1.f;
+		ArmsReaching = 0;
+	}
 	// Windmill: spin with floppy arms; any hand that whips past someone hits them.
 	if (Now < BrawlSpinUntil)
 	{
@@ -5473,7 +5509,17 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 	if (Dist < 175.f)
 	{
 		const float Roll = FMath::FRand();
-		if (Roll < 0.32f)
+		if (Roll < 0.18f)
+		{
+			// Wind up to one side, then swing the arms through them (Gang Beasts haymaker).
+			BrawlSwingDir = FMath::RandBool() ? 1.f : -1.f;
+			SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw - 60.f * BrawlSwingDir, 0.f));
+			ArmsReaching = 3;
+			BrawlSwingUntil = Now + 0.3f;
+			BrawlNextMove = Now + 0.6f;
+			return;
+		}
+		if (Roll < 0.40f)
 		{
 			Server_PunchHand_Implementation(bBrawlLeft); // one-two combos
 			bBrawlLeft = !bBrawlLeft;
@@ -6074,6 +6120,31 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			continue; // a hand that's holding something doesn't slap (a swinging empty hand does)
 		}
 		const float Speed = HandVel.Size();
+		// SHOVE: arms out and walking into someone (too slow to be a hit) pushes them back - off bridges, walls, trucks...
+		if ((ArmsReaching & (1 << i)) && !bGripping && Speed < SlapSpeed && Now - LastShoveTime > 0.35f && HasAuthority())
+		{
+			const FVector MoveDir = GetVelocity().GetSafeNormal2D();
+			if (GetVelocity().Size2D() > 140.f)
+			{
+				TArray<FOverlapResult> Pushed;
+				FCollisionQueryParams ShoveParams(SCENE_QUERY_STAT(BRShove), false, this);
+				GetWorld()->OverlapMultiByObjectType(Pushed, Pos, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(28.f), ShoveParams);
+				for (const FOverlapResult& P : Pushed)
+				{
+					ABRCharacter* Target = Cast<ABRCharacter>(P.GetActor());
+					if (Target && Target != this && Target->GetCondition() == EPVVCondition::Normal && !Target->GetCarrier() && !Target->GetCurrentBoat()
+						&& FVector::DotProduct((Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D(), MoveDir) > 0.5f)
+					{
+						LastShoveTime = Now;
+						const float Force = FMath::Clamp(GetVelocity().Size2D() / 600.f, 0.3f, 1.f) * (Target->bBlocking ? 1.3f : 1.f);
+						Target->LaunchCharacter(MoveDir * 420.f * Force + FVector(0.f, 0.f, 60.f), true, false);
+						Target->AddLean(MoveDir * 700.f * Force, this);
+						Target->Multicast_BodyHit(TEXT("spine_03"), MoveDir * HitReaction * 0.5f * Force);
+						break;
+					}
+				}
+			}
+		}
 		if (Now < HandReadyAt[i] || (Speed < SlapSpeed && !bPunching) || Speed > 6000.f)
 		{
 			continue; // too slow (or a teleport)
@@ -7008,5 +7079,47 @@ void ABRCharacter::Server_HangJump_Implementation()
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
 	{
 		GetMesh()->AddImpulseToAllBodiesBelow(FVector(0.f, 0.f, 300.f) + In * 150.f, TEXT("spine_02"), true, true);
+	}
+}
+
+void ABRCharacter::TickBodyPartGrab(float DeltaSeconds)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	// Rocked (KO meter high) but still standing: you stumble about - a little shove here and there.
+	if (GetCondition() == EPVVCondition::Normal && KOMeter > 0.5f && !GetCurrentBoat() && !GetCarrier() && !bClimbing && Now >= NextStumbleTime)
+	{
+		NextStumbleTime = Now + FMath::FRandRange(0.5f, 1.2f);
+		const FVector Stumble = FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f).Vector() * FMath::Lerp(120.f, 320.f, (KOMeter - 0.5f) * 2.f);
+		LaunchCharacter(Stumble, false, false);
+		AddLean(Stumble * 2.f, nullptr);
+	}
+	// Holding someone's LEG and walking away from them: you pull their feet out from under them.
+	ABRCharacter* Held = HandGrabTarget.Get();
+	const FString Bone = HandGrabBone.ToString();
+	const bool bLeg = Bone.StartsWith(TEXT("calf")) || Bone.StartsWith(TEXT("foot")) || Bone.StartsWith(TEXT("thigh"));
+	if (!Held || !bLeg || Held->GetCondition() != EPVVCondition::Normal || GetCondition() != EPVVCondition::Normal)
+	{
+		LegPullTime = 0.f;
+		return;
+	}
+	const FVector Away = (GetActorLocation() - Held->GetActorLocation()).GetSafeNormal2D();
+	if (FVector::DotProduct(GetVelocity(), Away) > 120.f)
+	{
+		LegPullTime += DeltaSeconds;
+		if (LegPullTime > 0.35f)
+		{
+			LegPullTime = 0.f;
+			Held->ApplyKnockdown(this, Away * 300.f + FVector(0.f, 0.f, 80.f));
+			ABRGameState::FX(this, EBRFX::PointsText, Held->GetActorLocation() + FVector(0.f, 0.f, 90.f), TEXT("LEG PULL!"));
+			Multicast_Sfx(2);
+		}
+	}
+	else
+	{
+		LegPullTime = FMath::Max(0.f, LegPullTime - DeltaSeconds);
 	}
 }

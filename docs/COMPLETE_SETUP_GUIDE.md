@@ -951,6 +951,13 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 
 **NPC drivers** slow down, stop and honk for people in the road instead of running them over. Only gate runners still floor it.
 
+**Round 3b: more physics**
+- **Grab body parts:** you hold whatever part your hand closed on (head, arm, leg, collar), and the physics tether is on that part.
+- **Grab a leg and walk away** from them and you pull their feet out from under them: **LEG PULL!**
+- **Shove:** hold your arms out and walk into someone (too slow to be a hit) and you **push them back**. It's how you get people off the bridge, the Wall or a truck. It pushes harder the faster you're going, and even harder if they're blocking.
+- **Rocked:** when your KO meter is high you **stumble about**. That's the moment to grab them.
+- **NPC haymakers:** brawling NPCs wind up to one side and **swing both arms through you**. Like player swings, they only hurt if they land.
+
 **Climbing (players):** there's no climb mode any more.
 1. Jump at a wall and **hold a mouse button**: your hand sticks.
 2. **Your hands hold you up like ropes.** With two hands you hang. With one hand you slowly slide down.

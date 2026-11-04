@@ -138,9 +138,11 @@ void ABRCharacter::UpdateGrabTethers()
 		}
 		else if (bHandUsable && Held && !Held->IsRagdollActive() && !bLiftOverhead && (HandGrabMask & (1 << i)) && Held->GetMesh() && Held->GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
 		{
+			// Hold on to the part you actually grabbed (head, arm, leg, collar).
+			const FName Part = (HandGrabBone != NAME_None && Held->GetMesh()->GetBoneIndex(HandGrabBone) != INDEX_NONE) ? HandGrabBone : FName(TEXT("spine_03"));
 			WantOther = Held->GetMesh();
-			OtherBone = TEXT("spine_03");
-			Anchor = Held->GetMesh()->GetBoneLocation(TEXT("spine_03")) + (Body->GetBoneLocation(HandBones[i]) - Held->GetMesh()->GetBoneLocation(TEXT("spine_03"))).GetClampedToMaxSize(25.f);
+			OtherBone = Part;
+			Anchor = Held->GetMesh()->GetBoneLocation(Part) + (Body->GetBoneLocation(HandBones[i]) - Held->GetMesh()->GetBoneLocation(Part)).GetClampedToMaxSize(15.f);
 		}
 		const bool bWant = bWorld || WantOther;
 		UPhysicsConstraintComponent* Tether = GrabTether[i];
