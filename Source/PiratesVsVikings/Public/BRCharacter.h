@@ -102,6 +102,16 @@ public:
 	/** Smuggling client: follows this Runner. */
 	TWeakObjectPtr<ABRCharacter> Leader;
 	int32 ClientPay = 0;
+	/** A smuggling client got killed, caught (zip-tied / locked up), sent back or drowned: their coyote pays for it. */
+	void LoseClient(const FString& What);
+	/** Server: you lost Count pieces of contraband (seized / caught / sent back): pay ContrabandLossPenalty each. */
+	void ChargeForLostContraband(int32 Count);
+	/** Who you last landed a hit on (your clients jump in on them). */
+	TWeakObjectPtr<ABRCharacter> LastMeleeVictim;
+	float LastMeleeTime = -100.f;
+	/** Money you lose when one of your clients is lost, and per piece of contraband Border Patrol take off you. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Money") int32 ClientLossPenalty = 500;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Money") int32 ContrabandLossPenalty = 300;
 	/** Last time a Border Patrol scanner checked this person (server world time), and who. */
 	float LastScannedTime = -1000.f;
 	TWeakObjectPtr<ABRCharacter> ScannedBy;

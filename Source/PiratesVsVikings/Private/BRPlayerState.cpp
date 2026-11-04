@@ -80,12 +80,13 @@ bool ABRPlayerState::RemoveItemAt(int32 Index, EBRItem& OutItem)
 	return true;
 }
 
-void ABRPlayerState::RemoveIllegalItems()
+int32 ABRPlayerState::RemoveIllegalItems()
 {
-	if (HasAuthority())
+	if (!HasAuthority())
 	{
-		Inventory.RemoveAll([](EBRItem Item) { return BR::IsIllegal(Item); });
+		return 0;
 	}
+	return Inventory.RemoveAll([](EBRItem Item) { return BR::IsIllegal(Item); });
 }
 
 bool ABRPlayerState::WearShovel()

@@ -96,6 +96,7 @@ public:
 	bool RemoveItem(EBRItem Item);
 	/** Removes the item in that inventory slot. */
 	bool RemoveItemAt(int32 Index, EBRItem& OutItem);
-	void RemoveIllegalItems();
+	/** Takes away all contraband; returns how many items were taken. */
+	int32 RemoveIllegalItems();
 	void AddMoney(int32 Amount) { Money = FMath::Max(0, Money + Amount); }
 };

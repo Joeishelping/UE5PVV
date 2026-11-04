@@ -428,8 +428,12 @@ void ABRGameMode::NotifyDetained(APVVCharacter* Victim, APVVCharacter* Captor)
 	}
 	if (Contraband > 0)
 	{
-		PS->RemoveIllegalItems();
+		const int32 Lost = PS->RemoveIllegalItems();
 		OnContrabandSeized(Captor, Contraband);
+		if (ABRCharacter* Smuggler = Cast<ABRCharacter>(Victim))
+		{
+			Smuggler->ChargeForLostContraband(Lost);
+		}
 	}
 	if (PS->bHasCrossedLine)
 	{
@@ -501,8 +505,7 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 		AwardPoints(Warden, PointsPerIllegalNPC);
 		if (ABRCharacter* Client = Cast<ABRCharacter>(Prisoner))
 		{
-			Client->Leader = nullptr; // their coyote lost them
-			Client->ClientPay = 0;
+			Client->LoseClient(TEXT("got SENT BACK over the border")); // their coyote lost them (and pays for it)
 			Client->StartWandering(Landing, 900.f);
 		}
 	}
@@ -548,7 +551,14 @@ void ABRGameMode::CatapultRunner(APVVCharacter* Prisoner, ABRCatapult* Catapult,
 					FText::FromString(NameOf(Prisoner)), FMath::RoundToInt(WrongfulArrestPenalty)));
 			}
 		}
-		PS->RemoveIllegalItems();
+		if (ABRCharacter* SentBack = Cast<ABRCharacter>(Prisoner))
+		{
+			SentBack->ChargeForLostContraband(PS->RemoveIllegalItems()); // sent back with it: it's gone
+		}
+		else
+		{
+			PS->RemoveIllegalItems();
+		}
 		PS->bHasCrossedLine = false;
 		PS->bIsAggressor = false;
 		PS->SentenceSeconds = 0;
@@ -638,6 +648,10 @@ void ABRGameMode::HandleDrowned(APVVCharacter* Victim)
 		Feed(FString::Printf(TEXT("%s sent %s for a SWIM!"), *NameOf(Tosser), *NameOf(Victim)));
 	}
 	Announce(FText::Format(LOCTEXT("Drowned", "{0} tried to swim the river and DROWNED. Should've bought a boat."), FText::FromString(NameOf(Victim))));
+	if (ABRCharacter* DrownedClient = Cast<ABRCharacter>(Victim))
+	{
+		DrownedClient->LoseClient(TEXT("DROWNED in the river"));
+	}
 	if (APVVCharacter* Carrier = Victim->GetCarrier())
 	{
 		Carrier->DropCarried();
@@ -1610,7 +1624,12 @@ void ABRGameMode::RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner)
 	{
 		if (!PS->bReachedSafety)
 		{
-			PS->RemoveIllegalItems();
+			// Caught / killed / sent home before you got it across: the contraband is gone, and so is your money.
+			const int32 Lost = PS->RemoveIllegalItems();
+			if (ABRCharacter* Smuggler = Cast<ABRCharacter>(C))
+			{
+				Smuggler->ChargeForLostContraband(Lost);
+			}
 		}
 		PS->bHasCrossedLine = false;
 		PS->bIsAggressor = false;

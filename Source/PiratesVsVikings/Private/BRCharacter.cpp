@@ -1026,6 +1026,20 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 		{
 			Threat = Cast<ABRCharacter>(L->GetCarrier()); // being hauled off: get them!
 		}
+		// Our coyote is in a fight: jump in on whoever they're fighting (who they're holding, or just hit).
+		if (!Threat)
+		{
+			ABRCharacter* Fighting = L->HandGrabTarget.Get();
+			if (!Fighting && Now - L->LastMeleeTime < 5.f)
+			{
+				Fighting = L->LastMeleeVictim.Get();
+			}
+			if (Fighting && Fighting != this && Fighting->Leader.Get() != L && Fighting->GetCondition() == EPVVCondition::Normal
+				&& (Fighting->IsNPC() || Fighting->GetFaction() != L->GetFaction()))
+			{
+				Threat = Fighting;
+			}
+		}
 		if (Threat && Threat->GetCondition() == EPVVCondition::Normal && !Threat->GetCurrentBoat()
 			&& FVector::Dist2D(Threat->GetActorLocation(), GetActorLocation()) < 1800.f)
 		{
@@ -5437,6 +5451,11 @@ bool ABRCharacter::FailsPapersScan() const
 
 void ABRCharacter::OnPrisonerStateChanged(EPVVCondition Was, EPVVCondition Now)
 {
+	// A smuggling client caught (zip-tied or locked up): their coyote pays for it.
+	if ((Now == EPVVCondition::Restrained || Now == EPVVCondition::Detained) && Was != EPVVCondition::Restrained && Was != EPVVCondition::Detained)
+	{
+		LoseClient(Now == EPVVCondition::Detained ? TEXT("was LOCKED UP") : TEXT("got ZIP-TIED by Border Patrol"));
+	}
 	// Zip-tied: everything illegal on you is taken (the nearest agent gets the credit).
 	if (Now == EPVVCondition::Restrained && Was != EPVVCondition::Restrained)
 	{
@@ -6525,6 +6544,11 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			const FVector Dir = HandVel.GetSafeNormal();
 			const FVector Push = Dir.GetSafeNormal2D() * FMath::Lerp(90.f, bHeadHit ? 420.f : 600.f, Curve) + FVector(0.f, 0.f, 60.f + 120.f * Curve);
 			Victim->ReceiveMeleeHit(this, Damage, Push);
+			if (KOVictim)
+			{
+				LastMeleeVictim = KOVictim;
+				LastMeleeTime = Now;
+			}
 			// A clean hit knocks their own punch off course and they need a beat before they can throw again.
 			if (KOVictim)
 			{
@@ -7526,6 +7550,7 @@ void ABRCharacter::Die(APVVCharacter* By, bool bGun)
 	}
 	bDead = true;
 	Health = 0.f;
+	LoseClient(TEXT("was KILLED"));
 	ReleaseHandGrab();
 	if (APVVCharacter* Carrier = GetCarrier())
 	{
@@ -7723,6 +7748,40 @@ FName ABRCharacter::PhysBelow(FName Bone) const
 		}
 	}
 	return Best;
+}
+
+void ABRCharacter::LoseClient(const FString& What)
+{
+	ABRCharacter* Coyote = Leader.Get();
+	if (!HasAuthority() || !bIsNPC || !Coyote)
+	{
+		return;
+	}
+	Leader = nullptr;
+	ClientPay = 0;
+	if (ABRPlayerState* PS = Coyote->GetBRPlayerState())
+	{
+		PS->AddMoney(-ClientLossPenalty);
+	}
+	ABRGameState::FX(Coyote, EBRFX::MoneyText, Coyote->GetActorLocation() + FVector(0.f, 0.f, 150.f), FString::Printf(TEXT("-$%d"), ClientLossPenalty));
+	Coyote->Notify(FText::Format(LOCTEXT("ClientLost", "You LOST a client - they {0}. -${1}"), FText::FromString(What), ClientLossPenalty));
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->Feed(FString::Printf(TEXT("%s lost a client (%s)"), *Coyote->GetPlayerDisplayName(), *What));
+	}
+}
+
+void ABRCharacter::ChargeForLostContraband(int32 Count)
+{
+	ABRPlayerState* PS = GetBRPlayerState();
+	if (!HasAuthority() || bIsNPC || !PS || Count <= 0)
+	{
+		return;
+	}
+	const int32 Loss = ContrabandLossPenalty * Count;
+	PS->AddMoney(-Loss);
+	ABRGameState::FX(this, EBRFX::MoneyText, GetActorLocation() + FVector(0.f, 0.f, 150.f), FString::Printf(TEXT("-$%d"), Loss));
+	Notify(FText::Format(LOCTEXT("ContrabandLost", "You failed to sneak your contraband through - it's gone. -${0}"), Loss));
 }
 
 #undef LOCTEXT_NAMESPACE

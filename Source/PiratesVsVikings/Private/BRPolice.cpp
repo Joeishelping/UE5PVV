@@ -179,15 +179,18 @@ int32 ABRCharacter::Confiscate()
 	}
 	if (ABRPlayerState* PS = GetBRPlayerState())
 	{
+		int32 Contraband = 0;
 		for (int32 i = PS->Inventory.Num() - 1; i >= 0; --i)
 		{
 			const EBRItem I = PS->Inventory[i];
 			if (BR::IsIllegal(I) || I == EBRItem::Knife || I == EBRItem::FakePassport)
 			{
+				Contraband += BR::IsIllegal(I) ? 1 : 0;
 				PS->RemoveItem(I);
 				++Taken;
 			}
 		}
+		ChargeForLostContraband(Contraband); // failed to sneak it through
 	}
 	ForceNetUpdate();
 	return Taken;
