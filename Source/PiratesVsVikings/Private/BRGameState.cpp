@@ -178,9 +178,9 @@ void ABRGameState::SpawnLocalFX(UObject* Context, EBRFX Kind, const FVector& Loc
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, FRotator::ZeroRotator, FVector(Scale));
 		return;
 	}
-	// Built-in look (punch hits = small dust puff).
-	const EBRFX Shown = Kind == EBRFX::PunchHit || Kind == EBRFX::Sparks ? EBRFX::Dust : (Kind == EBRFX::CigaretteSmoke ? EBRFX::Smoke : Kind);
-	const float Size = Kind == EBRFX::PunchHit ? 0.35f : (Kind == EBRFX::CigaretteSmoke ? 0.2f : (Kind == EBRFX::Sparks ? 0.25f : 1.f));
+	// Built-in look: punch hits = quick white flash, sparks = little orange sparks, cigarette = tiny smoke puff.
+	const EBRFX Shown = Kind == EBRFX::CigaretteSmoke ? EBRFX::Smoke : Kind;
+	const float Size = Kind == EBRFX::CigaretteSmoke ? 0.2f : 1.f;
 	const FTransform At(Location);
 	if (ABRFX* Effect = World->SpawnActorDeferred<ABRFX>(ABRFX::StaticClass(), At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 	{

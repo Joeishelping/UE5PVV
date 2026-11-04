@@ -4819,6 +4819,8 @@ void ABRFX::BeginPlay()
 	if (Kind == EBRFX::Splash) { Color = FLinearColor(0.75f, 0.88f, 1.f); BlobSize = 35.f; Life = 0.8f; }
 	if (Kind == EBRFX::Smoke) { Color = FLinearColor(0.35f, 0.35f, 0.37f); BlobSize = 80.f; Life = 1.6f; }
 	if (Kind == EBRFX::Blood) { Color = FLinearColor(0.45f, 0.02f, 0.02f); BlobSize = 14.f; Life = 0.7f; }
+	if (Kind == EBRFX::PunchHit) { Color = FLinearColor(1.f, 0.95f, 0.8f); BlobSize = 16.f; Life = 0.22f; }	// quick white impact flash
+	if (Kind == EBRFX::Sparks) { Color = FLinearColor(1.f, 0.55f, 0.08f); BlobSize = 6.f; Life = 0.5f; }		// little orange sparks that arc and fall
 	if (Kind == EBRFX::BloodPool) { Color = FLinearColor(0.25f, 0.01f, 0.01f); BlobSize = 60.f; Life = GetDefault<UBRSettings>()->BloodPoolSeconds; }
 	for (UStaticMeshComponent* B : Blobs)
 	{
@@ -4831,12 +4833,12 @@ void ABRFX::BeginPlay()
 			}
 		}
 		FVector D = FMath::VRand();
-		D.Z = (Kind == EBRFX::Splash || Kind == EBRFX::Blood) ? FMath::Abs(D.Z) * 2.5f : FMath::Abs(D.Z) * 0.6f;
+		D.Z = (Kind == EBRFX::Splash || Kind == EBRFX::Blood || Kind == EBRFX::Sparks) ? FMath::Abs(D.Z) * 2.5f : FMath::Abs(D.Z) * 0.6f;
 		if (Kind == EBRFX::BloodPool)
 		{
 			D = FVector(D.X, D.Y, 0.f) * 0.25f; // the pool spreads a little on the ground
 		}
-		Drift.Add(D * (Kind == EBRFX::Smoke ? 120.f : (Kind == EBRFX::Blood ? 220.f : 160.f)));
+		Drift.Add(D * (Kind == EBRFX::Smoke ? 120.f : (Kind == EBRFX::Blood ? 220.f : (Kind == EBRFX::Sparks ? 380.f : (Kind == EBRFX::PunchHit ? 260.f : 160.f)))));
 	}
 	if (bText && Popup)
 	{
@@ -4884,7 +4886,7 @@ void ABRFX::Tick(float DeltaSeconds)
 	{
 		if (UStaticMeshComponent* B = Blobs[i].Get())
 		{
-			B->SetRelativeLocation(Drift[i] * T + ((Kind == EBRFX::Splash || Kind == EBRFX::Blood) ? FVector(0.f, 0.f, -300.f * T * T) : FVector::ZeroVector));
+			B->SetRelativeLocation(Drift[i] * T + ((Kind == EBRFX::Splash || Kind == EBRFX::Blood || Kind == EBRFX::Sparks) ? FVector(0.f, 0.f, -300.f * T * T) : FVector::ZeroVector));
 			B->SetRelativeScale3D(FVector(FMath::Max(0.01f, Size * (0.7f + 0.1f * i))));
 		}
 	}

@@ -1,6 +1,8 @@
 # Making the effects (Niagara) — step by step
 
-Every effect slot lives in **Edit → Project Settings → Border Run → Effects**. You make an effect once, drag it into its slot, and the game uses it from then on. Empty slots keep the simple built-in look, so you can do these one at a time.
+Every effect slot lives in **Edit → Project Settings → Border Run → Effects**.
+
+**You don't *have* to make any of these.** The game has built-in versions of all of them: a dust puff, a splash, smoke, a quick white flash for punch hits, little orange sparks, red blood droplets, rain, sand, and a blood puddle. Make Niagara versions only for the ones you want to look fancier. You make an effect once, drag it into its slot, and the game uses it from then on. Empty slots keep the simple built-in look, so you can do these one at a time.
 
 You'll make **9 Niagara Systems** and **1 decal material** (for the blood puddle).
 
@@ -188,7 +190,13 @@ Loops too, centered on your camera.
 
 The puddle under someone who's stabbed, shot or killed isn't a particle effect. It's a **decal**: a picture projected onto the ground.
 
-### C1. Make the material
+### C0. Shortcut: let the script build it (1 click)
+1. In the editor, go to **Tools → Execute Python Script...** (older versions: **File → Execute Python Script**).
+2. Pick `Tools/Editor/make_blood_pool.py` from the project folder.
+3. It creates **/Game/FX/M_BloodPool** for you. Skip to **C2**.
+(If you don't see that menu item, go to **Edit → Plugins**, search **Python Editor Script Plugin**, tick it and restart. The project turns it on already, though.)
+
+### C1. Make the material by hand (if you'd rather)
 1. Content Browser → right-click → **Material** → name it `M_BloodPool` and open it.
 2. Click the big result node, and in **Details**:
    - **Material Domain:** **Deferred Decal**
