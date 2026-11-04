@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Interfaces/OnlineExternalUIInterface.h"
+#include "Interfaces/OnlineIdentityInterface.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Online/OnlineSessionNames.h"
@@ -245,7 +246,18 @@ void UBRGameInstance::Init()
 		// Fires when you accept a Steam invite (or "Join Game" from the friends list) - even from the desktop.
 		InviteHandle = Sessions->AddOnSessionUserInviteAcceptedDelegate_Handle(FOnSessionUserInviteAcceptedDelegate::CreateUObject(this, &UBRGameInstance::OnInviteAccepted));
 	}
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+	if (IOnlineIdentityPtr Identity = Subsystem ? Subsystem->GetIdentityInterface() : nullptr)
+	{
+		LoginHandle = Identity->AddOnLoginCompleteDelegate_Handle(0, FOnLoginCompleteDelegate::CreateUObject(this, &UBRGameInstance::OnLoginComplete));
+	}
 	Status(FString::Printf(TEXT("Online: %s"), *GetOnlineServiceName()));
+	if (NeedsLogin())
+	{
+		// Epic: quietly sign back in with last time's login (no window). If that fails, the Epic window opens when you click Host / Find.
+		bTriedPersistentLogin = true;
+		StartLogin(TEXT("persistentauth"));
+	}
 }
 
 void UBRGameInstance::Shutdown()
@@ -257,6 +269,11 @@ void UBRGameInstance::Shutdown()
 		Sessions->ClearOnFindSessionsCompleteDelegate_Handle(FindHandle);
 		Sessions->ClearOnJoinSessionCompleteDelegate_Handle(JoinHandle);
 		Sessions->ClearOnSessionUserInviteAcceptedDelegate_Handle(InviteHandle);
+	}
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+	if (IOnlineIdentityPtr Identity = Subsystem ? Subsystem->GetIdentityInterface() : nullptr)
+	{
+		Identity->ClearOnLoginCompleteDelegate_Handle(0, LoginHandle);
 	}
 	Super::Shutdown();
 }
@@ -297,7 +314,12 @@ void UBRGameInstance::HostSteam()
 	IOnlineSessionPtr Sessions = GetSessions();
 	if (!Sessions)
 	{
-		Status(TEXT("No online subsystem - is Steam running? Use Host + Radmin instead."));
+		Status(TEXT("Online isn't available (Online: ") + GetOnlineServiceName() + TEXT("). Use a packaged / Standalone game, not the editor window."));
+		return;
+	}
+	if (NeedsLogin())
+	{
+		LoginThen(EAfterLogin::Host);
 		return;
 	}
 	if (Sessions->GetNamedSession(NAME_GameSession))
@@ -324,6 +346,7 @@ void UBRGameInstance::CreateSessionNow()
 	Settings.bShouldAdvertise = true;
 	Settings.bAllowJoinInProgress = true;
 	Settings.bIsLANMatch = bLan;
+	Settings.bIsDedicated = false;
 	Settings.bUsesPresence = true;
 	Settings.bAllowJoinViaPresence = true;
 	Settings.bAllowInvites = true;
@@ -341,10 +364,11 @@ void UBRGameInstance::OnCreateSessionComplete(FName SessionName, bool bWasSucces
 {
 	if (!bWasSuccessful)
 	{
-		Status(TEXT("Creating the session failed. Is Steam running and logged in?"));
+		Status(TEXT("Creating the online game failed. Signed in? (Epic: check the Product IDs in Project Settings -> Epic Online Services.)"));
 		return;
 	}
-	Status(TEXT("Hosting! Press Shift+Tab -> right-click a friend -> Invite to Game (or type Invite)."));
+	Status(GetOnlineServiceName() == TEXT("EOS") ? TEXT("Hosting! Friends can find your game in FIND GAMES, or press INVITE.")
+		: TEXT("Hosting! Press Shift+Tab -> right-click a friend -> Invite to Game (or type Invite)."));
 	const FString Map = UGameplayStatics::GetCurrentLevelName(GetWorld(), true);
 	UGameplayStatics::OpenLevel(GetWorld(), FName(*Map), true, TEXT("listen"));
 }
@@ -381,13 +405,18 @@ void UBRGameInstance::LeaveGame()
 
 void UBRGameInstance::Invite()
 {
+	if (NeedsLogin())
+	{
+		LoginThen(EAfterLogin::Invite);
+		return;
+	}
 	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
 	IOnlineExternalUIPtr UI = Subsystem ? Subsystem->GetExternalUIInterface() : nullptr;
 	if (!UI || !IsInSession() || !UI->ShowInviteUI(0, NAME_GameSession))
 	{
-		if (GetOnlineServiceName() != TEXT("STEAM"))
+		if (GetOnlineServiceName() != TEXT("STEAM") && GetOnlineServiceName() != TEXT("EOS"))
 		{
-			Status(TEXT("Steam is NOT connected (Online: ") + GetOnlineServiceName() + TEXT("). Open Steam first, use the packaged Development .exe, not the editor."));
+			Status(TEXT("Not connected online (Online: ") + GetOnlineServiceName() + TEXT("). Use the packaged game, not the editor."));
 		}
 		else if (!IsInSession())
 		{
@@ -405,26 +434,92 @@ void UBRGameInstance::Invite()
 
 void UBRGameInstance::FindGame()
 {
+	StartSearch(false);
+}
+
+void UBRGameInstance::BrowseGames()
+{
+	StartSearch(true);
+}
+
+void UBRGameInstance::StartSearch(bool bBrowse)
+{
 	IOnlineSessionPtr Sessions = GetSessions();
 	const ULocalPlayer* Player = GetFirstGamePlayer();
 	if (!Sessions || !Player)
 	{
-		Status(TEXT("No online subsystem - is Steam running?"));
+		Status(TEXT("Online isn't available (Online: ") + GetOnlineServiceName() + TEXT("). Use a packaged / Standalone game."));
 		return;
 	}
+	if (NeedsLogin())
+	{
+		LoginThen(bBrowse ? EAfterLogin::Browse : EAfterLogin::Find);
+		return;
+	}
+	if (bSearching)
+	{
+		return;
+	}
+	bBrowseSearch = bBrowse;
+	bSearching = true;
 	Search = MakeShared<FOnlineSessionSearch>();
-	Search->MaxSearchResults = 5000; // app 480 is shared with every other test game
+	Search->MaxSearchResults = GetOnlineServiceName() == TEXT("EOS") ? 50 : 5000; // (Steam app 480 is shared with every other test game)
 	Search->bIsLanQuery = GetOnlineServiceName() == TEXT("NULL");
-	Search->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
-	Status(TEXT("Searching for a Border Run game..."));
+	Search->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+	Search->QuerySettings.Set(BRSessionKey, FString(TEXT("1")), EOnlineComparisonOp::Equals); // only Border Run games
+	Status(bBrowse ? TEXT("Looking for games...") : TEXT("Searching for a Border Run game..."));
 	Sessions->FindSessions(0, Search.ToSharedRef());
+}
+
+void UBRGameInstance::JoinFoundGame(int32 Index)
+{
+	IOnlineSessionPtr Sessions = GetSessions();
+	if (!Sessions || !FoundResults.IsValidIndex(Index))
+	{
+		return;
+	}
+	if (Sessions->GetNamedSession(NAME_GameSession))
+	{
+		PendingInvite = FoundResults[Index]; // leave our own game first, then join (OnDestroySessionComplete)
+		bHostAfterDestroy = false;
+		Sessions->DestroySession(NAME_GameSession);
+		return;
+	}
+	Status(FString::Printf(TEXT("Joining %s's game..."), *FoundGames[Index].HostName));
+	Sessions->JoinSession(0, NAME_GameSession, FoundResults[Index]);
 }
 
 void UBRGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 {
+	bSearching = false;
 	IOnlineSessionPtr Sessions = GetSessions();
 	if (!Sessions || !Search.IsValid())
 	{
+		return;
+	}
+	if (bBrowseSearch)
+	{
+		// Server browser: list every Border Run game (name, players, ping).
+		FoundGames.Reset();
+		FoundResults.Reset();
+		for (const FOnlineSessionSearchResult& Result : Search->SearchResults)
+		{
+			FString Value;
+			if (!Result.Session.SessionSettings.Get(BRSessionKey, Value) || Value != TEXT("1"))
+			{
+				continue;
+			}
+			FFoundGame Game;
+			Game.HostName = Result.Session.OwningUserName.IsEmpty() ? FString(TEXT("Border Run game")) : Result.Session.OwningUserName;
+			Game.MaxPlayers = Result.Session.SessionSettings.NumPublicConnections;
+			Game.Players = FMath::Max(1, Game.MaxPlayers - Result.Session.NumOpenPublicConnections);
+			Game.PingMs = Result.PingInMs;
+			FoundGames.Add(Game);
+			FoundResults.Add(Result);
+		}
+		++FoundGamesVersion;
+		Status(FoundGames.Num() > 0 ? FString::Printf(TEXT("Found %d game(s) - click one to join."), FoundGames.Num())
+			: FString(TEXT("No open games right now. Host one, or try again in a moment.")));
 		return;
 	}
 	for (const FOnlineSessionSearchResult& Result : Search->SearchResults)
@@ -437,7 +532,7 @@ void UBRGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 			return;
 		}
 	}
-	Status(FString::Printf(TEXT("No Border Run game found (%d sessions checked). Ask the host for an invite instead."), Search->SearchResults.Num()));
+	Status(FString::Printf(TEXT("No Border Run game found (%d checked). Try FIND GAMES, or ask the host for an invite."), Search->SearchResults.Num()));
 }
 
 void UBRGameInstance::OnInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult)
@@ -473,5 +568,88 @@ void UBRGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCom
 	if (APlayerController* PC = GetFirstLocalPlayerController())
 	{
 		PC->ClientTravel(Address, TRAVEL_Absolute);
+	}
+}
+
+// -------------------------------------------------------------------------------------------
+// Epic login (EOS needs you signed in before hosting / joining). Steam / LAN don't need this.
+
+bool UBRGameInstance::IsLoggedIn() const
+{
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+	IOnlineIdentityPtr Identity = Subsystem ? Subsystem->GetIdentityInterface() : nullptr;
+	return Identity.IsValid() && Identity->GetLoginStatus(0) == ELoginStatus::LoggedIn;
+}
+
+bool UBRGameInstance::NeedsLogin() const
+{
+	return GetOnlineServiceName() == TEXT("EOS") && !IsLoggedIn();
+}
+
+void UBRGameInstance::LoginThen(EAfterLogin Then)
+{
+	AfterLogin = Then;
+	if (bLoginInProgress)
+	{
+		Status(TEXT("Signing in to Epic..."));
+		return;
+	}
+	// The remembered login already failed: open the Epic sign-in window (free account; only needed once).
+	StartLogin(bTriedPersistentLogin ? TEXT("accountportal") : TEXT("persistentauth"));
+	bTriedPersistentLogin = true;
+}
+
+void UBRGameInstance::StartLogin(const FString& Type)
+{
+	const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+	IOnlineIdentityPtr Identity = Subsystem ? Subsystem->GetIdentityInterface() : nullptr;
+	if (!Identity.IsValid())
+	{
+		return;
+	}
+	bLoginInProgress = true;
+	LastLoginType = Type;
+	Status(Type == TEXT("accountportal") ? TEXT("Sign in with your Epic account in the window that opened (only needed once)...")
+		: TEXT("Signing in to Epic..."));
+	FOnlineAccountCredentials Credentials;
+	Credentials.Type = Type;
+	Credentials.Id = TEXT("");
+	Credentials.Token = TEXT("");
+	Identity->Login(0, Credentials);
+}
+
+void UBRGameInstance::OnLoginComplete(int32 LocalUserNum, bool bWasSuccessful, const FUniqueNetId& UserId, const FString& Error)
+{
+	bLoginInProgress = false;
+	if (bWasSuccessful)
+	{
+		const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld());
+		IOnlineIdentityPtr Identity = Subsystem ? Subsystem->GetIdentityInterface() : nullptr;
+		Status(FString::Printf(TEXT("Signed in to Epic as %s."), Identity.IsValid() ? *Identity->GetPlayerNickname(0) : TEXT("you")));
+		RunAfterLogin();
+		return;
+	}
+	UE_LOG(LogPVV, Warning, TEXT("[Online] Epic login failed: %s"), *Error);
+	if (AfterLogin != EAfterLogin::None && LastLoginType == TEXT("persistentauth"))
+	{
+		// The quiet login didn't work but you clicked something: open the Epic sign-in window now.
+		StartLogin(TEXT("accountportal"));
+		return;
+	}
+	AfterLogin = EAfterLogin::None;
+	Status(TEXT("Epic sign-in didn't work: ") + Error + TEXT(" (Check the IDs in Project Settings -> Epic Online Services.)"));
+}
+
+void UBRGameInstance::RunAfterLogin()
+{
+	const EAfterLogin Then = AfterLogin;
+	AfterLogin = EAfterLogin::None;
+	switch (Then)
+	{
+	case EAfterLogin::Host: HostSteam(); break;
+	case EAfterLogin::Find: FindGame(); break;
+	case EAfterLogin::Browse: BrowseGames(); break;
+	case EAfterLogin::Invite: Invite(); break;
+	default: break;
 	}
 }

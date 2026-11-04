@@ -122,19 +122,21 @@ void UBRMenuWidget::BuildLayout()
 	AddRow(Box, Teams);
 	BuildCustomize(Box);
 
-	UButton* HostSteam = MakeButton(TEXT("HOST GAME  (invite Steam friends)"), Go);
+	UButton* HostSteam = MakeButton(TEXT("HOST ONLINE GAME"), Go);
 	HostSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHostSteam);
 	AddRow(Box, HostSteam);
 
-	UButton* FindSteam = MakeButton(TEXT("FIND A FRIEND'S GAME  (Steam)"), Neutral);
-	FindSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFindSteam);
-	AddRow(Box, FindSteam);
+	UButton* Browse = MakeButton(TEXT("FIND GAMES  (server list)"), Neutral);
+	Browse->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBrowseGames);
+	AddRow(Box, Browse);
+	ServerList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	AddRow(Box, ServerList);
 
-	UButton* InviteSteam = MakeButton(TEXT("INVITE A STEAM FRIEND  (after hosting)"), Neutral);
+	UButton* InviteSteam = MakeButton(TEXT("INVITE A FRIEND  (after hosting)"), Neutral);
 	InviteSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnInviteSteam);
 	AddRow(Box, InviteSteam);
 
-	UButton* HostLan = MakeButton(TEXT("HOST GAME  (Radmin / LAN)"), Neutral);
+	UButton* HostLan = MakeButton(TEXT("HOST GAME  (LAN / direct IP)"), Neutral);
 	HostLan->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHostLan);
 	AddRow(Box, HostLan);
 
@@ -389,6 +391,10 @@ void UBRMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	}
 	RefreshPickers();
 	RefreshHost();
+	if (ServerList && ShownGamesVersion != GI->FoundGamesVersion)
+	{
+		RefreshServerList();
+	}
 	if (CustomizeBox)
 	{
 		CustomizeBox->SetVisibility(GI->PreferredTeam != EPVVFaction::None ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -887,4 +893,62 @@ void UBRMenuWidget::OnPlay()
 void UBRMenuWidget::OnQuit()
 {
 	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
+}
+
+// -------------------------------------------------------------------------------------------
+// Server browser
+
+void UBRServerButton::HandleClick()
+{
+	if (UBRMenuWidget* Owner = Menu.Get())
+	{
+		Owner->JoinServer(GameIndex);
+	}
+}
+
+void UBRMenuWidget::OnBrowseGames()
+{
+	if (UBRGameInstance* GI = GetBRGameInstance())
+	{
+		GI->BrowseGames();
+	}
+}
+
+void UBRMenuWidget::JoinServer(int32 Index)
+{
+	UBRGameInstance* GI = GetBRGameInstance();
+	if (!GI)
+	{
+		return;
+	}
+	GI->bMenuDone = true;
+	if (ABRPlayerController* PC = GetBRController())
+	{
+		PC->HideMenu();
+	}
+	GI->JoinFoundGame(Index);
+}
+
+void UBRMenuWidget::RefreshServerList()
+{
+	const UBRGameInstance* GI = GetBRGameInstance();
+	if (!GI || !ServerList)
+	{
+		return;
+	}
+	ShownGamesVersion = GI->FoundGamesVersion;
+	ServerList->ClearChildren();
+	const TArray<UBRGameInstance::FFoundGame>& Games = GI->GetFoundGames();
+	for (int32 i = 0; i < Games.Num() && i < 12; ++i)
+	{
+		const UBRGameInstance::FFoundGame& Game = Games[i];
+		UBRServerButton* Row = WidgetTree->ConstructWidget<UBRServerButton>(UBRServerButton::StaticClass());
+		Row->GameIndex = i;
+		Row->Menu = this;
+		Row->SetBackgroundColor(FLinearColor(0.15f, 0.15f, 0.18f, 0.9f));
+		Row->OnClicked.AddDynamic(Row, &UBRServerButton::HandleClick);
+		Row->AddChild(MakeText(FString::Printf(TEXT("%s     %d/%d players     %d ms     - click to JOIN"), *Game.HostName, Game.Players, Game.MaxPlayers, Game.PingMs),
+			15, FLinearColor(0.9f, 0.9f, 0.9f)));
+		AddRow(ServerList, Row, 2.f);
+	}
 }

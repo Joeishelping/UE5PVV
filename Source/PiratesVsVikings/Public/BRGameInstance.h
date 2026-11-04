@@ -11,7 +11,9 @@
 class FOnlineSessionSearch;
 
 /**
- * Steam friends multiplayer (Unreal's built-in Online Subsystem Steam + sessions).
+ * Online multiplayer through Unreal's Online Subsystem: Epic Online Services (P2P with Epic's relays - no ports, no VPN,
+ * no Steam needed; players sign in with a free Epic account once) or Steam, whichever is the DefaultPlatformService.
+ * (Older Steam notes:)
  *  1. Host:   press ~ and type  HostSteam
  *  2. Invite: Shift+Tab (Steam overlay) -> friend -> "Invite to Game", or type  Invite
  *  3. Friend: accepts the Steam invite (or right-clicks you -> "Join Game") and drops into the match.
@@ -27,10 +29,30 @@ public:
 	virtual void Init() override;
 	virtual void Shutdown() override;
 
+	/** Host an online game (Epic Online Services P2P, or Steam if that's the online service). Logs into Epic first if needed. */
 	UFUNCTION(Exec, BlueprintCallable, Category = "BR|Online") void HostSteam();
 	UFUNCTION(Exec, BlueprintCallable, Category = "BR|Online") void Invite();
+	/** Join the first Border Run game found. */
 	UFUNCTION(Exec, BlueprintCallable, Category = "BR|Online") void FindGame();
 	UFUNCTION(Exec, BlueprintCallable, Category = "BR|Online") void LeaveGame();
+
+	// --- Server browser ---------------------------------------------------------------------
+	struct FFoundGame
+	{
+		FString HostName;
+		int32 Players = 0;
+		int32 MaxPlayers = 0;
+		int32 PingMs = 0;
+	};
+	/** Search for open games and LIST them (the menu shows them; click one to join). */
+	UFUNCTION(Exec, BlueprintCallable, Category = "BR|Online") void BrowseGames();
+	void JoinFoundGame(int32 Index);
+	const TArray<FFoundGame>& GetFoundGames() const { return FoundGames; }
+	/** Bumped every time the list changes (the menu rebuilds its rows). */
+	int32 FoundGamesVersion = 0;
+	bool bSearching = false;
+	/** Signed in to the online service (Epic needs a login before you can host or join). */
+	bool IsLoggedIn() const;
 
 	/** "Steam" when friends invites are available, "NULL" otherwise (LAN/IP only). */
 	UFUNCTION(BlueprintPure, Category = "BR|Online") FString GetOnlineServiceName() const;
@@ -88,7 +110,24 @@ private:
 	void OnInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
 
 	TSharedPtr<FOnlineSessionSearch> Search;
-	FDelegateHandle CreateHandle, DestroyHandle, FindHandle, JoinHandle, InviteHandle;
+	FDelegateHandle CreateHandle, DestroyHandle, FindHandle, JoinHandle, InviteHandle, LoginHandle;
+	TArray<FFoundGame> FoundGames;
+	TArray<FOnlineSessionSearchResult> FoundResults;
+	/** The search fills the browser list instead of auto-joining. */
+	bool bBrowseSearch = false;
+
+	// Epic login: try the remembered login silently, then the Epic account window; then do what you clicked.
+	enum class EAfterLogin : uint8 { None, Host, Find, Browse, Invite };
+	EAfterLogin AfterLogin = EAfterLogin::None;
+	bool bTriedPersistentLogin = false;
+	bool bLoginInProgress = false;
+	FString LastLoginType;
+	bool NeedsLogin() const;
+	void LoginThen(EAfterLogin Then);
+	void StartLogin(const FString& Type);
+	void OnLoginComplete(int32 LocalUserNum, bool bWasSuccessful, const FUniqueNetId& UserId, const FString& Error);
+	void RunAfterLogin();
+	void StartSearch(bool bBrowse);
 	bool bHostAfterDestroy = false;
 	/** Invite accepted while we still had our own session: join this once that session is gone. */
 	TOptional<FOnlineSessionSearchResult> PendingInvite;

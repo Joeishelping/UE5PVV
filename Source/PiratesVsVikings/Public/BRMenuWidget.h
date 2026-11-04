@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "BRMenuWidget.generated.h"
 
 class UBorder;
@@ -12,6 +13,19 @@ class USlider;
 class UEditableTextBox;
 class UTextBlock;
 class UVerticalBox;
+
+class UBRMenuWidget;
+
+/** One row of the server browser: a button that joins game #Index. */
+UCLASS()
+class PIRATESVSVIKINGS_API UBRServerButton : public UButton
+{
+	GENERATED_BODY()
+public:
+	int32 GameIndex = INDEX_NONE;
+	TWeakObjectPtr<UBRMenuWidget> Menu;
+	UFUNCTION() void HandleClick();
+};
 
 /**
  * Main menu built entirely in code (no widget asset needed).
@@ -29,6 +43,14 @@ protected:
 
 private:
 	UPROPERTY() TObjectPtr<UTextBlock> StatusLine;
+	/** Server browser: open online games (rebuilt when the search finishes). */
+	UPROPERTY() TObjectPtr<UVerticalBox> ServerList;
+	int32 ShownGamesVersion = -1;
+	void RefreshServerList();
+	UFUNCTION() void OnBrowseGames();
+public:
+	void JoinServer(int32 Index);
+private:
 	UPROPERTY() TObjectPtr<UTextBlock> RunnerLabel;
 	UPROPERTY() TObjectPtr<UTextBlock> WardenLabel;
 	UPROPERTY() TObjectPtr<UEditableTextBox> AddressBox;
