@@ -160,6 +160,12 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SparksEffect;
 	/** Blood spurt when someone is stabbed or shot (empty = built-in red droplets). */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> BloodEffect;
+	/** Blood puddles on the ground when someone is stabbed / shot / killed (and drips from badly hurt people). */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") bool bBloodPools = true;
+	/** Your own puddle: a DEFERRED DECAL material (see docs/EFFECTS_TUTORIAL.md). Empty = built-in red puddle. */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (EditCondition = "bBloodPools")) TSoftObjectPtr<UMaterialInterface> BloodPoolDecal;
+	/** How long a blood puddle stays (seconds). */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects", meta = (ClampMin = "5", EditCondition = "bBloodPools")) float BloodPoolSeconds = 45.f;
 	/** Rain (follows your camera; empty = simple built-in streaks). */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> RainEffect;
 	/** Sandstorm (follows your camera; empty = simple built-in blowing sand). */

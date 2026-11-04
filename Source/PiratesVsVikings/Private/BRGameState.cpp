@@ -1,4 +1,6 @@
 #include "BRGameState.h"
+#include "Materials/MaterialInterface.h"
+#include "Components/DecalComponent.h"
 #include "BRAudio.h"
 #include "BRReplay.h"
 #include "BRCharacter.h"
@@ -150,6 +152,26 @@ void ABRGameState::SpawnLocalFX(UObject* Context, EBRFX Kind, const FVector& Loc
 	if (!World || World->GetNetMode() == NM_DedicatedServer)
 	{
 		return;
+	}
+	if (Kind == EBRFX::BloodPool)
+	{
+		const UBRSettings* FXSettings = GetDefault<UBRSettings>();
+		if (!FXSettings->bBloodPools)
+		{
+			return; // blood puddles switched off
+		}
+		if (UMaterialInterface* DecalMat = FXSettings->BloodPoolDecal.LoadSynchronous())
+		{
+			// Your decal, projected straight down onto the floor, random size and spin, fades out at the end.
+			const float Radius = 55.f * Scale * FMath::FRandRange(0.8f, 1.3f);
+			if (UDecalComponent* Decal = UGameplayStatics::SpawnDecalAtLocation(World, DecalMat, FVector(40.f, Radius, Radius), Location,
+				FRotator(-90.f, FMath::FRandRange(0.f, 360.f), 0.f), FXSettings->BloodPoolSeconds))
+			{
+				Decal->SetFadeScreenSize(0.f);
+				Decal->SetFadeOut(FMath::Max(0.f, FXSettings->BloodPoolSeconds - 3.f), 3.f, false);
+			}
+			return;
+		}
 	}
 	if (UNiagaraSystem* System = GetDefault<UBRSettings>()->GetEffect(Kind))
 	{

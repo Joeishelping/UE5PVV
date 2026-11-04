@@ -4819,7 +4819,7 @@ void ABRFX::BeginPlay()
 	if (Kind == EBRFX::Splash) { Color = FLinearColor(0.75f, 0.88f, 1.f); BlobSize = 35.f; Life = 0.8f; }
 	if (Kind == EBRFX::Smoke) { Color = FLinearColor(0.35f, 0.35f, 0.37f); BlobSize = 80.f; Life = 1.6f; }
 	if (Kind == EBRFX::Blood) { Color = FLinearColor(0.45f, 0.02f, 0.02f); BlobSize = 14.f; Life = 0.7f; }
-	if (Kind == EBRFX::BloodPool) { Color = FLinearColor(0.25f, 0.01f, 0.01f); BlobSize = 60.f; Life = 45.f; }
+	if (Kind == EBRFX::BloodPool) { Color = FLinearColor(0.25f, 0.01f, 0.01f); BlobSize = 60.f; Life = GetDefault<UBRSettings>()->BloodPoolSeconds; }
 	for (UStaticMeshComponent* B : Blobs)
 	{
 		B->SetHiddenInGame(bText);
