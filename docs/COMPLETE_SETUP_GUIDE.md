@@ -980,6 +980,16 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 - NPCs **back off and block when they're rattled** (high KO meter), not just when they're nearly out.
 - NPCs who knock you down and pick you up **drag you towards the water** before throwing.
 
+**Round 6: real guard, smarter fights**
+- **Blocking is physical:** your **forearms come up in front of your face**.
+  - A punch that lands **on those arms (or the face behind them) from the front is BLOCKED**: no damage, it only wears down your guard meter. Hard punches wear it down more. Your guard sparks and rocks back, and their fist bounces off.
+  - **Body shots slip under the guard**, and hits from the **side or behind** get through. Keep turning to face them!
+  - Too many blocked punches and it's a **GUARD BREAK** (staggered, can't block for a moment).
+- **Smart targeting:** punches lock onto the **head**, but if the target's guard is up they go for the **body** instead.
+- **NPCs fight like a real fight (but arcadey):**
+  - They **step in and throw a few**, then **back out of range** with the guard up, circle, and go again.
+  - When you wind up a punch they may **block** or **slip to the side and counter**. Cowards block the most, brawlers the least.
+
 **Climbing (players):** there's no climb mode any more.
 1. Jump at a wall and **hold a mouse button**: your hand sticks.
 2. **Your hands hold you up like ropes.** With two hands you hang. With one hand you slowly slide down.

@@ -1163,6 +1163,14 @@ private:
 	FVector HazardPoint() const;
 	float NextPunchAt[2] = { 0.f, 0.f };
 	float NextBumpTime = 0.f;
+	/** NPC fight rhythm: stepping in to attack vs backing out to reset. */
+	bool bBrawlIn = true;
+	float BrawlPhaseUntil = 0.f;
+	float NextReactTime = 0.f;
+	/** Set by a fist that landed under / around the guard: the next ApplyBlock lets it through. */
+	bool bGuardBypass = false;
+	/** A punch landed on your raised guard: wears the guard down instead of you. */
+	void GuardAbsorb(float Power, const FVector& Dir, FName Bone, ABRCharacter* By);
 	float BrawlSpinUntil = 0.f;
 	float BrawlHoldUntil = 0.f;
 	bool bBrawlLeft = false;

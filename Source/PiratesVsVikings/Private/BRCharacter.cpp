@@ -2240,8 +2240,10 @@ void ABRCharacter::OnAttackStartedNative()
 				{
 					continue;
 				}
-				// Judge "in front" flat (left/right only), then aim at their head (or chest if there's no head bone).
-				const FName Spot = Other->GetMesh() && Other->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? FName(TEXT("head")) : FName(TEXT("spine_03"));
+				// Judge "in front" flat (left/right only), then aim at their head - or their BODY if their guard is up (smart).
+				const ABRCharacter* OtherBR = Cast<ABRCharacter>(Other);
+				const bool bGuardUp = OtherBR && OtherBR->IsBlocking();
+				const FName Spot = !bGuardUp && Other->GetMesh() && Other->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? FName(TEXT("head")) : FName(TEXT("spine_02"));
 				if (!Other->GetMesh() || Other->GetMesh()->GetBoneIndex(Spot) == INDEX_NONE)
 				{
 					continue;
@@ -4278,6 +4280,11 @@ float ABRCharacter::ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVe
 
 float ABRCharacter::ApplyBlock(APVVCharacter* Attacker, float Damage, FVector& Impulse)
 {
+	if (bGuardBypass)
+	{
+		bGuardBypass = false; // a fist that got under / around the guard (decided by where it actually landed)
+		return Damage;
+	}
 	if (!bBlocking || !Attacker || GetCondition() != EPVVCondition::Normal)
 	{
 		return Damage;
@@ -4916,7 +4923,7 @@ void ABRCharacter::TickReachVisuals()
 		return;
 	}
 	// Loosen the reaching arms so they can stretch out (climbing = both arms up on the wall).
-	const uint8 Reach = bClimbing ? 3 : ArmsReaching;
+	const uint8 Reach = (bClimbing || bBlocking) ? 3 : ArmsReaching; // (guard up = both arms up)
 	if (Reach != AppliedReachMuscles)
 	{
 		AppliedReachMuscles = Reach;
@@ -4963,11 +4970,21 @@ void ABRCharacter::TickReachVisuals()
 	const FName HandBones[2] = { FName(TEXT("hand_l")), FName(TEXT("hand_r")) };
 	for (int32 i = 0; i < 2; ++i)
 	{
+		const float Side = i == 0 ? -1.f : 1.f;
+		if (bBlocking && !Held)
+		{
+			// GUARD: both fists up in front of your face, forearms covering it - punches really bounce off them.
+			const FVector Head = Body->GetBoneIndex(TEXT("head")) != INDEX_NONE ? Body->GetBoneLocation(TEXT("head")) : GetActorLocation() + FVector(0.f, 0.f, 70.f);
+			const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
+			const FVector GuardAt = Head + Fwd * 34.f + GetActorRightVector() * Side * 13.f - FVector(0.f, 0.f, 6.f);
+			const FVector HandNow = Body->GetBoneLocation(HandBones[i]);
+			Body->SetPhysicsLinearVelocity(((GuardAt - HandNow) * 14.f).GetClampedToMaxSize(1400.f) + GetVelocity(), false, HandBones[i]);
+			continue;
+		}
 		if (!(ArmsReaching & (1 << i)))
 		{
 			continue;
 		}
-		const float Side = i == 0 ? -1.f : 1.f;
 		// Zombie arms: straight out at shoulder height, and up/down with where you look (look up = arms up).
 		// Gorilla style: arms out in front, a bit low and wide, so swinging the mouse sweeps them through whoever's in front of you.
 		const float Pitch = FMath::DegreesToRadians(FMath::Clamp(FRotator::NormalizeAxis(GetBaseAimRotation().Pitch) - 5.f, -40.f, 75.f));
@@ -5546,9 +5563,63 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 		}
 		return;
 	}
+	// They're throwing a punch at us: guard up, or slip to the side (not every time - it's still a brawl).
+	if (Foe->PunchUntil > Now && Dist < 220.f && !bBlocking && Now >= NextReactTime && HandGrabTarget.Get() != Foe)
+	{
+		NextReactTime = Now + FMath::FRandRange(0.6f, 1.1f);
+		const float Roll = FMath::FRand();
+		const float BlockChance = FightStyle == 3 ? 0.6f : (FightStyle == 0 ? 0.3f : 0.45f);
+		if (Roll < BlockChance)
+		{
+			BotBlock(FMath::FRandRange(0.4f, 0.7f));
+			return;
+		}
+		if (Roll < BlockChance + 0.25f)
+		{
+			const FVector Slip = FVector::CrossProduct(ToFoe.GetSafeNormal(), FVector::UpVector) * (FMath::RandBool() ? 1.f : -1.f);
+			LaunchCharacter(Slip * 380.f - ToFoe.GetSafeNormal() * 120.f, true, false);
+			BrawlNextMove = FMath::Max(BrawlNextMove, Now + 0.25f); // ...and counter
+			return;
+		}
+	}
 	if (Now < BrawlNextMove)
 	{
 		return;
+	}
+	// Real-fight rhythm: step IN and let a few go, then step back OUT of range, guard up, reset - and go again.
+	if (Now >= BrawlPhaseUntil)
+	{
+		bBrawlIn = !bBrawlIn;
+		const float InTime = FMath::FRandRange(1.f, 2.f) * (FightStyle == 0 ? 1.4f : 1.f);
+		const float OutTime = FMath::FRandRange(0.6f, 1.4f) * (FightStyle == 0 ? 0.5f : 1.f);
+		BrawlPhaseUntil = Now + (bBrawlIn ? InTime : OutTime);
+	}
+	if (!bBrawlIn && !Foe->IsDazed() && Foe->GetCondition() == EPVVCondition::Normal && HandGrabTarget.Get() != Foe)
+	{
+		SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw, 0.f));
+		const FVector Side = FVector::CrossProduct(ToFoe.GetSafeNormal(), FVector::UpVector) * (bBrawlLeft ? 1.f : -1.f);
+		if (Dist < 230.f)
+		{
+			LaunchCharacter(-ToFoe.GetSafeNormal() * 300.f + Side * 120.f, true, false); // back off out of range
+		}
+		else if (Dist > 360.f)
+		{
+			AddMovementInput(ToFoe.GetSafeNormal(), 0.6f); // don't let them get away either
+		}
+		else if (FMath::FRand() < 0.4f)
+		{
+			LaunchCharacter(Side * 220.f, true, false); // circle / bob and weave
+		}
+		if (FMath::FRand() < 0.3f)
+		{
+			BotBlock(FMath::FRandRange(0.4f, 0.8f));
+		}
+		BrawlNextMove = Now + FMath::FRandRange(0.3f, 0.5f);
+		return;
+	}
+	if (bBrawlIn && Dist > 190.f && Dist < 600.f)
+	{
+		AddMovementInput(ToFoe.GetSafeNormal(), 1.f); // step in
 	}
 	float Pace = FMath::Lerp(1.15f, 0.45f, FMath::Clamp(Aggression, 0.f, 1.f)); // (Gang Beasts fights breathe a bit)
 	if (Foe->IsDazed())
@@ -6345,7 +6416,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			if (VictimBody)
 			{
 				for (const TCHAR* BoneName : { TEXT("head"), TEXT("neck_01"), TEXT("spine_03"), TEXT("spine_02"), TEXT("pelvis"), TEXT("upperarm_l"), TEXT("upperarm_r"),
-					TEXT("lowerarm_l"), TEXT("lowerarm_r"), TEXT("thigh_l"), TEXT("thigh_r") })
+					TEXT("lowerarm_l"), TEXT("lowerarm_r"), TEXT("hand_l"), TEXT("hand_r"), TEXT("thigh_l"), TEXT("thigh_r") })
 				{
 					if (VictimBody->GetBoneIndex(BoneName) != INDEX_NONE)
 					{
@@ -6359,7 +6430,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 				}
 			}
 			const bool bHeadHit = HitBone == FName(TEXT("head")) || HitBone == FName(TEXT("neck_01"));
-			const bool bArmHit = HitBone.ToString().Contains(TEXT("arm"));
+			const bool bArmHit = HitBone.ToString().Contains(TEXT("arm")) || HitBone.ToString().StartsWith(TEXT("hand"));
 			// How HARD was it? The speed the fist was travelling INTO them (a glancing brush barely counts), plus your weight behind it.
 			const FVector HitPoint = VictimBody && VictimBody->GetBoneIndex(HitBone) != INDEX_NONE ? VictimBody->GetBoneLocation(HitBone) : Victim->GetActorLocation();
 			const FVector Into = (HitPoint - Pos).IsNearlyZero() ? HandVel.GetSafeNormal() : (HitPoint - Pos).GetSafeNormal();
@@ -6378,7 +6449,28 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			}
 			Damage *= bHeadHit ? HeadHitMultiplier : (bArmHit ? 0.25f : BodyHitDamageScale); // head hurts, body shoves, arms mostly get blocked
 			ABRCharacter* KOVictim = Cast<ABRCharacter>(Victim);
-			const bool bGuarded = KOVictim && KOVictim->bBlocking;
+			// The GUARD is real: their arms are up in front of their face. A fist that lands on those arms (or the face they're
+			// covering) from the front is BLOCKED. Body shots slip under the guard; hits from the side / behind get through.
+			const bool bFromFront = KOVictim && FVector::DotProduct(KOVictim->GetActorForwardVector().GetSafeNormal2D(), -HandVel.GetSafeNormal2D()) > 0.2f;
+			const bool bCaughtOnGuard = KOVictim && KOVictim->bBlocking && bFromFront && (bArmHit || bHeadHit);
+			if (bCaughtOnGuard)
+			{
+				KOVictim->GuardAbsorb(Curve, HandVel.GetSafeNormal(), HitBone, this);
+				Body->AddImpulse(-HandVel.GetSafeNormal() * FMath::Lerp(300.f, 800.f, Curve), Hands[i], true); // your fist bounces off
+				Multicast_Sfx(0);
+				HandReadyAt[i] = Now + 0.3f;
+				if (bPunching)
+				{
+					bPunchConnected = true;
+					PunchUntil = -1.f;
+				}
+				break;
+			}
+			const bool bGuarded = false; // (got past the guard)
+			if (KOVictim && KOVictim->bBlocking)
+			{
+				KOVictim->bGuardBypass = true; // under / around the guard: it lands
+			}
 			if (KOVictim && !bGuarded)
 			{
 				// Head: a clean, hard shot rattles you a LOT. Body: a few weak shots barely matter.
@@ -7467,6 +7559,39 @@ FVector ABRCharacter::HazardPoint() const
 		break;
 	}
 	return FVector::ZeroVector;
+}
+
+void ABRCharacter::GuardAbsorb(float Power, const FVector& Dir, FName Bone, ABRCharacter* By)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// The punch landed on your raised arms: it wears the GUARD down (hard ones more), rocks you back a little, no damage.
+	GuardMeter -= FMath::Lerp(0.06f, 0.3f, Power);
+	ABRGameState::FX(this, EBRFX::Sparks, GetMesh() && GetMesh()->GetBoneIndex(Bone) != INDEX_NONE ? GetMesh()->GetBoneLocation(Bone) : GetActorLocation() + FVector(0.f, 0.f, 70.f));
+	Multicast_BodyHit(Bone, Dir * HitReaction * FMath::Lerp(0.3f, 0.8f, Power));
+	AddLean(Dir.GetSafeNormal2D() * FMath::Lerp(200.f, 600.f, Power), By);
+	LaunchCharacter(Dir.GetSafeNormal2D() * FMath::Lerp(60.f, 220.f, Power), false, false);
+	if (GuardMeter <= 0.f)
+	{
+		// GUARD BREAK: arms knocked aside, you stagger for a moment and can't block.
+		GuardMeter = 0.f;
+		bBlocking = false;
+		GuardBrokenUntil = GetWorld()->GetTimeSeconds() + 2.5f;
+		if (const ABRGameState* GBS = GetBRGameState())
+		{
+			DazedUntil = GBS->GetServerWorldTimeSeconds() + 1.2f;
+		}
+		UpdateMovementSpeed();
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("GUARD BREAK!"));
+		Notify(LOCTEXT("GuardBreak2", "GUARD BROKEN! You're staggered and can't block for a moment."));
+	}
+	else if (Power > 0.4f)
+	{
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("BLOCKED"));
+	}
+	ForceNetUpdate();
 }
 
 #undef LOCTEXT_NAMESPACE
