@@ -1204,6 +1204,25 @@ Nothing to plug in. This only happens on the built-in test map.
   3. **Left click** to shoot.
 - The bullets never hit your own vehicle.
 
+## Part 15af: The checkpoint, simplified (stamp, confiscate, or arrest)
+
+You no longer have to search every car or frisk everyone who gets out.
+
+1. **Scan everyone in the truck (V).** The scan says whether each person is **legal**, has **no papers**, or is **carrying contraband**.
+2. **Everyone clean:** the barrier lifts and the truck drives through. That's a cleared truck, worth budget.
+3. **Someone has contraband:** hold **E** at the truck to **CONFISCATE**.
+   - Most hand it over through the window: it's seized and you get budget and points.
+   - Some won't go quietly. They jump out to fight, pull a knife or run, and that's when you tase them.
+4. **Someone has no papers** (and the contraband is dealt with): hold **E** to **DENY ENTRY**.
+   - Their passports get stamped and the truck backs up and turns round for Mexico.
+   - You get points and budget for each person with no papers. Nobody gets tased.
+   - Deny a truck of legal travellers and your approval takes a hit.
+   - A Runner player hiding in a denied truck gets dumped out on the Mexican side.
+5. **O** still orders people out of the truck if you want to arrest someone yourself.
+
+- **Waiting:** dirty trucks sit and wait for your decision. Most people don't panic just because they were scanned. If you take far too long, they lose their nerve.
+- **No more hidden stashes** in normal cars. Contraband is either on people or under the crates in a **box truck**, and box trucks still work exactly as before.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

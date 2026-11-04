@@ -1222,6 +1222,18 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 	const float Distance = ToTarget.Size();
 	const float Now = GetWorld()->GetTimeSeconds();
 
+	// Denied entry: back up and turn round for Mexico.
+	if (DeniedAt > 0.f)
+	{
+		ThrottleInput = -0.45f;
+		SteerInput = 0.6f;
+		if (Now - DeniedAt > 3.f)
+		{
+			ABRGameState::FX(this, EBRFX::Dust, GetActorLocation());
+			Destroy(); // (gone back to Mexico, with everyone still aboard)
+		}
+		return;
+	}
 	// Running the checkpoint: pedal to the metal, nothing stops us.
 	if (bRunningGate)
 	{
@@ -1297,13 +1309,8 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 		}
 		// Everybody scanned: they ALL step out and wait by the van to be searched (hold E on each).
 		// Clean people get back in once searched; anyone with no papers reacts (fight, run or hands up).
-		if (bAllScanned && !bSteppedOut && !bRunningGate)
-		{
-			bSteppedOut = true;
-			bReacted = true; // suspects react on foot now, not from inside the truck
-			StepOutForSearch(Inspector);
-			return;
-		}
+		// (No more "everybody out and search them": illegals get a passport stamp - DENIED - and contraband
+		//  is confiscated from the truck (hold E); see WantsCheckpointAction.)
 		if (WaitingOutside.Num() > 0 || HoldsAtCheckpoint())
 		{
 			FedUpFrom = Now; // nobody gets fed up while they're being searched (or the back is open)
@@ -1311,19 +1318,12 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 		}
 		const bool bCleared = bAllScanned && !bAnySuspect;
 		const bool bFedUp = Now - FMath::Max(CheckpointArrivalTime, FedUpFrom) > MaxCheckpointWait;
-		// Scanned and somebody's dirty: give Border Patrol a few seconds to order them out, then they react.
-		if (bAllScanned && bAnySuspect && !bReacted)
+		// Scanned and somebody's dirty: they sit tight and wait for Border Patrol's decision (deny / confiscate / order out).
+		if (bAllScanned && bAnySuspect && Now - FMath::Max(CheckpointArrivalTime, FedUpFrom) > MaxCheckpointWait * 0.6f && !bReacted)
 		{
-			if (ReactAt < 0.f)
-			{
-				ReactAt = Now + FMath::FRandRange(5.f, 9.f);
-			}
-			else if (Now >= ReactAt)
-			{
-				bReacted = true;
-				SuspectsReact();
-				return;
-			}
+			bReacted = true;
+			SuspectsReact(); // took too long: they lose their nerve
+			return;
 		}
 		if (!bCheckpointDone && (bCleared || bFedUp || !CheckGate))
 		{
@@ -1483,9 +1483,9 @@ void ABRTruck::SuspectsReact()
 
 void ABRTruck::OnSuspectScanned()
 {
-	if (HasAuthority() && bNPCDriven && !bReacted && ReactAt < 0.f)
+	if (HasAuthority() && bNPCDriven && !bReacted && ReactAt < 0.f && FMath::FRand() < 0.12f)
 	{
-		ReactAt = GetWorld()->GetTimeSeconds() + FMath::FRandRange(1.5f, 3.5f);
+		ReactAt = GetWorld()->GetTimeSeconds() + FMath::FRandRange(1.5f, 3.5f); // the odd one panics; most wait for the verdict
 	}
 }
 
@@ -1668,14 +1668,49 @@ bool ABRTruck::WantsBribe(const APVVCharacter* Interactor) const
 		&& FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) < 520.f;
 }
 
+ABRTruck::ECheckpointAction ABRTruck::WantsCheckpointAction(const APVVCharacter* Interactor) const
+{
+	if (!bNPCDriven || bCheckpointDone || bRunningGate || DeniedAt > 0.f || CheckpointArrivalTime < 0.f || RouteIndex != CheckpointIndex
+		|| !Interactor || Interactor->GetFaction() != BR::Wardens || Interactor->GetCondition() != EPVVCondition::Normal
+		|| Interactor->GetCurrentBoat() || Interactor->GetCarriedCharacter() || FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) > 520.f)
+	{
+		return ECheckpointAction::None;
+	}
+	bool bAllScanned = true;
+	bool bContraband = false;
+	bool bAnyone = false;
+	for (const APVVCharacter* Occupant : Occupants)
+	{
+		if (const ABRCharacter* BRC = Cast<ABRCharacter>(Occupant))
+		{
+			bAnyone = true;
+			bAllScanned &= BRC->LastScannedTime >= CheckpointArrivalTime;
+			bContraband |= BRC->bCarriesContraband && BRC->GetCondition() == EPVVCondition::Normal;
+		}
+	}
+	if (!bAnyone || !bAllScanned)
+	{
+		return ECheckpointAction::None; // scan everyone first (V)
+	}
+	return bContraband ? ECheckpointAction::Confiscate : ECheckpointAction::Deny;
+}
+
 bool ABRTruck::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
-	return WantsBribe(Interactor) || Super::CanInteract_Implementation(Interactor);
+	return WantsBribe(Interactor) || WantsCheckpointAction(Interactor) != ECheckpointAction::None || Super::CanInteract_Implementation(Interactor);
 }
 
 float ABRTruck::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
 {
-	return WantsBribe(Interactor) ? 1.5f : Super::GetInteractDuration_Implementation(Interactor);
+	if (WantsBribe(Interactor))
+	{
+		return 1.5f;
+	}
+	if (WantsCheckpointAction(Interactor) != ECheckpointAction::None)
+	{
+		return 1.2f;
+	}
+	return Super::GetInteractDuration_Implementation(Interactor);
 }
 
 FText ABRTruck::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
@@ -1684,13 +1719,119 @@ FText ABRTruck::GetInteractPrompt_Implementation(APVVCharacter* Interactor) cons
 	{
 		return FText::Format(LOCTEXT("Bribe", "TAKE the ${0} bribe and wave them through (hold) - watch the cameras! | O = order them out"), BribeOffer);
 	}
+	switch (WantsCheckpointAction(Interactor))
+	{
+	case ECheckpointAction::Confiscate: return LOCTEXT("Confiscate", "CONFISCATE the contraband (hold) - they hand it over... or fight | O = order them out");
+	case ECheckpointAction::Deny: return LOCTEXT("Deny", "DENY ENTRY - stamp the passports and send them back (hold). Only for people with NO PAPERS!");
+	default: break;
+	}
 	return Super::GetInteractPrompt_Implementation(Interactor);
+}
+
+void ABRTruck::ConfiscateAtCheckpoint(ABRCharacter* Cop)
+{
+	int32 Seized = 0;
+	TArray<ABRCharacter*> Fighters;
+	for (APVVCharacter* Occupant : Occupants)
+	{
+		ABRCharacter* BRC = Cast<ABRCharacter>(Occupant);
+		if (!BRC || !BRC->bCarriesContraband || BRC->GetCondition() != EPVVCondition::Normal)
+		{
+			continue;
+		}
+		// Most hand it over through the window. Some won't go quietly.
+		const float Resist = BRC->IsNPC() ? (BRC->bAggressiveSuspect ? 0.6f : 0.3f) : 0.f;
+		if (FMath::FRand() < Resist)
+		{
+			Fighters.Add(BRC);
+		}
+		else
+		{
+			BRC->bCarriesContraband = false;
+			++Seized;
+			ABRGameState::FX(this, EBRFX::PointsText, BRC->GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("HANDED IT OVER"));
+		}
+	}
+	for (ABRCharacter* F : Fighters)
+	{
+		Unseat(F);
+		F->LaunchCharacter(FVector(FMath::FRandRange(-150.f, 150.f), FMath::FRandRange(-150.f, 150.f), 300.f), true, true);
+		F->ReactToBust(Cop, !F->bIllegal); // fight, knife or run
+	}
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		if (Seized > 0)
+		{
+			GM->OnContrabandSeized(Cop, Seized);
+		}
+		if (Fighters.Num() > 0)
+		{
+			GM->Feed(TEXT("Somebody at the checkpoint won't give up their contraband!"));
+		}
+	}
+	if (Cop)
+	{
+		Cop->Notify(Fighters.Num() > 0 ? LOCTEXT("ConfFight", "One of them won't hand it over - get them!")
+			: LOCTEXT("ConfOk", "Contraband seized. Anyone with no papers still has to be DENIED (hold E again)."));
+	}
+	ForceNetUpdate();
+}
+
+void ABRTruck::DenyEntry(ABRCharacter* Cop)
+{
+	int32 Illegals = 0;
+	TArray<APVVCharacter*> Players;
+	for (APVVCharacter* Occupant : Occupants)
+	{
+		ABRCharacter* BRC = Cast<ABRCharacter>(Occupant);
+		if (!BRC)
+		{
+			continue;
+		}
+		if (BRC->IsNPC())
+		{
+			Illegals += BRC->bIllegal ? 1 : 0;
+		}
+		else if (BRC->IsRunner())
+		{
+			++Illegals;
+			Players.Add(BRC); // Runner players get turfed out on the Mexican side
+		}
+	}
+	for (APVVCharacter* P : Players)
+	{
+		Unseat(P);
+		if (ABRCharacter* BRC = Cast<ABRCharacter>(P))
+		{
+			BRC->Notify(LOCTEXT("YouDenied", "ENTRY DENIED. Your passport got stamped - find another way across."));
+		}
+	}
+	DeniedAt = GetWorld()->GetTimeSeconds();
+	BribeOffer = 0;
+	bReacted = true;
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 320.f), TEXT("ENTRY DENIED"));
+	ABRGameState::Sfx(this, EBRSfx::ScanAlarm, GetActorLocation());
+	HonkHorn();
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->OnEntryDenied(Cop, Illegals);
+	}
+	ForceNetUpdate();
 }
 
 void ABRTruck::OnInteract_Implementation(APVVCharacter* Interactor)
 {
 	if (!WantsBribe(Interactor))
 	{
+		if (HasAuthority())
+		{
+			switch (WantsCheckpointAction(Interactor))
+			{
+			case ECheckpointAction::Confiscate: ConfiscateAtCheckpoint(Cast<ABRCharacter>(Interactor)); return;
+			case ECheckpointAction::Deny: DenyEntry(Cast<ABRCharacter>(Interactor)); return;
+			default: break;
+			}
+		}
 		Super::OnInteract_Implementation(Interactor);
 		return;
 	}

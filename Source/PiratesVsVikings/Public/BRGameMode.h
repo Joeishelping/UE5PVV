@@ -65,6 +65,8 @@ public:
 	void OnContrabandSeized(APVVCharacter* Warden, int32 Count);
 	/** Server: every passenger of a truck at the checkpoint was scanned and clean. */
 	void OnTruckCleared(APVVCharacter* Warden);
+	/** Border Patrol stamped DENIED on a truck at the checkpoint (Illegals = people aboard with no papers). */
+	void OnEntryDenied(APVVCharacter* Warden, int32 Illegals);
 	/** Server: a truck waited too long at the checkpoint and pushed through. */
 	void OnTruckForcedThrough();
 	/** Server: illegal NPCs / contraband got across the border without being caught - points for the Runners team. */

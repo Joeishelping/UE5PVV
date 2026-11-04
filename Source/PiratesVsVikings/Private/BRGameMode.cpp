@@ -765,7 +765,7 @@ void ABRGameMode::SpawnNPCTruck()
 	const float ModelRoll = FMath::FRand();
 	Truck->Model = bBoxTruck ? EBRCarModel::Pickup : ModelRoll < 0.35f ? EBRCarModel::Pickup : ModelRoll < 0.65f ? EBRCarModel::Sedan : ModelRoll < 0.8f ? EBRCarModel::Lowrider : EBRCarModel::Van;
 	Truck->bRequiresKey = true;	// players can hide in the back but can't steal it
-	Truck->bHiddenCargo = FMath::FRand() < 0.18f; // some have a stash hidden in the vehicle (search it once it's empty)
+	Truck->bHiddenCargo = false; // (no more tedious car searches - contraband is on people, or under the crates of a box truck)
 	Truck->bInfiniteFuel = true;
 	Truck->FinishSpawning(Spawn);
 
@@ -1807,6 +1807,21 @@ void ABRGameMode::SpawnBorderRush()
 		GS->Multicast_NoisePing(RushSpot);
 	}
 	Announce(FText::Format(LOCTEXT("RushGo", "HERE THEY COME! {0} people are storming the Wall! Run them down, tase them, set the dogs on them!"), RushSpawned));
+}
+
+void ABRGameMode::OnEntryDenied(APVVCharacter* Warden, int32 Illegals)
+{
+	if (Illegals <= 0)
+	{
+		// Turned away people whose papers were fine.
+		ChangeApproval(-HarassmentPenalty);
+		Announce(FText::Format(LOCTEXT("DenyWrong", "{0} turned away a truck of LEGAL travellers! Approval -{1}"), FText::FromString(NameOf(Warden)), FMath::RoundToInt(HarassmentPenalty)));
+		return;
+	}
+	AwardPoints(Warden, PointsPerIllegalNPC * Illegals);
+	AddBudget(BudgetPerCatch / 2 * Illegals);
+	ChangeApproval(GoodCatchBonus * 0.5f);
+	Feed(FString::Printf(TEXT("%s DENIED ENTRY to %d with no papers"), *NameOf(Warden), Illegals));
 }
 
 #undef LOCTEXT_NAMESPACE

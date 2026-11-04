@@ -175,6 +175,12 @@ public:
 	/** Chance a truck with someone dirty aboard offers a bribe. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float BribeChance = 0.35f;
 	bool WantsBribe(const APVVCharacter* Interactor) const;
+	/** At the checkpoint, everyone scanned: confiscate contraband (they hand it over or fight), or deny entry (no papers). */
+	enum class ECheckpointAction : uint8 { None, Confiscate, Deny };
+	ECheckpointAction WantsCheckpointAction(const APVVCharacter* Interactor) const;
+	void ConfiscateAtCheckpoint(ABRCharacter* Cop);
+	void DenyEntry(ABRCharacter* Cop);
+	float DeniedAt = -1.f;
 	/** Box trucks: an NPC driver won't pull away while the back doors are open. */
 	virtual bool HoldsAtCheckpoint() const { return false; }
 	bool HasReachedFarSide() const { return bReachedFarSide; }
