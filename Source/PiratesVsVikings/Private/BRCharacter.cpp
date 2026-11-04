@@ -995,7 +995,7 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 		StartWandering(GetActorLocation(), 900.f);
 		return;
 	}
-	if (GetCondition() != EPVVCondition::Normal || GetCarrier())
+	if (GetCondition() != EPVVCondition::Normal || GetCarrier() || GetWorld()->GetTimeSeconds() < SurrenderUntil)
 	{
 		return;
 	}
@@ -1105,6 +1105,10 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < SurrenderUntil)
+	{
+		return; // hands up, not moving
+	}
 	// Fighting mad: go after them, then run for it.
 	if (ABRCharacter* Foe = AngryAt.Get())
 	{
@@ -3082,6 +3086,21 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		if (bIsNPC)
 		{
 			TickSearchWait();
+		}
+		// Pointing a gun at an NPC: they react (give up, run, or keep coming).
+		if (!bIsNPC && bAiming && HasWeapon() && GetCondition() == EPVVCondition::Normal && GetWorld()->GetTimeSeconds() >= NextAimCheckTime)
+		{
+			NextAimCheckTime = GetWorld()->GetTimeSeconds() + 0.25f;
+			const FVector Eye = GetActorLocation() + FVector(0.f, 0.f, 60.f);
+			FHitResult AimHit;
+			FCollisionQueryParams AimParams(SCENE_QUERY_STAT(BRGunPoint), false, this);
+			if (GetWorld()->LineTraceSingleByChannel(AimHit, Eye, Eye + GetBaseAimRotation().Vector() * 2500.f, ECC_Pawn, AimParams))
+			{
+				if (ABRCharacter* Aimed = Cast<ABRCharacter>(AimHit.GetActor()); Aimed && Aimed->IsNPC())
+				{
+					Aimed->ReactToGunPoint(this);
+				}
+			}
 		}
 		TickWounds(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
@@ -7782,6 +7801,56 @@ void ABRCharacter::ChargeForLostContraband(int32 Count)
 	PS->AddMoney(-Loss);
 	ABRGameState::FX(this, EBRFX::MoneyText, GetActorLocation() + FVector(0.f, 0.f, 150.f), FString::Printf(TEXT("-$%d"), Loss));
 	Notify(FText::Format(LOCTEXT("ContrabandLost", "You failed to sneak your contraband through - it's gone. -${0}"), Loss));
+}
+
+void ABRCharacter::ReactToGunPoint(ABRCharacter* Gunman)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!HasAuthority() || !bIsNPC || !Gunman || bOfficer || bDead || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat()
+		|| Now < NextGunReactTime)
+	{
+		return;
+	}
+	NextGunReactTime = Now + 6.f;
+	if (Now < SurrenderUntil)
+	{
+		SurrenderUntil = Now + 8.f; // still got their hands up
+		return;
+	}
+	// Who are they? Armed / the fighting kind mostly keep coming; runners might keep running; regular folks give up.
+	const bool bArmed = HeldItem == EBRItem::IllegalGun;
+	const bool bFighting = IsBrawling();
+	const bool bRunning = Now < FleeUntil;
+	float GiveUpChance = 0.75f;
+	if (bArmed)
+	{
+		GiveUpChance = 0.15f;
+	}
+	else if (bFighting)
+	{
+		GiveUpChance = bAggressiveSuspect ? 0.3f : 0.5f;
+	}
+	else if (bRunning)
+	{
+		GiveUpChance = 0.45f;
+	}
+	if (FMath::FRand() < GiveUpChance)
+	{
+		// Hands up: stop, beg, stand still (a good moment to zip-tie them).
+		CalmDown();
+		ReleaseHandGrab();
+		SurrenderUntil = Now + 8.f;
+		GetCharacterMovement()->StopMovementImmediately();
+		ForceEmote(3); // Beg
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("DON'T SHOOT!"));
+		Gunman->Notify(LOCTEXT("GaveUp", "They put their hands up. Zip-tie them (knock down or grab, then hold E)."));
+		return;
+	}
+	// Didn't give up: carry on with what they were doing (and a calm one bolts).
+	if (!bFighting && !bRunning && !bArmed)
+	{
+		StartFleeing(12.f);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

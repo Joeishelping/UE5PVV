@@ -234,10 +234,11 @@ void ABRCharacter::Frisk(ABRCharacter* Cop)
 		{
 			ReturnToTruckAfterSearch(); // clean: back in the van
 		}
-		if (GM)
+		if (GM && !bWasWaiting)
 		{
-			GM->OnVehicleSearched(Cop, IsSuspect() ? 1 : 0); // searching clean citizens is harassment
+			GM->OnVehicleSearched(Cop, IsSuspect() ? 1 : 0); // searching clean citizens on the street is harassment
 		}
+		// (searching the people who stepped out at the checkpoint is just the routine check - no penalty)
 	}
 }
 

@@ -678,10 +678,7 @@ void ABRCar::OnInteract_Implementation(APVVCharacter* Interactor)
 			{
 				Cop->Notify(LOCTEXT("StashNone", "Nothing hidden in this one."));
 			}
-			if (GM)
-			{
-				GM->OnVehicleSearched(Interactor, 0);
-			}
+			// (an empty vehicle search is routine - only ordering clean people OUT counts as harassment)
 		}
 		return;
 	}

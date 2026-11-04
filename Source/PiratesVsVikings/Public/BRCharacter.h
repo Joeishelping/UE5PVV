@@ -49,6 +49,12 @@ public:
 	void StartWandering(const FVector& Home, float Radius);
 	/** Server (NPCs): make a run for it, away from Border Patrol, for this many seconds. */
 	void StartFleeing(float Seconds);
+	/** Server (NPCs): someone is pointing a gun at us. Give up (hands up, begging) - or keep fighting / running, by who they are. */
+	void ReactToGunPoint(ABRCharacter* Gunman);
+	/** Hands up and begging until this time (stands still; easy to zip-tie). */
+	float SurrenderUntil = -1.f;
+	float NextGunReactTime = 0.f;
+	float NextAimCheckTime = 0.f;
 	/** Server (NPCs): attack this person Gang Beasts style for a while, then run. */
 	void StartBrawling(ABRCharacter* Target, float Seconds, float Aggression = 0.5f);
 	/** NPC busted at the checkpoint (no papers / contraband): fight, pull a knife, run, or give up - random, by how bad they are. */
