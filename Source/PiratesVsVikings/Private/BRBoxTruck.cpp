@@ -41,6 +41,9 @@ namespace
 
 ABRBoxTruck::ABRBoxTruck()
 {
+	// Taller vehicle: camera further back and higher, so you see over the box.
+	DriveArmLength = 1350.f;
+	DriveCamHeight = 480.f;
 	PaintColor = FLinearColor(0.85f, 0.85f, 0.82f);
 	MassKg = 1800.f;
 	// Two seats up front only: the back is cargo.
@@ -147,6 +150,11 @@ void ABRBoxTruck::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 void ABRBoxTruck::BeginPlay()
 {
 	Super::BeginPlay();
+	// Nothing in or on the truck (crates, packages, people in the back) ever pulls the chase camera in.
+	if (CameraBoom)
+	{
+		CameraBoom->bDoCollisionTest = false;
+	}
 	ApplyDoorCollision();
 }
 

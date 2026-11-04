@@ -2488,6 +2488,7 @@ ABRPhysicsProp::ABRPhysicsProp()
 	Mesh->SetStaticMesh(Cube.Object);
 	Mesh->SetRelativeScale3D(FVector(0.6f));
 	Mesh->SetCollisionProfileName(TEXT("PhysicsActor"));
+	Mesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore); // loose crates never shove your camera about
 	Mesh->SetSimulatePhysics(true);
 	Mesh->SetNotifyRigidBodyCollision(true);
 }
@@ -2602,6 +2603,7 @@ void ABRPhysicsProp::ApplyHeldState()
 	{
 		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 		Mesh->SetCollisionProfileName(TEXT("PhysicsActor"));
+		Mesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 		Mesh->SetSimulatePhysics(true);
 	}
 }

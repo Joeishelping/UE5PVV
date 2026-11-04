@@ -140,8 +140,8 @@ void ABRCar::BeginPlay()
 		}
 		if (CameraBoom)
 		{
-			CameraBoom->TargetArmLength = 1050.f;
-			CameraBoom->SocketOffset = FVector(0.f, 0.f, 320.f);
+			CameraBoom->TargetArmLength = DriveArmLength;
+			CameraBoom->SocketOffset = FVector(0.f, 0.f, DriveCamHeight);
 			CameraBoom->ProbeSize = 20.f;
 			CameraBoom->bEnableCameraLag = true;
 			CameraBoom->CameraLagSpeed = 9.f;
@@ -187,7 +187,7 @@ void ABRCar::Tick(float DeltaSeconds)
 	if (IsLocallyControlled() && CameraBoom)
 	{
 		// Aiming out of the window: pull the camera in over the cab so you can line up a shot.
-		const float Default = 1050.f; // (set in BeginPlay)
+		const float Default = DriveArmLength;
 		CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, bDriveAiming ? Default * 0.55f : Default, DeltaSeconds, 6.f);
 		if (bDriveAiming && !Cast<ABRCharacter>(GetDriver()))
 		{

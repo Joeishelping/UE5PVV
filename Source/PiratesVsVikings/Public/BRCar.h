@@ -71,6 +71,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Car") float Fuel = 0.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float FuelPerSecond = 1.f / 60.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float RideHeight = 45.f;
+	/** Chase camera: distance behind and height above the vehicle. */
+	UPROPERTY(EditAnywhere, Category = "BR|Car") float DriveArmLength = 1050.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Car") float DriveCamHeight = 320.f;
 	/** Hit someone faster than this (cm/s) and you RUN THEM OVER: they get knocked flying (never killed). */
 	UPROPERTY(EditAnywhere, Category = "BR|Car") float RunOverSpeed = 450.f;
 	/** How far people get thrown when run over (x car speed). */
