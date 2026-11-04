@@ -51,7 +51,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Map") bool bBuildTestMap = true;
 
 	/** The built-in river only counts while the test map is on. */
-	virtual bool ContainsPoint(const FVector& WorldLocation) const override { return bBuildTestMap; }
+	virtual bool ContainsPoint(const FVector& WorldLocation) const override { return bBuildTestMap && WorldLocation.Z > GetActorLocation().Z + RiverBedZ - 200.f; } // not down in a tunnel
 
 	/** Server: shops, fences, wall, catapult, pen, cars, player starts. */
 	void SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass, TSubclassOf<ABRTruck> WardenTruckClass, TSubclassOf<ABRDog> DogClass);
@@ -98,6 +98,11 @@ public:
 	static constexpr float TownEdgeX = -6000.f;
 	static constexpr float RiverBedZ = -150.f;
 	static constexpr float DeepHalfWidth = 1100.f;
+	/** The two dig tunnels: where they start (Mexican side), their Y lines, and where they come out (past the Wall). */
+	static constexpr float TunnelStartX = LineX + 1300.f;
+	static constexpr float TunnelEndX = WallX + 800.f;
+	static constexpr float TunnelY1 = -4200.f;
+	static constexpr float TunnelY2 = 3600.f;
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UBoxComponent> RiverBed;

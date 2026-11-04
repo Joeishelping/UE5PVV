@@ -73,10 +73,66 @@ ABRDesertArena::ABRDesertArena()
 
 	// Desert floor on both sides, sloped banks down into the river.
 	const float BankX = RiverHalfWidth + 800.f;
-	const float FloorLen = HalfX - BankX;
-	AddBlock(TEXT("Sand_West"), FVector(-(BankX + FloorLen * 0.5f), 0.f, Ground - 200.f), FVector(FloorLen, HalfY * 2.f, 400.f), ArenaSand);
-	const float EastLen = EastX - BankX;
-	AddBlock(TEXT("Sand_East"), FVector(BankX + EastLen * 0.5f, 0.f, Ground - 200.f), FVector(EastLen, HalfY * 2.f, 400.f), ArenaSand);
+	// The sand is split into blocks around the two tunnel pits (real holes the ramps go down through).
+	TArray<FBox2D> TunnelHoles;
+	for (const float TY : { TunnelY1, TunnelY2 })
+	{
+		FBox2D StartHole, ExitHole;
+		ABRDigTunnel::GetHoleRects(TunnelEndX - TunnelStartX, StartHole, ExitHole);
+		TunnelHoles.Add(StartHole.ShiftBy(FVector2D(TunnelStartX, TY)));
+		TunnelHoles.Add(ExitHole.ShiftBy(FVector2D(TunnelStartX, TY)));
+	}
+	auto AddSandFloor = [&](const TCHAR* BaseName, float X0, float X1)
+	{
+		TArray<float> Xs = { X0, X1 };
+		for (const FBox2D& H : TunnelHoles)
+		{
+			if (H.Max.X > X0 && H.Min.X < X1)
+			{
+				Xs.Add(FMath::Clamp(H.Min.X, X0, X1));
+				Xs.Add(FMath::Clamp(H.Max.X, X0, X1));
+			}
+		}
+		Xs.Sort();
+		int32 Piece = 0;
+		for (int32 i = 0; i + 1 < Xs.Num(); ++i)
+		{
+			const float XA = Xs[i];
+			const float XB = Xs[i + 1];
+			if (XB - XA < 1.f)
+			{
+				continue;
+			}
+			const float MidX = (XA + XB) * 0.5f;
+			TArray<float> Ys = { -HalfY, HalfY };
+			for (const FBox2D& H : TunnelHoles)
+			{
+				if (MidX > H.Min.X && MidX < H.Max.X)
+				{
+					Ys.Add(H.Min.Y);
+					Ys.Add(H.Max.Y);
+				}
+			}
+			Ys.Sort();
+			for (int32 j = 0; j + 1 < Ys.Num(); ++j)
+			{
+				const float YA = Ys[j];
+				const float YB = Ys[j + 1];
+				const float MidY = (YA + YB) * 0.5f;
+				bool bHole = YB - YA < 1.f;
+				for (const FBox2D& H : TunnelHoles)
+				{
+					bHole |= H.IsInside(FVector2D(MidX, MidY));
+				}
+				if (!bHole)
+				{
+					AddBlock(*FString::Printf(TEXT("%s_%d"), BaseName, Piece++), FVector(MidX, MidY, Ground - 200.f), FVector(XB - XA, YB - YA, 400.f), ArenaSand);
+				}
+			}
+		}
+	};
+	AddSandFloor(TEXT("Sand_West"), -HalfX, -BankX);
+	AddSandFloor(TEXT("Sand_East"), BankX, EastX);
 	// Banks: from the desert floor (+100) down to the river bed (-150) over 8 m.
 	AddBlock(TEXT("Sand_WestBank"), FVector(-1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), ArenaSand, FRotator(-17.4f, 0.f, 0.f));
 	AddBlock(TEXT("Sand_EastBank"), FVector(1915.f, 0.f, -73.f), FVector(840.f, HalfY * 2.f, 100.f), ArenaSand, FRotator(17.4f, 0.f, 0.f));
@@ -866,14 +922,14 @@ void ABRDesertArena::TickParticles(float DeltaSeconds)
 bool ABRDesertArena::IsInRiver(const FVector& WorldLocation) const
 {
 	const FVector Local = WorldLocation - GetActorLocation();
-	return FMath::Abs(Local.X) < RiverHalfWidth && FMath::Abs(Local.Y) < HalfY && Local.Z < 15.f;
+	return FMath::Abs(Local.X) < RiverHalfWidth && FMath::Abs(Local.Y) < HalfY && Local.Z < 15.f && Local.Z > RiverBedZ - 200.f;
 }
 
 bool ABRDesertArena::IsDeepWater(const FVector& WorldLocation) const
 {
 	const FVector Local = WorldLocation - GetActorLocation();
 	const bool bOnBridge = FMath::Abs(Local.Y - RoadY) < RoadHalfWidth + 70.f && Local.Z > Ground - 60.f;
-	return !bOnBridge && FMath::Abs(Local.X) < DeepHalfWidth && FMath::Abs(Local.Y) < HalfY && Local.Z < 15.f;
+	return !bOnBridge && FMath::Abs(Local.X) < DeepHalfWidth && FMath::Abs(Local.Y) < HalfY && Local.Z < 15.f && Local.Z > RiverBedZ - 200.f;
 }
 
 void ABRDesertArena::GetNPCRoute(TArray<FVector>& OutRoute, int32& OutCheckpointIndex) const
@@ -1045,23 +1101,14 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	UClass* PitClass = CockfightPitClass ? CockfightPitClass.Get() : ABRCockfightPit::StaticClass();
 	World->SpawnActor<ABRCockfightPit>(PitClass, At(-9000.f, 2200.f, Ground), Params); // spawns its own betting counters
 
-	// --- Pinata in the plaza, tunnels under the border (exit past the Wall)
+	// --- Pinata in the plaza
 	World->SpawnActor<ABRPinata>(ABRPinata::StaticClass(), At(-10450.f, 1250.f, Ground), Params);
 	// --- Mariachi band stage north of the plaza (facing the plaza)
 	World->SpawnActor<ABRMariachiBand>(ABRMariachiBand::StaticClass(), At(-10300.f, 3200.f, Ground, -90.f), Params);
 
 	// --- Lucha Libre ring out in the open (spawns its own challenge + betting counters)
 	World->SpawnActor<ABRLuchaRing>(ABRLuchaRing::StaticClass(), At(-11000.f, -6200.f, Ground), Params); // open desert by the scrapyard
-	if (ABRTunnel* T1 = World->SpawnActorDeferred<ABRTunnel>(ABRTunnel::StaticClass(), At(-5900.f, -5200.f, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
-	{
-		T1->ExitOffset = FVector(WallX + 900.f - (-5900.f), -400.f, 0.f);
-		T1->FinishSpawning(At(-5900.f, -5200.f, Ground));
-	}
-	if (ABRTunnel* T2 = World->SpawnActorDeferred<ABRTunnel>(ABRTunnel::StaticClass(), At(-6200.f, 6000.f, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
-	{
-		T2->ExitOffset = FVector(WallX + 900.f - (-6200.f), 500.f, 0.f);
-		T2->FinishSpawning(At(-6200.f, 6000.f, Ground));
-	}
+	// (The old instant-travel tunnels are gone: tunnels are dug and walked through now, see ABRDigTunnel.)
 
 	// --- Stuff to grab, swing and throw (Z)
 	{
@@ -1087,19 +1134,19 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, -4800.f, Ground, 180.f), Params);
 	World->SpawnActor<ABRWatchtower>(ABRWatchtower::StaticClass(), At(WallX + 700.f, 4200.f, Ground, 180.f), Params);
 	// Real dig-and-walk tunnels: two starts on the Mexican side, each aims straight east and comes out past the Wall.
-	for (const float TY : { -4200.f, 3600.f })
+	// (The arena's sand floor already has the holes for their pits; see the constructor.)
+	for (const float TY : { TunnelY1, TunnelY2 })
 	{
-		const float StartX = LineX + 900.f;
-		if (ABRDigTunnel* Dig = World->SpawnActorDeferred<ABRDigTunnel>(ABRDigTunnel::StaticClass(), At(StartX, TY, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		if (ABRDigTunnel* Dig = World->SpawnActorDeferred<ABRDigTunnel>(ABRDigTunnel::StaticClass(), At(TunnelStartX, TY, Ground), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 		{
-			Dig->ExitDistance = (WallX + 1200.f) - StartX;
-			Dig->DetectAfter = (-RiverHalfWidth) - StartX;
-			Dig->FinishSpawning(At(StartX, TY, Ground));
+			Dig->ExitDistance = ABRDigTunnel::SnapLength(TunnelEndX - TunnelStartX);
+			Dig->DetectAfter = (-RiverHalfWidth) - TunnelStartX;
+			Dig->FinishSpawning(At(TunnelStartX, TY, Ground));
 		}
 	}
 	// Anti-air guns by the watchtowers (shoot down balloons and rafts).
-	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, -4300.f, Ground, 180.f), Params);
-	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, 3700.f, Ground, 180.f), Params);
+	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, -3300.f, Ground, 180.f), Params);
+	World->SpawnActor<ABRAntiAir>(ABRAntiAir::StaticClass(), At(WallX + 1100.f, 2700.f, Ground, 180.f), Params);
 
 	// --- Border Patrol supply counters (paid from the government budget)
 	auto Supply = [&](float X, float Y, EBRWardenGear Gear, EBRItem SupplyItem, int32 Cost, float Cooldown)

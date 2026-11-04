@@ -84,7 +84,7 @@ Day/night, weather and ambient music are added to your map automatically.
 | Piece | What to do |
 |---|---|
 | **BR Human Cannon** | Point its arrow over the border. Runners **climb up on the barrel** (E, or Z to climb), and anyone presses **E: LIGHT THE FUSE**. 3 seconds later, everyone sitting on the barrel goes flying. With a **Cannonball Suit / Helmet** you can also climb *inside* and aim it yourself, and you land on your feet. Border Patrol can plug it. Sounds: **Fire Sound**, **Fuse Sound**. |
-| **BR Tunnel** | Put it on the Mexico side. Drag the **diamond** (Exit Offset) to where people should come out, past the Wall. Runners need a **Shovel** (a Station selling Item = Shovel) to dig it open (25 s), then anyone can crawl through once the Line is open. Border Patrol can cave it in from either end. |
+| **BR Dig Tunnel** | A real tunnel you dig and walk through (no teleporting); see COMPLETE_SETUP_GUIDE Part 15w. Put it on the Mexico side with its red arrow pointing at the USA side, and set **Exit Distance** (cm) so the exit lands past the Wall. **Your ground needs two holes** for its ramps: one about 9.6 m long just *behind* the actor, and one just past Exit Distance, each 4.2 m wide. (The built-in desert map cuts these for you. On a Landscape, use Landscape → Paint → the Visibility tool to punch the holes.) |
 | **BR Pinata** | Put it in the plaza. Runners whack it (E) and the 10th whack wins cash or a random item. It comes back after 2.5 minutes. |
 | **Mariachi Trumpet** | Sell it at a Station (Item = Mariachi Trumpet). A Runner who owns one presses **G** near Border Patrol and they dance for 4 seconds. Put your music in **BP_Runner → BR Mariachi → Trumpet Sound** and a dance animation in **BR Animations → Dance Anim**. |
 

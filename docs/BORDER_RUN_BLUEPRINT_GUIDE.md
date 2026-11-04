@@ -143,7 +143,7 @@ Use this as the "no ladder" way over **low walls and fences**, but **not** the b
 
 - Item **Shovel** ($40). In the Invasion phase, a Runner at a `BP_DigSpot` (soft sand, marked) holds E → `TunnelProgress` (replicated, 0–100) on the dig spot rises **+1 per second per digger** — so more friends = faster.
 - Digging makes a **NOISE ping every 15 s**. Wardens can **fill in** the hole (hold E 5 s → progress −40).
-- At 100 → spawn `BP_TunnelExit` on the far side of the Wall (a fixed linked actor). Interact on the hole → hold 3 s → Teleport to the exit. The tunnel stays until a Warden collapses it (hold E 10 s at either end).
+- (Old plan, replaced: tunnels are now real dug corridors you walk through, with no teleporting. Border Patrol fill finished ones in from inside. See COMPLETE_SETUP_GUIDE Part 15w.)
 - Optional: have Runners carry **dirt bags** away (item) — leaving dirt piles near the hole gives it away to drones.
 
 ---
