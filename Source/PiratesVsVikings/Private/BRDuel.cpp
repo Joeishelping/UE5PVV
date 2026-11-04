@@ -87,7 +87,7 @@ void ABRDuelSpot::OnInteract_Implementation(APVVCharacter* Interactor)
 	State = EState::Countdown;
 	StateTime = GetWorld()->GetTimeSeconds();
 	CountShown = 0;
-	C->Notify(LOCTEXT("DuelStart", "Stand on your mark. Hands off the trigger. When it says DRAW: right mouse to aim, left click to shoot. Walk off your mark and you lose."));
+	C->Notify(LOCTEXT("DuelStart", "The pistolero lends you a revolver for this duel only. Stand on your mark, hands off it. When it says DRAW: right mouse to aim, left click to shoot. Walk off your mark and you lose."));
 	GM->Feed(FString::Printf(TEXT("%s called out the pistolero! HIGH NOON..."), *C->GetPlayerDisplayName()));
 }
 
@@ -260,8 +260,9 @@ void ABRDuelSpot::Tick(float DeltaSeconds)
 			StateTime = Now;
 			Say(TEXT("DRAW!"), 300.f);
 			ABRGameState::Sfx(this, EBRSfx::Whistle, GetActorLocation());
-			C->SetWeaponDrawn(true); // revolver out - aim and fire!
+			C->SetWeaponDrawn(true); // the loaner revolver comes out - aim and fire!
 			C->ForceNetUpdate();
+			C->Notify(LOCTEXT("DuelDraw", "DRAW!!! Right mouse to aim, LEFT CLICK to fire!"));
 			const float Faster = FMath::Pow(0.9f, static_cast<float>(FMath::Min(Wins, 5)));
 			NextNPCShot = Now + FMath::FRandRange(DrawTime.X, DrawTime.Y) * Faster;
 		}

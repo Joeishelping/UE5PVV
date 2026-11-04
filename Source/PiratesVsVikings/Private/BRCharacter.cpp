@@ -530,6 +530,14 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 	{
 		AddShake(1.2f); // big landing
 	}
+	if (HasAuthority() && bDropKicking && GetCondition() == EPVVCondition::Normal)
+	{
+		// Drop kick landed: back on your feet (a little wobbly).
+		bDropKicking = false;
+		Multicast_FlightFlop(false);
+		ApplySlow(0.5f, 0.5f);
+		BalanceGraceUntil = GetWorld()->GetTimeSeconds() + 1.f;
+	}
 	if (HasAuthority() && bDiving)
 	{
 		bDiving = false;
@@ -3704,6 +3712,11 @@ void ABRCharacter::StopJumping()
 	{
 		Server_ClimbHold(false);
 	}
+	if (bHangPullHeld)
+	{
+		bHangPullHeld = false;
+		Server_SetHangPull(false);
+	}
 	bSpaceHeld = false;
 	Super::StopJumping();
 }
@@ -3741,9 +3754,11 @@ bool ABRCharacter::HandleJumpPressed()
 		Server_Lift(); // both hands on someone: SPACE = heave them over your head (again = BODY SLAM)
 		return true;
 	}
-	if (bHandHanging)
+	// Gang Beasts climbing: hands stuck on something above you + HOLD SPACE = heave your body up (and over the top).
+	if (bHandHanging || (bHandAnchored[0] && HandAnchor[0].Z > GetActorLocation().Z + 15.f) || (bHandAnchored[1] && HandAnchor[1].Z > GetActorLocation().Z + 15.f))
 	{
-		Server_HangJump(); // hanging off your hands: kick and heave yourself UP (a real jump - you still have to make it over)
+		bHangPullHeld = true;
+		Server_SetHangPull(true);
 		return true;
 	}
 	if (bClimbing)
@@ -4929,7 +4944,7 @@ void ABRCharacter::TickThrown()
 	}
 	TArray<FOverlapResult> Hits;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRThrownHit), false, this);
-	GetWorld()->OverlapMultiByObjectType(Hits, Pos, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(80.f), Params);
+	GetWorld()->OverlapMultiByObjectType(Hits, Pos, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(60.f), Params);
 	ABRCharacter* Thrower = ThrownBy.Get();
 	for (const FOverlapResult& H : Hits)
 	{
@@ -4940,11 +4955,28 @@ void ABRCharacter::TickThrown()
 			continue;
 		}
 		BowledOver.Add(Other);
-		Other->MarkThrown(Thrower); // they can knock over the next one too (chain reaction!)
-		Other->ApplyKnockdown(Thrower, Vel.GetSafeNormal2D() * FMath::Min(Vel.Size(), 1600.f) * 0.5f + FVector(0.f, 0.f, 220.f));
-		if (Other->GetCondition() == EPVVCondition::KnockedDown && !Other->bKnockedOut)
+		// Gang Beasts: a body flying into you SHOVES you and makes you stagger. Only a really fast one (or a drop kick)
+		// bowls you right over - and you're back up quickly.
+		const float Speed = Vel.Size();
+		const bool bBowled = bDropKick || Speed > 1000.f || (Speed > 750.f && Other->KOMeter > 0.4f);
+		if (bBowled)
 		{
-			Other->SetKnockdownTimeLeft(ThrowKnockdownSeconds);
+			if (Speed > 1150.f)
+			{
+				Other->MarkThrown(Thrower); // a REALLY fast one keeps going: chain reaction
+			}
+			Other->ApplyKnockdown(Thrower, Vel.GetSafeNormal2D() * FMath::Min(Speed, 1400.f) * 0.4f + FVector(0.f, 0.f, 180.f));
+			if (Other->GetCondition() == EPVVCondition::KnockedDown && !Other->bKnockedOut)
+			{
+				Other->SetKnockdownTimeLeft(ThrowKnockdownSeconds);
+			}
+		}
+		else
+		{
+			const FVector Shove = Vel.GetSafeNormal2D() * FMath::Lerp(250.f, 520.f, (Speed - 450.f) / 550.f);
+			Other->LaunchCharacter(Shove + FVector(0.f, 0.f, 80.f), true, false);
+			Other->AddLean(Shove * 2.5f, Thrower);
+			Other->Multicast_BodyHit(TEXT("spine_03"), Vel.GetSafeNormal() * HitReaction * 0.6f);
 		}
 		Other->LastTosser = Thrower;
 		Other->LastTossTime = Now;
@@ -4953,7 +4985,7 @@ void ABRCharacter::TickThrown()
 			Other->AddKO(Other->HeadHitKO, this); // two feet to the chest: that rings your bell
 			Other->Multicast_BodyHit(TEXT("spine_03"), Vel.GetSafeNormal() * HitReaction * 1.5f);
 		}
-		ABRGameState::FX(this, EBRFX::PointsText, Other->GetActorLocation() + FVector(0.f, 0.f, 120.f), bDropKick ? TEXT("DROP KICK!") : TEXT("STRIKE!"));
+		ABRGameState::FX(this, EBRFX::PointsText, Other->GetActorLocation() + FVector(0.f, 0.f, 120.f), bDropKick ? TEXT("DROP KICK!") : (bBowled ? TEXT("STRIKE!") : TEXT("OOF!")));
 		Multicast_Sfx(1);
 		if (Thrower)
 		{
@@ -4993,7 +5025,7 @@ void ABRCharacter::Server_GrabStruggle_Implementation()
 	}
 	LastMashTime = Now;
 	// One hand is easier to slip than two.
-	GrabStruggle += Holder->HandGrabMask == 3 ? 0.07f : 0.12f;
+	GrabStruggle += Holder->HandGrabMask == 3 ? 0.045f : 0.075f; // two hands: ~22 mashes, one hand: ~13
 	if (GrabStruggle >= 1.f)
 	{
 		Holder->NoRegrabTarget = this;
@@ -5080,7 +5112,7 @@ void ABRCharacter::TickHandGrab(float DeltaSeconds)
 	}
 	const float Dist = FVector::Dist2D(Held->GetActorLocation(), GetActorLocation());
 	if (GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier() || Held->GetCurrentBoat() || Held->GetCarrier()
-		|| Held->GetCondition() == EPVVCondition::Detained || Held->GetCondition() == EPVVCondition::Restrained || Dist > 320.f
+		|| Held->GetCondition() == EPVVCondition::Detained || Held->GetCondition() == EPVVCondition::Restrained || Dist > 480.f
 		|| (HandGrabMask == 0 && ArmsReaching == 0))
 	{
 		ReleaseHandGrab();
@@ -6210,25 +6242,27 @@ void ABRCharacter::DoKick()
 		DoDropKick(); // kick in the air: DROP KICK
 		return;
 	}
-	if (!HasAuthority() || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bClimbing || bInCannon || Now - LastKickTime < 0.9f)
+	if (!HasAuthority() || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bClimbing || bInCannon || Now - LastKickTime < 0.7f)
 	{
 		return;
 	}
 	LastKickTime = Now;
 	BlowDisguise();
 	Multicast_Kick();
+	// Step into it (a kick has some weight behind it).
+	LaunchCharacter(GetActorForwardVector().GetSafeNormal2D() * 220.f, false, false);
 	// Aim the foot at the nearest person's LEG in front of you (Gang Beasts: kick their legs out from under them).
 	if (bWobbleOn)
 	{
 		const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
 		APVVCharacter* Best = nullptr;
-		float BestD = 190.f;
+		float BestD = 230.f;
 		for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
 		{
 			APVVCharacter* Other = *It;
 			const FVector To = (Other->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 			const float D = To.Size();
-			if (Other != this && D < BestD && Other->GetCondition() == EPVVCondition::Normal && FVector::DotProduct(To.GetSafeNormal(), Fwd) > 0.4f)
+			if (Other != this && D < BestD && Other->GetCondition() != EPVVCondition::Detained && FVector::DotProduct(To.GetSafeNormal(), Fwd) > 0.35f)
 			{
 				BestD = D;
 				Best = Other;
@@ -6241,12 +6275,12 @@ void ABRCharacter::DoKick()
 			const FName Shin = TheirBody && TheirBody->GetBoneIndex(TEXT("calf_l")) != INDEX_NONE ? FName(TEXT("calf_l")) : NAME_None;
 			const FVector Aim = Shin != NAME_None ? TheirBody->GetBoneLocation(Shin) : Best->GetActorLocation() - FVector(0.f, 0.f, 50.f);
 			TargetLocal = GetActorTransform().InverseTransformPositionNoScale(Aim);
-			TargetLocal.X = FMath::Clamp(TargetLocal.X + 25.f, 60.f, 140.f); // kick THROUGH the leg
+			TargetLocal.X = FMath::Clamp(TargetLocal.X + 35.f, 70.f, 165.f); // kick THROUGH the leg
 			TargetLocal.Y = FMath::Clamp(TargetLocal.Y, -40.f, 50.f);
-			TargetLocal.Z = FMath::Clamp(TargetLocal.Z, -80.f, 10.f);
+			TargetLocal.Z = FMath::Clamp(TargetLocal.Z, -95.f, 25.f); // (low enough to boot someone on the floor)
 		}
 		Multicast_AttackSteer(2, TargetLocal, KickExtendSeconds);
-		KickHitUntil = Now + KickExtendSeconds + 0.12f;
+		KickHitUntil = Now + KickExtendSeconds + 0.2f;
 		bFootTracked = false;
 	}
 	// Props get punted (and bodies without physics still use the simple kick).
@@ -6275,13 +6309,28 @@ void ABRCharacter::TickKickContact(float DeltaSeconds)
 	LastFootPos = Foot;
 	TArray<FOverlapResult> Hits;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRKickFoot), false, this);
-	GetWorld()->OverlapMultiByObjectType(Hits, Foot, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(30.f), Params);
+	GetWorld()->OverlapMultiByObjectType(Hits, Foot, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(48.f), Params);
 	for (const FOverlapResult& H : Hits)
 	{
 		APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
-		if (!Victim || Victim == this || Victim->GetCarrier() || Victim->GetCondition() != EPVVCondition::Normal)
+		if (!Victim || Victim == this || Victim->GetCarrier() || Victim->GetCondition() == EPVVCondition::Detained || Victim->GetCondition() == EPVVCondition::Restrained)
 		{
 			continue;
+		}
+		// Kicking someone who's DOWN: punt them across the floor (Gang Beasts).
+		if (Victim->GetCondition() == EPVVCondition::KnockedDown)
+		{
+			const FVector Punt = GetActorForwardVector().GetSafeNormal2D();
+			KickHitUntil = -1.f;
+			Victim->ReceiveMeleeHit(this, KickDamage * 0.3f, Punt * 200.f);
+			if (ABRCharacter* Down = Cast<ABRCharacter>(Victim))
+			{
+				Down->Multicast_BodyHit(TEXT("pelvis"), Punt * HitReaction * 2.2f + FVector(0.f, 0.f, HitReaction * 0.6f));
+				Down->ExtendKnockdown(0.6f);
+			}
+			ABRGameState::FX(this, EBRFX::PointsText, Victim->GetBodyLocation() + FVector(0.f, 0.f, 70.f), TEXT("BOOT!"));
+			Multicast_Sfx(3);
+			return;
 		}
 		const USkeletalMeshComponent* TheirBody = Victim->GetMesh();
 		FName HitBone = TEXT("pelvis");
@@ -6304,7 +6353,8 @@ void ABRCharacter::TickKickContact(float DeltaSeconds)
 		const FString BoneStr = HitBone.ToString();
 		const bool bLeg = BoneStr.StartsWith(TEXT("calf")) || BoneStr.StartsWith(TEXT("thigh")) || BoneStr.StartsWith(TEXT("foot"));
 		const bool bHead = HitBone == FName(TEXT("head"));
-		const float Power = FMath::Clamp((FootVel.Size() - SlapSpeed) / FMath::Max(100.f, HardHitSpeed * 1.1f - SlapSpeed), 0.f, 1.f);
+		// A kick is committed: even a scrappy one carries real weight.
+		const float Power = FMath::Clamp((FootVel.Size() - SlapSpeed) / FMath::Max(100.f, HardHitSpeed * 0.9f - SlapSpeed), 0.45f, 1.f);
 		const float Curve = Power * Power;
 		const FVector Dir = FootVel.GetSafeNormal2D().IsNearlyZero() ? GetActorForwardVector().GetSafeNormal2D() : FootVel.GetSafeNormal2D();
 		ABRCharacter* BRVictim = Cast<ABRCharacter>(Victim);
@@ -6313,7 +6363,7 @@ void ABRCharacter::TickKickContact(float DeltaSeconds)
 		{
 			// Leg kick: hurts a little, and if they're moving (or it's a hard one) it sweeps their legs: TRIPPED.
 			Victim->ReceiveMeleeHit(this, KickDamage * FMath::Lerp(0.25f, 0.6f, Curve), Dir * 120.f);
-			const bool bTrip = Victim->GetVelocity().Size2D() > 180.f || Power > 0.65f;
+			const bool bTrip = Victim->GetVelocity().Size2D() > 120.f || Power > 0.6f || (BRVictim && BRVictim->KOMeter > 0.35f);
 			if (bTrip)
 			{
 				Victim->ApplyKnockdown(this, Dir * 250.f + FVector(0.f, 0.f, 120.f));
@@ -6321,16 +6371,29 @@ void ABRCharacter::TickKickContact(float DeltaSeconds)
 			}
 			else if (BRVictim)
 			{
-				BRVictim->ApplySlow(1.f, 0.5f); // dead leg: limping for a second
+				BRVictim->ApplySlow(1.2f, 0.45f); // dead leg: limping for a second
+				BRVictim->AddLean(Dir * 900.f, this); // and wobbling
 			}
 		}
 		else
 		{
 			// Body / head kick: a big shove (and a head kick rattles them like a punch).
-			Victim->ReceiveMeleeHit(this, KickDamage * FMath::Lerp(0.4f, 1.1f, Curve) * (bHead ? 1.4f : 1.f), Dir * KickPush * FMath::Lerp(0.4f, 1.f, Curve) + FVector(0.f, 0.f, 200.f));
-			if (BRVictim && !BRVictim->bBlocking)
+			// Body / head kick: a BIG shove that sends them stumbling back (Gang Beasts boot to the chest).
+			const FVector Shove = Dir * KickPush * FMath::Lerp(0.6f, 1.1f, Curve);
+			Victim->ReceiveMeleeHit(this, KickDamage * FMath::Lerp(0.5f, 1.1f, Curve) * (bHead ? 1.4f : 1.f), Shove + FVector(0.f, 0.f, 200.f));
+			if (BRVictim)
 			{
-				BRVictim->AddKO(bHead ? BRVictim->HeadHitKO * FMath::Lerp(0.5f, 2.2f, Curve) : BRVictim->BodyHitKO * FMath::Lerp(0.3f, 1.5f, Curve), this);
+				BRVictim->LaunchCharacter(Shove * (BRVictim->bBlocking ? 0.5f : 0.9f) + FVector(0.f, 0.f, 120.f), true, false);
+				BRVictim->AddLean(Dir * 1600.f * FMath::Lerp(0.6f, 1.f, Curve), this);
+				if (!BRVictim->bBlocking)
+				{
+					BRVictim->AddKO(bHead ? BRVictim->HeadHitKO * FMath::Lerp(0.6f, 2.2f, Curve) : BRVictim->BodyHitKO * FMath::Lerp(0.5f, 1.6f, Curve), this);
+				}
+				// A hard one (or a head kick) on someone already wobbly puts them down.
+				if ((bHead && Power > 0.6f) || (Power > 0.8f && BRVictim->KOMeter > 0.3f))
+				{
+					BRVictim->ApplyKnockdown(this, Shove * 0.5f + FVector(0.f, 0.f, 160.f));
+				}
 			}
 		}
 		if (BRVictim)
@@ -6380,7 +6443,7 @@ void ABRCharacter::Multicast_Kick_Implementation()
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("foot_r")) != INDEX_NONE)
 	{
 		const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
-		GetMesh()->AddImpulse(Fwd * 1600.f + FVector(0.f, 0.f, 500.f), PhysBone(TEXT("foot_r")), true);
+		GetMesh()->AddImpulse(Fwd * 2200.f + FVector(0.f, 0.f, 600.f), PhysBone(TEXT("foot_r")), true);
 		GetMesh()->AddImpulse(Fwd * 900.f + FVector(0.f, 0.f, 300.f), PhysBone(TEXT("calf_r")), true);
 		GetMesh()->AddImpulseToAllBodiesBelow(-Fwd * 150.f, PhysBelow(TEXT("spine_02")), true, true); // lean back into it
 	}
@@ -7719,10 +7782,10 @@ void ABRCharacter::TickHandHang(float DeltaSeconds)
 		const FVector Wish0 = Move->GetCurrentAcceleration().GetSafeNormal2D();
 		const bool bPushIn = FVector::DotProduct(Wish0, (AvgAnchor - GetActorLocation()).GetSafeNormal2D()) > 0.3f;
 		const bool bLookUp = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch) > 15.f;
-		if (AvgAnchor.Z > Shoulders.Z + 10.f && (bPushIn || bLookUp) && HangGrip > 0.1f)
+		if (AvgAnchor.Z > Shoulders.Z - 20.f && (bPushIn || bLookUp || bHangPullHeld) && HangGrip > 0.1f)
 		{
 			Move->SetMovementMode(MOVE_Falling);
-			Move->Velocity.Z = Holding == 2 ? 220.f : 110.f;
+			Move->Velocity.Z = bHangPullHeld ? (Holding == 2 ? 330.f : 200.f) : (Holding == 2 ? 220.f : 110.f);
 		}
 		else
 		{
@@ -7758,18 +7821,41 @@ void ABRCharacter::TickHandHang(float DeltaSeconds)
 	const float LookPitch = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch);
 	const FVector Wish = Move->GetCurrentAcceleration().GetSafeNormal2D();
 	const bool bPushingIn = FVector::DotProduct(Wish, Dir.GetSafeNormal2D()) > 0.3f;
-	const bool bPulling = (LookPitch > 15.f || bPushingIn) && ToAnchor.Z > 20.f && HangGrip > 0.f;
+	const bool bPulling = (LookPitch > 15.f || bPushingIn || bHangPullHeld) && ToAnchor.Z > 20.f && HangGrip > 0.f;
 	if (bPulling)
 	{
-		const float Pull = (Holding == 2 ? 170.f : 75.f) * FMath::Lerp(0.4f, 1.f, HangGrip);
+		// HOLD SPACE = heave hard (Gang Beasts): both hands lift you quickly, one hand slowly.
+		const float Pull = (bHangPullHeld ? (Holding == 2 ? 300.f : 160.f) : (Holding == 2 ? 170.f : 75.f)) * FMath::Lerp(0.55f, 1.f, HangGrip);
 		V.Z = FMath::Max(V.Z, Pull);
+	}
+	// Heaved up level with your hands and still holding SPACE: if there's a top to climb onto, haul yourself over it.
+	if (bHangPullHeld && ToAnchor.Z < 35.f && HangGrip > 0.f)
+	{
+		const FVector In = FVector(Anchor - GetActorLocation()).GetSafeNormal2D();
+		const FVector Probe = Anchor + In * 50.f + FVector(0.f, 0.f, 170.f);
+		FHitResult Top;
+		FCollisionQueryParams TopParams(SCENE_QUERY_STAT(BRMantle), false, this);
+		if (GetWorld()->LineTraceSingleByChannel(Top, Probe, Probe - FVector(0.f, 0.f, 260.f), ECC_Visibility, TopParams)
+			&& Top.ImpactNormal.Z > 0.65f && Top.ImpactPoint.Z > Anchor.Z - 60.f)
+		{
+			// Over the top! (feet up and in, hands let go)
+			V = In * 320.f;
+			V.Z = FMath::Max(420.f, (Top.ImpactPoint.Z - GetActorLocation().Z) * 3.2f + 260.f);
+			Move->Velocity = V;
+			bHandAnchored[0] = bHandAnchored[1] = false;
+			bHandHanging = false;
+			HangGrip = FMath::Min(1.f, HangGrip + 0.3f);
+			BalanceGraceUntil = GetWorld()->GetTimeSeconds() + 1.5f;
+			return;
+		}
 	}
 	// One hand: you slowly slip. Grip wears out the longer you hang (faster while pulling, much faster on one hand).
 	if (Holding == 1 && !bPulling)
 	{
 		V.Z = FMath::Min(V.Z, -40.f);
 	}
-	HangGrip -= DeltaSeconds * (Holding == 2 ? 1.f / 16.f : 1.f / 6.f) * (bPulling ? 1.6f : 1.f);
+	// Grip lasts: ~45 s on two hands, ~15 s on one (a bit faster while heaving).
+	HangGrip -= DeltaSeconds * (Holding == 2 ? 1.f / 45.f : 1.f / 15.f) * (bPulling ? 1.25f : 1.f);
 	Move->Velocity = V;
 	if (HangGrip <= 0.f)
 	{
@@ -7781,6 +7867,11 @@ void ABRCharacter::TickHandHang(float DeltaSeconds)
 			Notify(LOCTEXT("GripGone", "Your grip gave out!"));
 		}
 	}
+}
+
+void ABRCharacter::Server_SetHangPull_Implementation(bool bHeld)
+{
+	bHangPullHeld = bHeld;
 }
 
 void ABRCharacter::Server_HangJump_Implementation()

@@ -1223,6 +1223,37 @@ You no longer have to search every car or frisk everyone who gets out.
 - **Waiting:** dirty trucks sit and wait for your decision. Most people don't panic just because they were scanned. If you take far too long, they lose their nerve.
 - **No more hidden stashes** in normal cars. Contraband is either on people or under the crates in a **box truck**, and box trucks still work exactly as before.
 
+## Part 15ag: Climbing, grips, kicks and throws (Gang Beasts tuning)
+
+- **Climbing:**
+  - Hold a click so a hand sticks to something above you, then **HOLD SPACE** to heave your body up.
+  - Two hands pull fast; one hand pulls slowly.
+  - When your shoulders reach your hands and there's a top (a wall, a roof, a ledge), keep holding Space and you haul yourself **over** it.
+  - If there's no top yet, reach up with one hand to re-grab higher, then the other.
+- **Grip:**
+  - Hanging on two hands lasts about 45 seconds (it used to be about 16); one hand lasts about 15.
+  - It refills quickly once your feet are on the ground.
+  - Holding a person doesn't break until you're 4.8 m apart.
+  - Wriggling free takes about 22 mashes against two hands, or 13 against one.
+- **Thrown bodies:**
+  - A body flying into you shoves you and makes you stagger ("OOF!").
+  - Only a really fast one, or one hitting someone who's already rocked, bowls you over ("STRIKE!"), and you get back up quickly.
+  - Chain reactions only happen with really fast throws.
+  - Falls have to be higher (4.5 m) to knock you flat.
+- **Kicks:**
+  - The foot reaches further and the hit window is longer.
+  - You step into the kick, and even a scrappy kick lands with real weight.
+  - A boot to the chest sends people stumbling back.
+  - A leg kick trips anyone moving or already wobbly; otherwise it gives them a dead leg.
+  - A hard head kick drops them.
+  - You can **boot someone who's on the floor** and send them sliding.
+- **Drop kick** (kick while in the air):
+  - You fly feet-first and land back on your feet.
+  - It no longer knocks *you* down.
+  - The people you hit still go flying.
+- **Duel:** you get a loaner revolver for the duel only. It comes out at DRAW and goes away when the duel ends.
+- **Mexico gym:** moved west so it isn't inside a house any more.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

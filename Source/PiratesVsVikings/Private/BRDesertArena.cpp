@@ -192,14 +192,14 @@ ABRDesertArena::ABRDesertArena()
 	AddHut(TEXT("House2"), FVector(-13500.f, 3000.f, Ground), FVector(800.f, 1000.f, 350.f), ArenaAdobe);
 	AddSign(TEXT("Sign_Town"), TEXT("WELCOME TO DUSTY GULCH"), FVector(-15000.f, 0.f, Ground + 450.f), 0.f, 150.f, FColor(255, 230, 180));
 	// Makeshift gym in town (membership at the front desk; equipment spawns in SpawnGameplayActors).
-	AddBlock(TEXT("Gym_Floor"), FVector(-15800.f, 3400.f, Ground + 3.f), FVector(1300.f, 1100.f, 6.f), FLinearColor(0.25f, 0.25f, 0.27f));
-	AddBlock(TEXT("Gym_Roof"), FVector(-15800.f, 3400.f, Ground + 360.f), FVector(1400.f, 1200.f, 20.f), FLinearColor(0.5f, 0.5f, 0.45f), FRotator::ZeroRotator, false);
-	AddBlock(TEXT("Gym_Post1"), FVector(-16450.f, 2850.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
-	AddBlock(TEXT("Gym_Post2"), FVector(-16450.f, 3950.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
-	AddBlock(TEXT("Gym_Post3"), FVector(-15150.f, 2850.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
-	AddBlock(TEXT("Gym_Post4"), FVector(-15150.f, 3950.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
-	AddSign(TEXT("Sign_Gym"), TEXT("GIMNASIO EL TORO - MEMBERS ONLY"), FVector(-15130.f, 3400.f, Ground + 420.f), 0.f, 70.f, FColor(255, 120, 60));
-	AddRoomLight(TEXT("Gym_Light"), FVector(-15800.f, 3400.f, Ground + 320.f), 60.f, 1100.f);
+	AddBlock(TEXT("Gym_Floor"), FVector(-17300.f, 3400.f, Ground + 3.f), FVector(1300.f, 1100.f, 6.f), FLinearColor(0.25f, 0.25f, 0.27f));
+	AddBlock(TEXT("Gym_Roof"), FVector(-17300.f, 3400.f, Ground + 360.f), FVector(1400.f, 1200.f, 20.f), FLinearColor(0.5f, 0.5f, 0.45f), FRotator::ZeroRotator, false);
+	AddBlock(TEXT("Gym_Post1"), FVector(-17950.f, 2850.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddBlock(TEXT("Gym_Post2"), FVector(-17950.f, 3950.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddBlock(TEXT("Gym_Post3"), FVector(-16650.f, 2850.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddBlock(TEXT("Gym_Post4"), FVector(-16650.f, 3950.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddSign(TEXT("Sign_Gym"), TEXT("GIMNASIO EL TORO - MEMBERS ONLY"), FVector(-16630.f, 3400.f, Ground + 420.f), 0.f, 70.f, FColor(255, 120, 60));
+	AddRoomLight(TEXT("Gym_Light"), FVector(-17300.f, 3400.f, Ground + 320.f), 60.f, 1100.f);
 
 	// Warden side.
 	AddBlock(TEXT("Cell_Front"), FVector(6400.f, 4000.f, Ground + 150.f), FVector(40.f, 640.f, 300.f), ArenaConcrete);
@@ -1327,7 +1327,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Gym(9550.f, 4100.f, 2, true, TEXT("TREADMILL"), FLinearColor(0.2f, 0.2f, 0.22f));
 	// Mexico gym: pay the (expensive) membership first.
 	{
-		const FTransform T = At(-15300.f, 3400.f, Ground, 0.f);
+		const FTransform T = At(-16800.f, 3400.f, Ground, 0.f);
 		if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 		{
 			S->Kind = EBRStationKind::BuyItem; S->bGymMembership = true; S->Price = 600;
@@ -1335,8 +1335,8 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 			S->FinishSpawning(T);
 		}
 	}
-	Gym(-16000.f, 3050.f, 1, false, TEXT("PESAS (WEIGHTS)"), FLinearColor(0.35f, 0.3f, 0.25f));
-	Gym(-16000.f, 3750.f, 2, false, TEXT("CAMINADORA (TREADMILL)"), FLinearColor(0.35f, 0.3f, 0.25f));
+	Gym(-17500.f, 3050.f, 1, false, TEXT("PESAS (WEIGHTS)"), FLinearColor(0.35f, 0.3f, 0.25f));
+	Gym(-17500.f, 3750.f, 2, false, TEXT("CAMINADORA (TREADMILL)"), FLinearColor(0.35f, 0.3f, 0.25f));
 
 	// --- Hiding spots (dumpsters, porta-potties, hay bales) on both sides
 	auto Hide = [&](float X, float Y, float Yaw, EBRHideStyle HideStyle)

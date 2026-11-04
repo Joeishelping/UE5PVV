@@ -580,13 +580,19 @@ void ABRCharacter::DoDropKick()
 	bDropKicking = true;
 	DropKickHitUntil = Now + 0.9f;
 	MarkThrown(this);
-	const float Saved = MaxKnockdownSpeed;
-	MaxKnockdownSpeed = FMath::Max(Saved, DropKickSpeed);
-	ApplyKnockdown(nullptr, (Fwd * DropKickSpeed + FVector(0.f, 0.f, GetCharacterMovement()->IsFalling() ? 120.f : 380.f)) / FMath::Max(0.1f, KnockbackScale));
-	MaxKnockdownSpeed = Saved;
-	if (GetCondition() == EPVVCondition::KnockedDown)
+	// You stay in control: fly feet-first with floppy limbs, then land back on your feet (no knockdown for the kicker).
+	LaunchCharacter(Fwd * DropKickSpeed * 0.8f + FVector(0.f, 0.f, GetCharacterMovement()->IsFalling() ? 160.f : 420.f), true, true);
+	BalanceGraceUntil = Now + 2.f; // the landing doesn't topple you
+	Multicast_FlightFlop(true);
+	if (bWobbleOn && GetMesh())
 	{
-		SetKnockdownTimeLeft(DropKickDownSeconds); // you land on your back and get up quickly
+		for (const TCHAR* Foot : { TEXT("foot_l"), TEXT("foot_r") })
+		{
+			if (GetMesh()->GetBoneIndex(Foot) != INDEX_NONE)
+			{
+				GetMesh()->AddImpulse(Fwd * 1400.f + FVector(0.f, 0.f, 500.f), PhysBone(Foot), true);
+			}
+		}
 	}
 	Multicast_Sfx(2);
 	ForceNetUpdate();

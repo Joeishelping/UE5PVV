@@ -388,7 +388,7 @@ public:
 	/** Getting up takes this long (can't walk while you push yourself up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float GetUpSeconds = 1.f;
 	/** Thrown people go flying FLOPPY (ragdoll) and are down this long (unless they were already KO'd). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float ThrowKnockdownSeconds = 2.2f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float ThrowKnockdownSeconds = 1.5f;
 	/** A hit at least this hard makes the whole body go limp for a split second (Gang Beasts stagger). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HitFlopThreshold = 700.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HitFlopSeconds = 0.3f;
@@ -424,7 +424,7 @@ public:
 	/** Punch: the fist is steered out to the target this long (then stays out if you keep holding the button). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float PunchExtendSeconds = 0.42f;
 	/** Kick: the leg is steered through the kick this long. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KickExtendSeconds = 0.35f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KickExtendSeconds = 0.45f;
 	/** Swinging your arms out (move the mouse while holding the buttons) hits people if the hand is fast enough. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bSwingAttacks = true;
 	/** Drop kick (kick in the air, or Alt without clicking): how hard you launch and how long you're down after. */
@@ -738,11 +738,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveSpeed = 1300.f;
 	/** Kick (R with fists out) and headbutt (middle mouse). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float KickDamage = 22.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float KickPush = 750.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float KickPush = 1000.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HeadbuttDamage = 30.f;
 	/** Wall climbing: height gained per correct left/right click, and how far a fall has to be to knock you out. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ClimbStep = 45.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FallKnockoutHeight = 320.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FallKnockoutHeight = 450.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float DiveCooldown = 2.f;
 	/** How high you leap off a friend's shoulders (cm/s up). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ShoulderLeap = 1100.f;
@@ -1273,6 +1273,9 @@ private:
 	float LastHangJump = -10.f;
 	void TickHandHang(float DeltaSeconds);
 	UFUNCTION(Server, Reliable) void Server_HangJump();
+	UFUNCTION(Server, Reliable) void Server_SetHangPull(bool bHeld);
+	/** Holding SPACE while your hands are stuck above you: heave yourself up (owner + server copy). */
+	bool bHangPullHeld = false;
 	/** Upward push of a jump while hanging from your hands (cm/s). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HangJumpUp = 560.f;
 	UFUNCTION(Server, Reliable) void Server_ClimbStep(bool bLeft);
