@@ -229,7 +229,7 @@ public:
 	/** Gang Beasts pacing: every hit is divided by this (higher = longer fights). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FightToughness = 1.9f;
 	/** Balance vs the computer: NPC hits on a PLAYER count this much (damage + KO meter). Lower = NPCs knock you out less easily. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float NPCHitsOnPlayersScale = 0.55f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float NPCHitsOnPlayersScale = 0.75f;
 	/** Balance vs the computer: a PLAYER's hits on an NPC count this much. Higher = NPCs go down easier. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PlayerHitsOnNPCsScale = 1.45f;
 	/** NPC vs player / player vs NPC scale for a hit from By on me (1 for player-player / NPC-NPC). */
@@ -1192,6 +1192,9 @@ private:
 	bool StartWallClimb();
 	/** Is the body in a state where the wobbly-body muscles can safely read it? (posed bones, physics bodies, collision on) */
 	bool MusclesSafe() const;
+	/** Console (~): ArmsDebug - shows the physics-body / arms state on screen (to check the wobbly body is really on). */
+	UFUNCTION(Exec) void ArmsDebug();
+	bool bArmsDebug = false;
 	/** Sticky hands: where each reaching hand is stuck to a surface (left, right). */
 	FVector HandAnchor[2];
 	bool bHandAnchored[2] = { false, false };

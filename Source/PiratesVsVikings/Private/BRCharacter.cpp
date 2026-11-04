@@ -2667,18 +2667,25 @@ void ABRCharacter::EnableWobble()
 	{
 		return; // switched on again when you get out (balloon / wheelbarrow rides switch collision off, so the body has no physics then)
 	}
-	// The bones must have been posed at least once, and the body must have its physics bodies, or the physics reads
-	// bones / bodies that don't exist (engine crash: "index 2 into an array of size 0").
+	// The bones must have been posed at least once (or the physics reads bones that don't exist - engine crash).
+	if (!MeshComp->IsRegistered() || MeshComp->GetNumBones() <= 0 || MeshComp->GetComponentSpaceTransforms().Num() < MeshComp->GetNumBones()
+		|| MeshComp->GetEditableComponentSpaceTransforms().Num() < MeshComp->GetNumBones() || !GetActorEnableCollision())
+	{
+		bWobblePending = true;
+		return;
+	}
+	// Turn the body's physics ON first (this is what creates the physics bodies the muscles drive)...
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	MeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	MeshComp->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
+	MeshComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	// ...then make sure they really exist before hooking the muscles up.
 	if (!MusclesSafe())
 	{
 		bWobblePending = true;
 		return;
 	}
 	bWobblePending = false;
-	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	MeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	MeshComp->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
-	MeshComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
 	PhysicalAnimation->SetSkeletalMeshComponent(MeshComp);
 	PhysicalAnimation->SetComponentTickEnabled(true);
@@ -3080,6 +3087,16 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	TickBodySounds(DeltaSeconds);
 	TickShake(DeltaSeconds);
 	TickReachVisuals();
+	if (bArmsDebug && GEngine && IsLocallyControlled())
+	{
+		const USkeletalMeshComponent* DebugBody = GetMesh();
+		GEngine->AddOnScreenDebugMessage(9001, 0.f, bWobbleOn ? FColor::Green : FColor::Red, FString::Printf(
+			TEXT("WOBBLE %s | pending %d | physics asset %s | bodies %d | safe %d | arms reaching %d | grab mask %d | holding %s | hand anchors %d%d | hanging %d"),
+			bWobbleOn ? TEXT("ON") : TEXT("OFF"), bWobblePending ? 1 : 0,
+			DebugBody && DebugBody->GetPhysicsAsset() ? *DebugBody->GetPhysicsAsset()->GetName() : TEXT("NONE!"),
+			DebugBody ? DebugBody->Bodies.Num() : 0, MusclesSafe() ? 1 : 0, ArmsReaching, HandGrabMask,
+			HandGrabTarget ? *HandGrabTarget->GetPlayerDisplayName() : TEXT("-"), bHandAnchored[0] ? 1 : 0, bHandAnchored[1] ? 1 : 0, bHandHanging ? 1 : 0));
+	}
 	TickRope();
 	TickEmoteWheel();
 	TickHeadTag();
@@ -4439,7 +4456,7 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 	const bool bContactGrabs = bWobbleOn && Cast<APlayerController>(GetController()) && GetMesh() && GetMesh()->GetBoneIndex(TEXT("hand_l")) != INDEX_NONE; // (NPCs / bots keep the simpler reach-grab)
 	if (!Best && bContactGrabs)
 	{
-		float BestTouch = 32.f;
+		float BestTouch = 45.f; // (generous: if your hand is on them, you've got them)
 		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 		{
 			ABRCharacter* Other = *It;
@@ -4466,7 +4483,7 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 					}
 					// Fat torsos: count the chest/belly as touched from a little further out.
 					const bool bTorso = FCString::Strstr(BoneName, TEXT("spine")) || FCString::Strstr(BoneName, TEXT("pelvis"));
-					const float D = FVector::Dist(Other->GetMesh()->GetBoneLocation(BoneName), HandAt) - (bTorso ? 18.f : 0.f);
+					const float D = FVector::Dist(Other->GetMesh()->GetBoneLocation(BoneName), HandAt) - (bTorso ? 28.f : 0.f);
 					if (D < BestTouch)
 					{
 						BestTouch = D;
@@ -5624,19 +5641,24 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 	{
 		return;
 	}
-	// Real-fight rhythm: step IN and let a few go, then step back OUT of range, guard up, reset - and go again.
+	// Real-fight rhythm: mostly IN and swinging, with short resets OUT of range now and then (brawlers barely reset).
+	// The style only changes how they reset: sneaks circle behind you, cowards back off with the guard up.
 	if (Now >= BrawlPhaseUntil)
 	{
 		bBrawlIn = !bBrawlIn;
-		const float InTime = FMath::FRandRange(1.f, 2.f) * (FightStyle == 0 ? 1.4f : 1.f);
-		const float OutTime = FMath::FRandRange(0.6f, 1.4f) * (FightStyle == 0 ? 0.5f : 1.f);
+		const float InTime = FMath::FRandRange(2.2f, 3.8f) * (FightStyle == 0 ? 1.5f : 1.f);
+		const float OutTime = FMath::FRandRange(0.4f, 0.9f) * (FightStyle == 0 ? 0.5f : (FightStyle == 3 ? 1.4f : 1.f));
 		BrawlPhaseUntil = Now + (bBrawlIn ? InTime : OutTime);
 	}
 	if (!bBrawlIn && !Foe->IsDazed() && Foe->GetCondition() == EPVVCondition::Normal && HandGrabTarget.Get() != Foe)
 	{
 		SetActorRotation(FRotator(0.f, ToFoe.Rotation().Yaw, 0.f));
 		const FVector Side = FVector::CrossProduct(ToFoe.GetSafeNormal(), FVector::UpVector) * (bBrawlLeft ? 1.f : -1.f);
-		if (Dist < 230.f)
+		if (FightStyle == 2 && Dist < 450.f)
+		{
+			LaunchCharacter(Side * 380.f + ToFoe.GetSafeNormal() * 60.f, true, false); // sneak round the side
+		}
+		else if (Dist < 230.f)
 		{
 			LaunchCharacter(-ToFoe.GetSafeNormal() * 300.f + Side * 120.f, true, false); // back off out of range
 		}
@@ -5655,37 +5677,17 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 		BrawlNextMove = Now + FMath::FRandRange(0.3f, 0.5f);
 		return;
 	}
-	if (bBrawlIn && Dist > 190.f && Dist < 600.f)
+	if (bBrawlIn && Dist > 150.f && Dist < 900.f)
 	{
-		AddMovementInput(ToFoe.GetSafeNormal(), 1.f); // step in
+		AddMovementInput(ToFoe.GetSafeNormal(), 1.f); // close the distance
+		GetCharacterMovement()->MaxWalkSpeed = FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 520.f);
 	}
-	float Pace = FMath::Lerp(1.15f, 0.45f, FMath::Clamp(Aggression, 0.f, 1.f)); // (Gang Beasts fights breathe a bit)
+	float Pace = FMath::Lerp(0.8f, 0.35f, FMath::Clamp(Aggression, 0.f, 1.f)); // in range: keep swinging
 	if (Foe->IsDazed())
 	{
 		Pace *= 0.45f; // they're seeing birds: finish them
 	}
 	BrawlNextMove = Now + Pace * FMath::FRandRange(0.7f, 1.3f);
-	const bool bFoeBusy = Foe->HandGrabTarget.Get() != nullptr && Foe->HandGrabTarget.Get() != this; // fighting someone else
-	const bool bFoeFacingMe = FVector::DotProduct(Foe->GetActorForwardVector().GetSafeNormal2D(), -ToFoe.GetSafeNormal()) > 0.4f;
-	// SNEAK: don't walk into their fists - circle round behind them (or wait till they're busy), then strike.
-	if (FightStyle == 2 && !Foe->IsDazed() && !bFoeBusy && bFoeFacingMe && Dist < 450.f && HandGrabTarget.Get() != Foe)
-	{
-		const FVector Around = FVector::CrossProduct(ToFoe.GetSafeNormal(), FVector::UpVector) * (bBrawlLeft ? 1.f : -1.f);
-		LaunchCharacter(Around * 380.f + ToFoe.GetSafeNormal() * (Dist > 250.f ? 120.f : -80.f), true, false);
-		BrawlNextMove = Now + 0.45f;
-		return;
-	}
-	// COWARD: keeps their distance until you're busy or groggy, then darts in.
-	if (FightStyle == 3 && !Foe->IsDazed() && !bFoeBusy && Foe->GetCondition() == EPVVCondition::Normal && HandGrabTarget.Get() != Foe)
-	{
-		if (Dist < 260.f)
-		{
-			BotBlock(FMath::FRandRange(0.4f, 0.8f));
-			LaunchCharacter(-ToFoe.GetSafeNormal() * 380.f, true, false);
-		}
-		BrawlNextMove = Now + 0.6f;
-		return;
-	}
 	// Hurt (or rattled - KO meter high): back off with the guard up for a moment (then come back swinging).
 	if ((GetBalanceFraction() < 0.3f || KOMeter > 0.55f) && !Foe->IsDazed() && Dist < 350.f && FMath::FRand() < (FightStyle == 0 ? 0.3f : 0.6f))
 	{
@@ -7657,6 +7659,11 @@ float ABRCharacter::VsComputerScale(const APVVCharacter* By) const
 		return 1.f;
 	}
 	return Hitter->bIsNPC ? NPCHitsOnPlayersScale : PlayerHitsOnNPCsScale;
+}
+
+void ABRCharacter::ArmsDebug()
+{
+	bArmsDebug = !bArmsDebug;
 }
 
 #undef LOCTEXT_NAMESPACE
