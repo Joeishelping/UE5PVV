@@ -2645,6 +2645,7 @@ void ABRCharacter::EnableWobble()
 	MeshComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
 	PhysicalAnimation->SetSkeletalMeshComponent(MeshComp);
+	PhysicalAnimation->SetComponentTickEnabled(true);
 	// Simulate from the spine up (legs stay on the animation), or the whole body below the pelvis.
 	const FName SimRoot = bWobblyLegs ? FName(TEXT("pelvis")) : FName(TEXT("spine_01"));
 	MeshComp->SetAllBodiesBelowSimulatePhysics(SimRoot, true, !bWobblyLegs);
@@ -2664,6 +2665,7 @@ void ABRCharacter::DisableWobble()
 	}
 	bWobbleOn = false;
 	PhysicalAnimation->SetSkeletalMeshComponent(nullptr); // drops all the muscle constraints
+	PhysicalAnimation->SetComponentTickEnabled(false); // and it doesn't tick at all while it's off
 	const FName SimRoot = bWobblyLegs ? FName(TEXT("pelvis")) : FName(TEXT("spine_01"));
 	MeshComp->SetAllBodiesBelowSimulatePhysics(SimRoot, false, true);
 	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(SimRoot, 0.f, false, true);
@@ -2945,6 +2947,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 		}
 		// Go fully limp: unhook the muscles completely while knocked down (they're hooked back up when you get up).
 		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
+		PhysicalAnimation->SetComponentTickEnabled(false);
 		bWobbleOn = false;
 		// Drop kick: throw the feet forward and the head back so you fly feet-first.
 		if (bDropKicking && GetMesh()->IsSimulatingPhysics())
@@ -3117,13 +3120,14 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	}
 	// Safety: if the body ever loses its posed bones (mesh swapped, re-registered), switch the muscles off
 	// before the physics reads bones that aren't there, and switch them back on once it's posed again.
-	if (PhysicalAnimation && PhysicalAnimation->GetSkeletalMesh() && !MusclesSafe())
+	if (PhysicalAnimation && (PhysicalAnimation->GetSkeletalMesh() || PhysicalAnimation->IsComponentTickEnabled()) && !MusclesSafe())
 	{
 		if (bWobbleOn)
 		{
 			DisableWobble();
 		}
 		PhysicalAnimation->SetSkeletalMeshComponent(nullptr);
+		PhysicalAnimation->SetComponentTickEnabled(false);
 		bWobbleOn = false;
 		bWobblePending = GetCondition() != EPVVCondition::KnockedDown;
 	}
@@ -6867,6 +6871,8 @@ bool ABRCharacter::MusclesSafe() const
 	const USkeletalMeshComponent* MeshComp = GetMesh();
 	return MeshComp && MeshComp->IsRegistered() && MeshComp->GetSkeletalMeshAsset() && GetActorEnableCollision()
 		&& MeshComp->GetComponentSpaceTransforms().Num() >= MeshComp->GetNumBones() && MeshComp->GetNumBones() > 0
+		// (the muscles read the EDITABLE pose buffer - with double buffering it can be empty while the other one isn't)
+		&& const_cast<USkeletalMeshComponent*>(MeshComp)->GetEditableComponentSpaceTransforms().Num() >= MeshComp->GetNumBones()
 		&& MeshComp->IsPhysicsStateCreated() && MeshComp->Bodies.Num() > 0
 		&& !bOnRide && !bInCannon;
 }
