@@ -509,6 +509,42 @@ void ABRBoxTruck::Tick(float DeltaSeconds)
 		{
 			ReleaseStowed(nullptr);
 		}
+		// A Runner's job truck made it: unloaded, then it's taken away (cargo and all).
+		if (!IsNPCTruck())
+		{
+			if (DeliveredAt < 0.f)
+			{
+				DeliveredAt = Now;
+				if (APVVCharacter* Driver = GetDriver())
+				{
+					if (ABRCharacter* BRDriver = Cast<ABRCharacter>(Driver))
+					{
+						BRDriver->Notify(LOCTEXT("JobDone", "Delivered! The truck gets unloaded and taken away."));
+					}
+				}
+			}
+			else if (Now - DeliveredAt > 5.f)
+			{
+				for (int32 i = Occupants.Num() - 1; i >= 0; --i)
+				{
+					if (Occupants[i])
+					{
+						Unseat(Occupants[i]);
+					}
+				}
+				for (ABRPhysicsProp* P : Cargo)
+				{
+					if (IsValid(P) && (P->IsCargoFrozen() || IsInHold(P->GetActorLocation(), 40.f)))
+					{
+						P->Destroy();
+					}
+				}
+				Cargo.Reset();
+				ABRGameState::FX(this, EBRFX::Dust, GetActorLocation());
+				Destroy();
+				return;
+			}
+		}
 	}
 }
 

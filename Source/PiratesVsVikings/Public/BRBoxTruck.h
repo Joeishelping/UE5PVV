@@ -82,6 +82,7 @@ private:
 	bool bCargoFrozen = false;
 	float SlowSince = -1.f;
 	float NoCopNearSince = -1.f;
+	float DeliveredAt = -1.f;
 	UPROPERTY() TArray<TObjectPtr<ABRPhysicsProp>> Cargo;
 	/** NPC stowaways (and Runners' clients) locked in the back: they ride attached until the doors open. */
 	TArray<TWeakObjectPtr<ABRCharacter>> Stowed;

@@ -246,6 +246,36 @@ void ABRCharacter::StartBrawling(ABRCharacter* Target, float Seconds, float Aggr
 	}
 }
 
+void ABRCharacter::DeniedByCop(ABRCharacter* Cop)
+{
+	if (!HasAuthority() || !bIsNPC)
+	{
+		return;
+	}
+	LaunchCharacter(FVector(FMath::FRandRange(-120.f, 120.f), FMath::FRandRange(-120.f, 120.f), 250.f), true, true);
+	const float Roll = FMath::FRand();
+	const float FightChance = bAggressiveSuspect ? 0.35f : 0.12f;
+	if (Cop && Roll < FightChance)
+	{
+		StartBrawling(Cop, 25.f, FMath::FRandRange(0.6f, 0.9f)); // "you can't send me back!"
+		return;
+	}
+	if (Roll < FightChance + 0.25f)
+	{
+		StartFleeing(30.f); // make a run for it (for the Wall)
+		return;
+	}
+	// Lawfully obliges: trudges back the way they came and goes home.
+	FVector Back = -GetActorForwardVector().GetSafeNormal2D();
+	for (TActorIterator<ABRWall> WallIt(GetWorld()); WallIt; ++WallIt)
+	{
+		Back = -WallIt->GetActorForwardVector().GetSafeNormal2D(); // away from the USA
+		break;
+	}
+	StartWandering(GetActorLocation() + Back * 4500.f, 300.f);
+	SetLifeSpan(40.f);
+}
+
 void ABRCharacter::ReactToBust(ABRCharacter* Cop, bool bMinorOffense)
 {
 	if (!HasAuthority() || !bIsNPC)

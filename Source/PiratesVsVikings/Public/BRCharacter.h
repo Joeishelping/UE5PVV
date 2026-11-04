@@ -59,6 +59,8 @@ public:
 	void StartBrawling(ABRCharacter* Target, float Seconds, float Aggression = 0.5f);
 	/** NPC busted at the checkpoint (no papers / contraband): fight, pull a knife, run, or give up - random, by how bad they are. */
 	void ReactToBust(ABRCharacter* Cop, bool bMinorOffense);
+	/** Server (NPC): turned away at the checkpoint - walk back to Mexico (most), run for it, or fight the officer. */
+	void DeniedByCop(ABRCharacter* Cop);
 
 	// --- Wounds (knives & guns) ---------------------------------------------------------
 	/** Real wounds from stabbing / shooting (punches never kill). 0 = dead. Heals slowly once you stop bleeding. */
