@@ -126,7 +126,7 @@ void ABRCharacter::UpdateGrabTethers()
 		FName OtherBone = NAME_None;
 		FVector Anchor = FVector::ZeroVector;
 		bool bWorld = false;
-		const bool bHandUsable = bPhysicalGrabs && bWobbleOn && Body->GetBoneIndex(HandBones[i]) != INDEX_NONE && Body->IsSimulatingPhysics(HandBones[i]);
+		const bool bHandUsable = bPhysicalGrabs && bWobbleOn && Body->GetBoneIndex(HandBones[i]) != INDEX_NONE && Body->IsSimulatingPhysics(PhysBone(HandBones[i]));
 		if (bHandUsable && bClimbing)
 		{
 			// Hands on the wall: the hand you moved last is higher.
@@ -177,7 +177,7 @@ void ABRCharacter::UpdateGrabTethers()
 		Tether->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Free, 0.f);
 		Tether->SetAngularTwistLimit(EAngularConstraintMotion::ACM_Free, 0.f);
 		Tether->SetDisableCollision(true);
-		Tether->SetConstrainedComponents(Body, HandBones[i], WantOther, OtherBone); // null other = tied to the world (the wall)
+		Tether->SetConstrainedComponents(Body, PhysBone(HandBones[i]), WantOther, Held && WantOther ? Held->PhysBone(OtherBone) : OtherBone); // null other = tied to the world (the wall)
 		GrabTether[i] = Tether;
 	}
 }
@@ -510,7 +510,7 @@ void ABRCharacter::TickAttackSteer()
 	const float Now = GetWorld()->GetTimeSeconds();
 	for (int32 i = 0; i < 3; ++i)
 	{
-		if (Now < SteerStart[i] || Now > SteerUntil[i] || Body->GetBoneIndex(Bones[i]) == INDEX_NONE || !Body->IsSimulatingPhysics(Bones[i]))
+		if (Now < SteerStart[i] || Now > SteerUntil[i] || Body->GetBoneIndex(Bones[i]) == INDEX_NONE || !Body->IsSimulatingPhysics(PhysBone(Bones[i])))
 		{
 			continue;
 		}
@@ -520,7 +520,7 @@ void ABRCharacter::TickAttackSteer()
 		const FVector Target = GetActorTransform().TransformPositionNoScale(SteerTargetLocal[i]);
 		const FVector At = Body->GetBoneLocation(Bones[i]);
 		const FVector Want = ((Target - At) * Gain).GetClampedToMaxSize(i == 2 ? 1500.f : 1800.f) + GetVelocity();
-		Body->SetPhysicsLinearVelocity(Want, false, Bones[i]);
+		Body->SetPhysicsLinearVelocity(Want, false, PhysBone(Bones[i]));
 	}
 }
 

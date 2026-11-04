@@ -624,8 +624,8 @@ void ABRCharacter::Multicast_FlightFlop_Implementation(bool bFlop)
 		Limp.bIsLocalSimulation = false;
 		Limp.OrientationStrength = SpineStrength * WobbleStrength * 0.15f;
 		Limp.AngularVelocityStrength = Limp.OrientationStrength * 0.1f;
-		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("spine_01"), Limp, true);
-		GetMesh()->AddImpulseToAllBodiesBelow(FVector(FMath::FRandRange(-200.f, 200.f), FMath::FRandRange(-200.f, 200.f), 300.f), TEXT("spine_02"), true, true);
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("spine_01")), Limp, true);
+		GetMesh()->AddImpulseToAllBodiesBelow(FVector(FMath::FRandRange(-200.f, 200.f), FMath::FRandRange(-200.f, 200.f), 300.f), PhysBelow(TEXT("spine_02")), true, true);
 	}
 	else
 	{
@@ -2261,7 +2261,7 @@ void ABRCharacter::OnAttackStartedNative()
 			Loose.bIsLocalSimulation = false;
 			Loose.OrientationStrength = 20.f;
 			Loose.AngularVelocityStrength = 2.f;
-			PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(Clavicle, Loose, true);
+			PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(Clavicle), Loose, true);
 			PunchArmRestoreAt = GetWorld()->GetTimeSeconds() + PunchWindup + PunchExtendSeconds + 0.2f;
 			// A straight jab: after the wind-up the fist is steered out to the target and HELD there for a moment
 			// (and keeps reaching if you keep holding the button) - no instant snap back.
@@ -2273,8 +2273,8 @@ void ABRCharacter::OnAttackStartedNative()
 				SteerUntil[Limb] = SteerStart[Limb] + PunchExtendSeconds;
 			}
 			// Wind-up: yank the fist back first (and twist the shoulders away)...
-			GetMesh()->AddImpulse(-Dir * PunchImpulse * 0.3f + FVector(0.f, 0.f, PunchImpulse * 0.05f), Hand, true);
-			GetMesh()->AddImpulseToAllBodiesBelow(-Dir * 90.f, TEXT("spine_03"), true, false);
+			GetMesh()->AddImpulse(-Dir * PunchImpulse * 0.3f + FVector(0.f, 0.f, PunchImpulse * 0.05f), PhysBone(Hand), true);
+			GetMesh()->AddImpulseToAllBodiesBelow(-Dir * 90.f, PhysBelow(TEXT("spine_03")), true, false);
 			// ...then FLING it (with your running speed behind it).
 			TWeakObjectPtr<ABRCharacter> WeakThis(this);
 			auto Fling = [WeakThis, Dir, Hand, Fore, Upper]()
@@ -2286,10 +2286,10 @@ void ABRCharacter::OnAttackStartedNative()
 					return;
 				}
 				const float Run = 1.f + FMath::Clamp(FVector::DotProduct(Self->GetVelocity(), Dir) / 900.f, 0.f, 0.5f);
-				Body->AddImpulse(Dir * Self->PunchImpulse * Run, Hand, true);
-				Body->AddImpulse(Dir * Self->PunchImpulse * 0.7f * Run, Fore, true);
-				Body->AddImpulse(Dir * Self->PunchImpulse * 0.35f, Upper, true);
-				Body->AddImpulseToAllBodiesBelow(Dir * 420.f, TEXT("spine_03"), true, false); // shoulders and chest into it
+				Body->AddImpulse(Dir * Self->PunchImpulse * Run, Self->PhysBone(Hand), true);
+				Body->AddImpulse(Dir * Self->PunchImpulse * 0.7f * Run, Self->PhysBone(Fore), true);
+				Body->AddImpulse(Dir * Self->PunchImpulse * 0.35f, Self->PhysBone(Upper), true);
+				Body->AddImpulseToAllBodiesBelow(Dir * 420.f, Self->PhysBelow(TEXT("spine_03")), true, false); // shoulders and chest into it
 				if (Self->HasAuthority() && Self->GetCharacterMovement() && Self->GetCharacterMovement()->IsMovingOnGround())
 				{
 					Self->LaunchCharacter(Dir.GetSafeNormal2D() * Self->PunchStep, false, false); // a little step into the punch
@@ -2334,7 +2334,7 @@ bool ABRCharacter::HandlePunchHit()
 	// Wobbly body: the actual fist has to connect (checked in TickBrawl during the punch window).
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("hand_r")) != INDEX_NONE)
 	{
-		PunchUntil = GetWorld()->GetTimeSeconds() + PunchWindow;
+		PunchUntil = GetWorld()->GetTimeSeconds() + FMath::Max(PunchWindow, PunchExtendSeconds + 0.15f); // live for the whole extension
 		bPunchConnected = false;
 		return true;
 	}
@@ -2448,7 +2448,7 @@ void ABRCharacter::Multicast_Shot_Implementation(FVector_NetQuantize Start, FVec
 	// Recoil kick through the physics arms.
 	if (bWobbleOn && GetMesh())
 	{
-		GetMesh()->AddImpulseToAllBodiesBelow(-GetActorForwardVector() * 60.f + FVector(0.f, 0.f, 40.f), TEXT("upperarm_r"), true, true);
+		GetMesh()->AddImpulseToAllBodiesBelow(-GetActorForwardVector() * 60.f + FVector(0.f, 0.f, 40.f), PhysBelow(TEXT("upperarm_r")), true, true);
 	}
 	if (GetNetMode() == NM_DedicatedServer)
 	{
@@ -2691,8 +2691,8 @@ void ABRCharacter::EnableWobble()
 	PhysicalAnimation->SetComponentTickEnabled(true);
 	// Simulate from the spine up (legs stay on the animation), or the whole body below the pelvis.
 	const FName SimRoot = bWobblyLegs ? FName(TEXT("pelvis")) : FName(TEXT("spine_01"));
-	MeshComp->SetAllBodiesBelowSimulatePhysics(SimRoot, true, !bWobblyLegs);
-	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(SimRoot, 1.f, false, !bWobblyLegs);
+	MeshComp->SetAllBodiesBelowSimulatePhysics(PhysBelow(SimRoot), true, !bWobblyLegs);
+	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(PhysBelow(SimRoot), 1.f, false, !bWobblyLegs);
 	bWobbleOn = true;
 	bArmsStiff = WantsStiffArms();
 	ApplyMuscles(bArmsStiff ? (bAiming ? AimArmStrength : DriveArmStrength) : ArmStrength);
@@ -2710,8 +2710,8 @@ void ABRCharacter::DisableWobble()
 	PhysicalAnimation->SetSkeletalMeshComponent(nullptr); // drops all the muscle constraints
 	PhysicalAnimation->SetComponentTickEnabled(false); // and it doesn't tick at all while it's off
 	const FName SimRoot = bWobblyLegs ? FName(TEXT("pelvis")) : FName(TEXT("spine_01"));
-	MeshComp->SetAllBodiesBelowSimulatePhysics(SimRoot, false, true);
-	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(SimRoot, 0.f, false, true);
+	MeshComp->SetAllBodiesBelowSimulatePhysics(PhysBelow(SimRoot), false, true);
+	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(PhysBelow(SimRoot), 0.f, false, true);
 }
 
 void ABRCharacter::ApplyMuscles(float ArmMuscle)
@@ -2727,10 +2727,10 @@ void ABRCharacter::ApplyMuscles(float ArmMuscle)
 		return Data;
 	};
 	// Order matters: each call overrides the bodies below that bone.
-	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("spine_01"), Muscle(SpineStrength), true);
-	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("neck_01"), Muscle(HeadStrength), true);
-	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_l"), Muscle(ArmMuscle), true);
-	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_r"), Muscle(ArmMuscle), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("spine_01")), Muscle(SpineStrength), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("neck_01")), Muscle(HeadStrength), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("clavicle_l")), Muscle(ArmMuscle), true);
+	PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("clavicle_r")), Muscle(ArmMuscle), true);
 	if (bWobblyLegs)
 	{
 		// Legs also get a position pull so the feet track the walk cycle.
@@ -2738,8 +2738,8 @@ void ABRCharacter::ApplyMuscles(float ArmMuscle)
 		FPhysicalAnimationData Legs = Muscle(LegMuscle);
 		Legs.PositionStrength = bClimbing ? 0.f : LegStrength * WobbleStrength * 0.5f;
 		Legs.VelocityStrength = LegMuscle * WobbleStrength * 0.05f;
-		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_l"), Legs, true);
-		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_r"), Legs, true);
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("thigh_l")), Legs, true);
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("thigh_r")), Legs, true);
 	}
 }
 
@@ -2761,7 +2761,7 @@ void ABRCharacter::TickWobble()
 		LastWobbleVelocity = Vel;
 		if (MomentumSway > 0.f && Change.Size() > 8.f && Change.Size() < 1500.f && GetMesh()->IsSimulatingPhysics(TEXT("spine_02")))
 		{
-			GetMesh()->AddImpulseToAllBodiesBelow(-Change * MomentumSway, TEXT("spine_02"), true, true);
+			GetMesh()->AddImpulseToAllBodiesBelow(-Change * MomentumSway, PhysBelow(TEXT("spine_02")), true, true);
 		}
 	}
 	// Arms snap to the aim pose while aiming; floppy otherwise.
@@ -2796,7 +2796,7 @@ void ABRCharacter::TickWobble()
 		NextSwayTime = Now + FMath::FRandRange(0.5f, 1.4f);
 		const float Woozy = 1.f + (Hunger < WeakHunger ? 1.5f : 0.f) + (1.f - GetBalanceFraction()) * 2.f + (IsTipsy() ? 2.5f : 0.f);
 		const FVector Shove = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f) * SwayStrength * Woozy;
-		GetMesh()->AddImpulseToAllBodiesBelow(Shove, TEXT("spine_02"), true, true);
+		GetMesh()->AddImpulseToAllBodiesBelow(Shove, PhysBelow(TEXT("spine_02")), true, true);
 	}
 }
 
@@ -2902,7 +2902,7 @@ void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 		return;
 	}
 	const FVector Dir = Attacker ? (GetActorLocation() - Attacker->GetActorLocation()).GetSafeNormal2D() : -GetActorForwardVector();
-	GetMesh()->AddImpulseToAllBodiesBelow(Dir * HitWobble + FVector(0.f, 0.f, HitWobble * 0.3f), TEXT("spine_01"), true, true);
+	GetMesh()->AddImpulseToAllBodiesBelow(Dir * HitWobble + FVector(0.f, 0.f, HitWobble * 0.3f), PhysBelow(TEXT("spine_01")), true, true);
 }
 
 void ABRCharacter::OnStateEffectsRefreshed()
@@ -3000,7 +3000,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 			{
 				if (GetMesh()->GetBoneIndex(Foot) != INDEX_NONE)
 				{
-					GetMesh()->AddImpulse(Fwd * 900.f + FVector(0.f, 0.f, 350.f), Foot, true);
+					GetMesh()->AddImpulse(Fwd * 900.f + FVector(0.f, 0.f, 350.f), PhysBone(Foot), true);
 				}
 			}
 			if (GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE)
@@ -3091,10 +3091,10 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	{
 		const USkeletalMeshComponent* DebugBody = GetMesh();
 		GEngine->AddOnScreenDebugMessage(9001, 0.f, bWobbleOn ? FColor::Green : FColor::Red, FString::Printf(
-			TEXT("WOBBLE %s | pending %d | physics asset %s | bodies %d | safe %d | arms reaching %d | grab mask %d | holding %s | hand anchors %d%d | hanging %d"),
+			TEXT("WOBBLE %s | pending %d | physics asset %s | bodies %d | safe %d | hand body %s | arm root %s | arms reaching %d | grab mask %d | holding %s | hand anchors %d%d | hanging %d"),
 			bWobbleOn ? TEXT("ON") : TEXT("OFF"), bWobblePending ? 1 : 0,
 			DebugBody && DebugBody->GetPhysicsAsset() ? *DebugBody->GetPhysicsAsset()->GetName() : TEXT("NONE!"),
-			DebugBody ? DebugBody->Bodies.Num() : 0, MusclesSafe() ? 1 : 0, ArmsReaching, HandGrabMask,
+			DebugBody ? DebugBody->Bodies.Num() : 0, MusclesSafe() ? 1 : 0, *PhysBone(TEXT("hand_l")).ToString(), *PhysBelow(TEXT("clavicle_l")).ToString(), ArmsReaching, HandGrabMask,
 			HandGrabTarget ? *HandGrabTarget->GetPlayerDisplayName() : TEXT("-"), bHandAnchored[0] ? 1 : 0, bHandAnchored[1] ? 1 : 0, bHandHanging ? 1 : 0));
 	}
 	TickRope();
@@ -4987,8 +4987,8 @@ void ABRCharacter::TickReachVisuals()
 		Loose.bIsLocalSimulation = false;
 		Loose.OrientationStrength = 40.f;
 		Loose.AngularVelocityStrength = 4.f;
-		if (Reach & 1) PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_l"), Loose, true);
-		if (Reach & 2) PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("clavicle_r"), Loose, true);
+		if (Reach & 1) PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("clavicle_l")), Loose, true);
+		if (Reach & 2) PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("clavicle_r")), Loose, true);
 	}
 	if (Reach == 0)
 	{
@@ -5005,7 +5005,7 @@ void ABRCharacter::TickReachVisuals()
 			const float Side = i == 0 ? -1.f : 1.f;
 			const FVector Point = GetActorLocation() + Wall * 45.f + FVector::CrossProduct(FVector::UpVector, Wall) * Side * 22.f + FVector(0.f, 0.f, bHigh ? 110.f : 60.f);
 			const FVector HandAt = Body->GetBoneLocation(ClimbHands[i]);
-			Body->SetPhysicsLinearVelocity(((Point - HandAt) * 10.f).GetClampedToMaxSize(900.f), false, ClimbHands[i]);
+			Body->SetPhysicsLinearVelocity(((Point - HandAt) * 10.f).GetClampedToMaxSize(900.f), false, PhysBone(ClimbHands[i]));
 		}
 		return;
 	}
@@ -5033,7 +5033,7 @@ void ABRCharacter::TickReachVisuals()
 			const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
 			const FVector GuardAt = Head + Fwd * 34.f + GetActorRightVector() * Side * 13.f - FVector(0.f, 0.f, 6.f);
 			const FVector HandNow = Body->GetBoneLocation(HandBones[i]);
-			Body->SetPhysicsLinearVelocity(((GuardAt - HandNow) * 14.f).GetClampedToMaxSize(1400.f) + GetVelocity(), false, HandBones[i]);
+			Body->SetPhysicsLinearVelocity(((GuardAt - HandNow) * 14.f).GetClampedToMaxSize(1400.f) + GetVelocity(), false, PhysBone(HandBones[i]));
 			continue;
 		}
 		if (!(ArmsReaching & (1 << i)))
@@ -5090,7 +5090,7 @@ void ABRCharacter::TickReachVisuals()
 		}
 		const FVector Hand = Body->GetBoneLocation(HandBones[i]);
 		// Fast enough that a quick mouse swing whips the arms round (that's what hurts), heavy enough to lag a little.
-		Body->SetPhysicsLinearVelocity(((Point - Hand) * 10.f).GetClampedToMaxSize(ArmSwingMaxSpeed) + GetVelocity() * 0.5f, false, HandBones[i]);
+		Body->SetPhysicsLinearVelocity(((Point - Hand) * 10.f).GetClampedToMaxSize(ArmSwingMaxSpeed) + GetVelocity() * 0.5f, false, PhysBone(HandBones[i]));
 	}
 }
 
@@ -5989,7 +5989,7 @@ void ABRCharacter::TickKickContact(float DeltaSeconds)
 		{
 			BRVictim->Multicast_BodyHit(HitBone, Dir * HitReaction * FMath::Lerp(0.5f, 1.6f, Curve));
 		}
-		Body->AddImpulse(-Dir * 400.f, TEXT("foot_r"), true); // the foot stops on them
+		Body->AddImpulse(-Dir * 400.f, PhysBone(TEXT("foot_r")), true); // the foot stops on them
 		Multicast_Sfx(3);
 		return;
 	}
@@ -6021,7 +6021,7 @@ void ABRCharacter::Multicast_Kick_Implementation()
 		Loose.bIsLocalSimulation = false;
 		Loose.OrientationStrength = 60.f;
 		Loose.AngularVelocityStrength = 6.f;
-		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("thigh_r"), Loose, true);
+		PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(PhysBelow(TEXT("thigh_r")), Loose, true);
 		const float NowK = GetWorld()->GetTimeSeconds();
 		PunchArmRestoreAt = FMath::Max(PunchArmRestoreAt, NowK + KickExtendSeconds + 0.25f);
 		SteerTargetLocal[2] = FVector(95.f, 12.f, -15.f); // out in front, about waist high
@@ -6032,9 +6032,9 @@ void ABRCharacter::Multicast_Kick_Implementation()
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("foot_r")) != INDEX_NONE)
 	{
 		const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
-		GetMesh()->AddImpulse(Fwd * 1600.f + FVector(0.f, 0.f, 500.f), TEXT("foot_r"), true);
-		GetMesh()->AddImpulse(Fwd * 900.f + FVector(0.f, 0.f, 300.f), TEXT("calf_r"), true);
-		GetMesh()->AddImpulseToAllBodiesBelow(-Fwd * 150.f, TEXT("spine_02"), true, true); // lean back into it
+		GetMesh()->AddImpulse(Fwd * 1600.f + FVector(0.f, 0.f, 500.f), PhysBone(TEXT("foot_r")), true);
+		GetMesh()->AddImpulse(Fwd * 900.f + FVector(0.f, 0.f, 300.f), PhysBone(TEXT("calf_r")), true);
+		GetMesh()->AddImpulseToAllBodiesBelow(-Fwd * 150.f, PhysBelow(TEXT("spine_02")), true, true); // lean back into it
 	}
 }
 
@@ -6046,7 +6046,7 @@ void ABRCharacter::Multicast_Headbutt_Implementation()
 	{
 		const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
 		GetMesh()->AddImpulse(Fwd * 900.f, TEXT("head"), true);
-		GetMesh()->AddImpulseToAllBodiesBelow(Fwd * 350.f, TEXT("spine_03"), true, true);
+		GetMesh()->AddImpulseToAllBodiesBelow(Fwd * 350.f, PhysBelow(TEXT("spine_03")), true, true);
 	}
 }
 
@@ -6476,9 +6476,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			const FVector Into = (HitPoint - Pos).IsNearlyZero() ? HandVel.GetSafeNormal() : (HitPoint - Pos).GetSafeNormal();
 			const float Closing = FMath::Max(0.f, FVector::DotProduct(HandVel, Into));
 			const float Effective = 0.35f * Speed + 0.65f * Closing + FMath::Max(0.f, FVector::DotProduct(GetVelocity(), Into)) * 0.3f;
-			const float Power = FMath::Clamp((Effective - SlapSpeed) / FMath::Max(100.f, HardHitSpeed - SlapSpeed), 0.f, 1.f);
+			// (a thrown punch that connects always counts for something - at least a third of full power)
+			const float Power = FMath::Clamp((Effective - SlapSpeed) / FMath::Max(100.f, HardHitSpeed - SlapSpeed), bPunching ? 0.35f : 0.f, 1.f);
 			const float Curve = Power * Power; // weak taps do very little, real swings do a lot
-			if (Effective < SlapSpeed * 0.8f)
+			if (!bPunching && Effective < SlapSpeed * 0.8f)
 			{
 				continue; // just a brush
 			}
@@ -6496,7 +6497,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			if (bCaughtOnGuard)
 			{
 				KOVictim->GuardAbsorb(Curve, HandVel.GetSafeNormal(), HitBone, this);
-				Body->AddImpulse(-HandVel.GetSafeNormal() * FMath::Lerp(300.f, 800.f, Curve), Hands[i], true); // your fist bounces off
+				Body->AddImpulse(-HandVel.GetSafeNormal() * FMath::Lerp(300.f, 800.f, Curve), PhysBone(Hands[i]), true); // your fist bounces off
 				Multicast_Sfx(0);
 				HandReadyAt[i] = Now + 0.3f;
 				if (bPunching)
@@ -6564,7 +6565,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 				KOVictim->Multicast_BodyHit(HitBone, Dir * HitReaction * FMath::Lerp(0.3f, bHeadHit ? 2.1f : 1.5f, Curve));
 			}
 			// Your own arm recoils a bit off them (you can see it connect).
-			Body->AddImpulse(-Dir * FMath::Lerp(150.f, 500.f, Curve), Hands[i], true);
+			Body->AddImpulse(-Dir * FMath::Lerp(150.f, 500.f, Curve), PhysBone(Hands[i]), true);
 			Multicast_Sfx(Curve > 0.3f ? 3 : 0);
 			HandReadyAt[i] = Now + 0.3f;
 			if (bPunching)
@@ -6585,12 +6586,12 @@ void ABRCharacter::Multicast_DiveLunge_Implementation()
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
 	{
 		const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
-		GetMesh()->AddImpulseToAllBodiesBelow(Forward * 700.f - FVector(0.f, 0.f, 150.f), TEXT("spine_02"), true, true);
+		GetMesh()->AddImpulseToAllBodiesBelow(Forward * 700.f - FVector(0.f, 0.f, 150.f), PhysBelow(TEXT("spine_02")), true, true);
 		for (const TCHAR* Hand : { TEXT("hand_l"), TEXT("hand_r") })
 		{
 			if (GetMesh()->GetBoneIndex(Hand) != INDEX_NONE)
 			{
-				GetMesh()->AddImpulse(Forward * 1400.f, Hand, true);
+				GetMesh()->AddImpulse(Forward * 1400.f, PhysBone(Hand), true);
 			}
 		}
 	}
@@ -6617,8 +6618,8 @@ void ABRCharacter::Multicast_BodyHit_Implementation(FName Bone, FVector_NetQuant
 	}
 	// The part that got hit snaps back; the rest of the upper body follows a bit.
 	ABRGameState::SpawnLocalFX(this, EBRFX::PunchHit, Body->GetBoneLocation(Bone));
-	Body->AddImpulse(Impulse, Bone, true);
-	Body->AddImpulseToAllBodiesBelow(Impulse * 0.35f, TEXT("spine_02"), true, true);
+	Body->AddImpulse(Impulse, PhysBone(Bone), true);
+	Body->AddImpulseToAllBodiesBelow(Impulse * 0.35f, PhysBelow(TEXT("spine_02")), true, true);
 	if (IsLocallyControlled())
 	{
 		AddShake(0.35f);
@@ -7404,7 +7405,7 @@ void ABRCharacter::Server_HangJump_Implementation()
 	LaunchCharacter(FVector(0.f, 0.f, HangJumpUp * (Holding == 2 ? 1.f : 0.7f)) + In * 160.f, false, true);
 	if (bWobbleOn && GetMesh() && GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
 	{
-		GetMesh()->AddImpulseToAllBodiesBelow(FVector(0.f, 0.f, 300.f) + In * 150.f, TEXT("spine_02"), true, true);
+		GetMesh()->AddImpulseToAllBodiesBelow(FVector(0.f, 0.f, 300.f) + In * 150.f, PhysBelow(TEXT("spine_02")), true, true);
 	}
 }
 
@@ -7664,6 +7665,61 @@ float ABRCharacter::VsComputerScale(const APVVCharacter* By) const
 void ABRCharacter::ArmsDebug()
 {
 	bArmsDebug = !bArmsDebug;
+}
+
+FName ABRCharacter::PhysBone(FName Bone) const
+{
+	const USkeletalMeshComponent* M = GetMesh();
+	if (!M || Bone == NAME_None)
+	{
+		return Bone;
+	}
+	FName Try = Bone;
+	for (int32 Guard = 0; Guard < 6 && Try != NAME_None; ++Guard)
+	{
+		if (M->GetBodyInstance(Try))
+		{
+			return Try;
+		}
+		Try = M->GetParentBone(Try);
+	}
+	return Bone;
+}
+
+FName ABRCharacter::PhysBelow(FName Bone) const
+{
+	// "Everything below this bone": if the bone itself has no physics body (auto-made physics assets often skip the
+	// collarbones, hands, feet), use the nearest bone underneath it that does (collarbone -> upper arm).
+	const USkeletalMeshComponent* M = GetMesh();
+	if (!M || Bone == NAME_None || M->GetBodyInstance(Bone) || !M->GetSkinnedAsset())
+	{
+		return Bone;
+	}
+	const FReferenceSkeleton& Ref = M->GetSkinnedAsset()->GetRefSkeleton();
+	const int32 Root = Ref.FindBoneIndex(Bone);
+	if (Root == INDEX_NONE)
+	{
+		return Bone;
+	}
+	FName Best = Bone;
+	int32 BestDepth = MAX_int32;
+	for (int32 i = 0; i < Ref.GetNum(); ++i)
+	{
+		int32 Depth = 0;
+		for (int32 P = i; P != INDEX_NONE && Depth < 8; P = Ref.GetParentIndex(P), ++Depth)
+		{
+			if (P == Root)
+			{
+				if (Depth > 0 && Depth < BestDepth && M->GetBodyInstance(Ref.GetBoneName(i)))
+				{
+					BestDepth = Depth;
+					Best = Ref.GetBoneName(i);
+				}
+				break;
+			}
+		}
+	}
+	return Best;
 }
 
 #undef LOCTEXT_NAMESPACE

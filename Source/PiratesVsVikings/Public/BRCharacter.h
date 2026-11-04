@@ -1192,6 +1192,11 @@ private:
 	bool StartWallClimb();
 	/** Is the body in a state where the wobbly-body muscles can safely read it? (posed bones, physics bodies, collision on) */
 	bool MusclesSafe() const;
+	/** The bone to push / tie physics to: this bone if it has a physics body, otherwise the nearest parent that does
+	 *  (auto-made physics assets often have no hand / foot bodies - pushing those would do nothing). */
+	FName PhysBone(FName Bone) const;
+	/** For "everything below this bone" calls: this bone, or the nearest bone under it that has a physics body. */
+	FName PhysBelow(FName Bone) const;
 	/** Console (~): ArmsDebug - shows the physics-body / arms state on screen (to check the wobbly body is really on). */
 	UFUNCTION(Exec) void ArmsDebug();
 	bool bArmsDebug = false;
