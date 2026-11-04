@@ -1,4 +1,5 @@
 #include "BRCantina.h"
+#include "BRDoors.h"
 #include "BRAudio.h"
 #include "BRCharacter.h"
 #include "BRGameMode.h"
@@ -187,6 +188,27 @@ bool ABRCantina::IsBanned(const APVVCharacter* Who) const
 void ABRCantina::BeginPlay()
 {
 	Super::BeginPlay();
+	// Real saloon doors: they flap open when you walk into them and swing shut behind you (the old ones were painted on).
+	TArray<UStaticMeshComponent*> Parts;
+	GetComponents<UStaticMeshComponent>(Parts);
+	for (UStaticMeshComponent* Part : Parts)
+	{
+		if (Part->GetName() == TEXT("Cantina_DoorL") || Part->GetName() == TEXT("Cantina_DoorR"))
+		{
+			Part->SetVisibility(false);
+		}
+	}
+	if (HasAuthority())
+	{
+		const FTransform DoorAt(GetActorRotation(), GetActorTransform().TransformPosition(FVector(HalfX + 6.f, 0.f, 0.f)));
+		if (ABRSwingDoor* Saloon = GetWorld()->SpawnActorDeferred<ABRSwingDoor>(ABRSwingDoor::StaticClass(), DoorAt, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			Saloon->bSaloon = true;
+			Saloon->DoorWidth = 300.f;
+			Saloon->DoorHeight = 260.f;
+			Saloon->FinishSpawning(DoorAt);
+		}
+	}
 	if (UTextRenderComponent* Sign = FindComponentByClass<UTextRenderComponent>())
 	{
 		Sign->SetText(FText::FromString(CantinaName));

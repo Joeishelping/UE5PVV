@@ -2414,6 +2414,17 @@ void ABRPhysicsProp::BeginPlay()
 			Mesh->SetStaticMesh(Round);
 		}
 	}
+	// 2 = barrel, 3 = clay pot (smashes like a bottle), 4 = sack of grain.
+	if (!PropMesh && PropShape >= 2 && PropShape <= 4)
+	{
+		const TCHAR* Shape = PropShape == 3 ? TEXT("/Engine/BasicShapes/Sphere.Sphere") : (PropShape == 2 ? TEXT("/Engine/BasicShapes/Cylinder.Cylinder") : TEXT("/Engine/BasicShapes/Cube.Cube"));
+		if (UStaticMesh* ShapeMesh = LoadObject<UStaticMesh>(nullptr, Shape))
+		{
+			Mesh->SetStaticMesh(ShapeMesh);
+		}
+		Mesh->SetWorldScale3D(PropShape == 2 ? FVector(0.7f, 0.7f, 0.95f) : (PropShape == 3 ? FVector(0.55f, 0.55f, 0.65f) : FVector(0.8f, 0.5f, 0.35f)));
+		Mesh->SetMassOverrideInKg(NAME_None, PropShape == 2 ? 35.f : (PropShape == 3 ? 6.f : 22.f), true);
+	}
 	if (!PropMesh)
 	{
 		if (UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(0))
@@ -2508,9 +2519,9 @@ void ABRPhysicsProp::OnPropHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	}
 	// Bonk.
 	Victim->ApplyKnockdown(LastThrower.Get(), Vel.GetSafeNormal2D() * 500.f + FVector(0.f, 0.f, 250.f));
-	if (PropShape == 1)
+	if (PropShape == 1 || PropShape == 3)
 	{
-		// Bottles SMASH.
+		// Bottles and clay pots SMASH.
 		ABRGameState::FX(this, EBRFX::Sparks, GetActorLocation());
 		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 60.f), TEXT("*SMASH*"));
 		SetLifeSpan(0.05f);

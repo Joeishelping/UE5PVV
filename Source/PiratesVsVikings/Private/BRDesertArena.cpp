@@ -1,5 +1,6 @@
 #include "BRDesertArena.h"
 #include "BRTunnels.h"
+#include "BRDoors.h"
 #include "BRAirWater.h"
 #include "BRSettings.h"
 #include "BRAudio.h"
@@ -168,6 +169,14 @@ ABRDesertArena::ABRDesertArena()
 	AddSign(TEXT("Sign_GunShop"), TEXT("ARMAS DON CHUY\nGUNS - PAPERS - GADGETS"), FVector(-16160.f, -3200.f, Ground + 720.f), 0.f, 110.f, FColor(255, 200, 90));
 	AddSign(TEXT("Sign_BackRoom"), TEXT("BACK ROOM (nights only)"), FVector(-17680.f, -3200.f, Ground + 520.f), 0.f, 40.f, FColor(200, 40, 40));
 	AddHut(TEXT("Taco"), FVector(-11500.f, 1800.f, Ground), FVector(800.f, 800.f, 300.f), FLinearColor(0.85f, 0.6f, 0.2f));
+	AddBlock(TEXT("Taco_Roof"), FVector(-11500.f, 1800.f, Ground + 320.f), FVector(880.f, 880.f, 40.f), FLinearColor(0.55f, 0.25f, 0.12f));
+	AddBlock(TEXT("Taco_Awning"), FVector(-11000.f, 1800.f, Ground + 270.f), FVector(220.f, 820.f, 12.f), FLinearColor(0.9f, 0.2f, 0.15f), FRotator(-12.f, 0.f, 0.f), false);
+	// Lights inside the shops (always on - it's dark under a roof).
+	AddRoomLight(TEXT("Taco_Light"), FVector(-11500.f, 1800.f, Ground + 250.f), 60.f, 900.f);
+	AddRoomLight(TEXT("ToolShop_Light1"), FVector(-12000.f, -3100.f, Ground + 520.f), 90.f, 1300.f);
+	AddRoomLight(TEXT("ToolShop_Light2"), FVector(-10900.f, -3100.f, Ground + 520.f), 90.f, 1300.f);
+	AddRoomLight(TEXT("GunShop_Light1"), FVector(-16700.f, -3200.f, Ground + 520.f), 80.f, 1200.f);
+	AddRoomLight(TEXT("GunShop_Light2"), FVector(-17900.f, -3200.f, Ground + 450.f), 40.f, 800.f); // dim back room
 	AddSign(TEXT("Sign_Taco"), TEXT("TACOS"), FVector(-11080.f, 1800.f, Ground + 380.f), 0.f, 120.f, FColor(255, 180, 40));
 	// The boat dock on the river (boats bought at the tool shop launch here).
 	AddBlock(TEXT("Dock_Deck"), FVector(-2550.f, -6000.f, Ground + 10.f), FVector(500.f, 900.f, 30.f), FLinearColor(0.4f, 0.28f, 0.15f));
@@ -376,6 +385,19 @@ UPointLightComponent* ABRDesertArena::AddNightLight(const TCHAR* Name, const FVe
 	Bulb->SetMobility(EComponentMobility::Movable);
 	Bulb->ComponentTags.Add(*FString::Printf(TEXT("Strength_%.2f"), Strength));
 	StreetLights.Add(Bulb);
+	return Bulb;
+}
+
+UPointLightComponent* ABRDesertArena::AddRoomLight(const TCHAR* Name, const FVector& Location, float Candelas, float Radius)
+{
+	UPointLightComponent* Bulb = CreateDefaultSubobject<UPointLightComponent>(Name);
+	Bulb->SetupAttachment(Root);
+	Bulb->SetRelativeLocation(Location);
+	Bulb->SetIntensityUnits(ELightUnits::Candelas);
+	Bulb->SetIntensity(Candelas);
+	Bulb->SetAttenuationRadius(Radius);
+	Bulb->SetLightColor(FLinearColor(1.f, 0.78f, 0.5f));
+	Bulb->SetCastShadows(false);
 	return Bulb;
 }
 
@@ -1067,6 +1089,47 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Station(-11700.f, 2050.f, EBRStationKind::BuyItem, EBRItem::Taco, 8, TEXT("TACO $8"), Shop);
 	Station(-11300.f, 2050.f, EBRStationKind::BuyItem, EBRItem::TacoPlatter, 40, TEXT("TACO PLATTER $40 (feeds 8)"), Shop);
 	Station(-13000.f, 1500.f, EBRStationKind::HireClient, EBRItem::None, 250, TEXT(""), FLinearColor(0.3f, 0.25f, 0.2f), 0.f, 10.f);
+	// Doors you just walk through (they swing open away from you, and shut behind you).
+	{
+		auto Door = [&](float X, float Y, float Width, float Height)
+		{
+			const FTransform T = At(X, Y, Ground);
+			if (ABRSwingDoor* D = World->SpawnActorDeferred<ABRSwingDoor>(ABRSwingDoor::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+			{
+				D->DoorWidth = Width;
+				D->DoorHeight = Height;
+				D->FinishSpawning(T);
+			}
+		};
+		Door(-10300.f, -3100.f, 290.f, 300.f); // Ferreteria
+		Door(-16200.f, -3200.f, 290.f, 300.f); // Armas Don Chuy
+		Door(-11100.f, 1800.f, 290.f, 260.f);  // Tacos
+	}
+	// Village clutter you can grab, throw and smash: barrels, clay pots, sacks of grain, crates.
+	{
+		struct FClutter { float X, Y; uint8 Shape; FLinearColor Color; };
+		const FLinearColor Wood(0.45f, 0.3f, 0.16f), Clay(0.72f, 0.38f, 0.2f), Burlap(0.7f, 0.6f, 0.42f), Crate(0.6f, 0.45f, 0.25f);
+		const FClutter Clutter[] = {
+			{ -10100.f, -3750.f, 2, Wood }, { -10100.f, -3600.f, 2, Wood }, { -9650.f, -4650.f, 2, FLinearColor(0.6f, 0.1f, 0.08f) },
+			{ -8750.f, -5380.f, 2, Wood }, { -7250.f, -5380.f, 2, Wood }, { -7180.f, -5250.f, 0, Crate },
+			{ -9800.f, 1100.f, 3, Clay }, { -10200.f, 1500.f, 3, Clay }, { -9900.f, 1650.f, 3, Clay }, { -10450.f, 900.f, 3, Clay },
+			{ -9600.f, -520.f, 3, Clay }, { -10400.f, -620.f, 3, Clay },
+			{ -9900.f, -200.f, 4, Burlap }, { -10100.f, -150.f, 4, Burlap }, { -9500.f, -320.f, 4, Burlap },
+			{ -12900.f, -2400.f, 0, Crate }, { -13000.f, -2250.f, 0, Crate }, { -10950.f, 2350.f, 2, Wood }, { -10950.f, 1250.f, 0, Crate },
+			{ -16050.f, -2600.f, 2, Wood }, { -16050.f, -3800.f, 0, Crate } };
+		int32 ClutterIndex = 0;
+		for (const FClutter& C : Clutter)
+		{
+			const FTransform T = At(C.X, C.Y, Ground + 70.f, ClutterIndex * 53.f);
+			if (ABRPhysicsProp* Prop = World->SpawnActorDeferred<ABRPhysicsProp>(ABRPhysicsProp::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn))
+			{
+				Prop->PropShape = C.Shape;
+				Prop->Color = C.Color;
+				Prop->FinishSpawning(T);
+			}
+			++ClutterIndex;
+		}
+	}
 	// Hot air balloon launch pad (north-west of town) and two wheelbarrows by the shops.
 	World->SpawnActor<ABRBalloon>(ABRBalloon::StaticClass(), At(-13600.f, 4300.f, Ground), Params);
 	World->SpawnActor<ABRWheelbarrow>(ABRWheelbarrow::StaticClass(), At(-10000.f, -2300.f, Ground), Params);

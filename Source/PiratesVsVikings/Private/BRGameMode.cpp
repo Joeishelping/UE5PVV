@@ -97,7 +97,12 @@ void ABRGameMode::StartMatchFlow()
 		}
 		GS->Phase = EBRPhase::Prep;
 		GS->PhaseSecondsLeft = PrepSeconds;
-		GS->TimeOfDay = StartHour;
+		GS->TimeOfDay = bRandomStart ? FMath::FRandRange(5.5f, 19.f) : StartHour; // usually daytime, sometimes dawn / dusk
+		if (bRandomStart)
+		{
+			const float WeatherRoll = FMath::FRand();
+			GS->Weather = WeatherRoll < 0.6f ? EBRWeather::Clear : (WeatherRoll < 0.85f ? EBRWeather::Rain : EBRWeather::Sandstorm);
+		}
 		GS->Approval = 100.f;
 		GS->WardenBudget = StartingBudget;
 		GS->BonusTraps = 0;
@@ -134,7 +139,7 @@ void ABRGameMode::TickBR()
 		return;
 	}
 
-	GS->TimeOfDay = FMath::Fmod(GS->TimeOfDay + 24.f / (DayLengthMinutes * 60.f), 24.f);
+	GS->TimeOfDay = FMath::Fmod(GS->TimeOfDay + 24.f / (DayLengthMinutes * 60.f) * (GS->IsNight() ? NightSpeedUp : 1.f), 24.f);
 
 	NextWeatherChange -= 1.f;
 	if (NextWeatherChange <= 0.f)

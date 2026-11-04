@@ -243,7 +243,7 @@ public:
 	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) override;
 	float ApplyBlock(APVVCharacter* Attacker, float Damage, FVector& Impulse);
 	/** Gang Beasts pacing: every hit is divided by this (higher = longer fights). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FightToughness = 1.9f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float FightToughness = 2.6f;
 	/** Balance vs the computer: NPC hits on a PLAYER count this much (damage + KO meter). Lower = NPCs knock you out less easily. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float NPCHitsOnPlayersScale = 0.75f;
 	/** Balance vs the computer: a PLAYER's hits on an NPC count this much. Higher = NPCs go down easier. */
@@ -273,13 +273,13 @@ public:
 	/** Also play the Punch animation on top of the physics fling (off = pure physics punches, like Gang Beasts). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bPunchAnimWithPhysics = false;
 	/** KO meter: how much one clean hit to the HEAD fills it (1 = knocked out). Body hits mostly just shove. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeadHitKO = 0.3f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeadHitKO = 0.2f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float BodyHitKO = 0.04f;
 	/** Body hits do this much of their normal damage (head hits do full). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float BodyHitDamageScale = 0.6f;
 	/** KO meter drains at this rate once you haven't been hit for KORecoverDelay seconds. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KORecoverRate = 0.15f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KORecoverDelay = 2.5f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KORecoverRate = 0.22f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KORecoverDelay = 1.6f;
 	/** A real knockout keeps you down this much longer than a normal knockdown. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KOExtraSeconds = 3.f;
 	/** After a knockout you get up groggy (slow, wobbly, can't punch) for this long. */
@@ -465,7 +465,7 @@ public:
 	/** Block button held (the guard comes back up after you punch out of it). */
 	bool bBlockHeld = false;
 	/** NPCs fight back once someone has done at least this much damage to them in a few seconds (a real punch - not a bump). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float FightBackDamage = 11.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float FightBackDamage = 3.f;
 	TWeakObjectPtr<ABRCharacter> ProvokedBy;
 	float ProvokeDamage = 0.f;
 	float ProvokeTime = -100.f;
@@ -673,7 +673,7 @@ protected:
 	/** Hand / foot speed (cm/s, into the target) that counts as a full-power hit. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HardHitSpeed = 1500.f;
 	/** A head shot at least this hard (0-1 power) knocks them down on the spot. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HeadKnockdownPower = 0.82f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HeadKnockdownPower = 0.95f;
 	/** How far a punch reaches from the shoulder (cm), and the little step you take into it. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchReach = 110.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchStep = 260.f;
@@ -1191,6 +1191,8 @@ private:
 	float YawRate = 0.f;
 	float LastYaw = 0.f;
 	float NextBumpTime = 0.f;
+	/** Balance can't knock you over until this time (after a dive / big launch lands). */
+	float BalanceGraceUntil = 0.f;
 	/** NPC fight rhythm: stepping in to attack vs backing out to reset. */
 	bool bBrawlIn = true;
 	float BrawlPhaseUntil = 0.f;

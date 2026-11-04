@@ -523,6 +523,7 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 	if (HasAuthority() && bDiving)
 	{
 		bDiving = false;
+		BalanceGraceUntil = GetWorld()->GetTimeSeconds() + 1.2f; // landing from a dive doesn't topple you
 		ABRGameState::FX(this, EBRFX::Dust, GetActorLocation() - FVector(0.f, 0.f, 80.f));
 		// BODY SPLASH: landed on someone who's already down = they stay down longer.
 		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
@@ -1146,7 +1147,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 				MugPlayer(Foe); // shove, grab, go
 				return;
 			}
-			if (ToFoe.Size() > 130.f)
+			if (ToFoe.Size() > 170.f) // fighting distance, not nose to nose
 			{
 				AddMovementInput(ToFoe.GetSafeNormal(), 1.f);
 			}
@@ -1222,16 +1223,54 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 	const FVector ToTarget = (WanderTarget - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	if (ToTarget.Size() < 80.f || Now > WanderGiveUpAt)
 	{
-		// Arrived (or stuck on a wall): hang out for a bit, then pick a new spot near home.
-		WanderPauseUntil = Now + FMath::FRandRange(2.f, 9.f);
-		const FVector2D Offset = FVector2D(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * WanderRadius;
-		WanderTarget = WanderHome + FVector(Offset.X, Offset.Y, 0.f);
-		WanderGiveUpAt = WanderPauseUntil + 20.f;
+		// Arrived (or stuck on a wall): spend a while there, then pick where to go next.
+		WanderPauseUntil = Now + FMath::FRandRange(4.f, 12.f);
+		// Villagers go about their day: to the market, the taco stand, the church, the well, the shops, a neighbour...
+		// and at each stop they turn to someone nearby and chat (or wave), instead of drifting about at random.
+		bool bErrand = false;
+		if (!bIllegal && !Leader.IsValid() && WanderRadius >= 600.f && FMath::FRand() < 0.7f)
+		{
+			for (TActorIterator<ABRDesertArena> It(GetWorld()); It; ++It)
+			{
+				if (It->IsInTown(GetActorLocation()))
+				{
+					TArray<FVector> Spots;
+					It->GetVillageSpots(Spots);
+					if (Spots.Num() > 0)
+					{
+						const FVector Spot = Spots[FMath::RandRange(0, Spots.Num() - 1)];
+						WanderTarget = Spot + FVector(FMath::FRandRange(-250.f, 250.f), FMath::FRandRange(-250.f, 250.f), 0.f);
+						bErrand = true;
+					}
+				}
+				break;
+			}
+		}
+		if (!bErrand)
+		{
+			const FVector2D Offset = FVector2D(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * WanderRadius;
+			WanderTarget = WanderHome + FVector(Offset.X, Offset.Y, 0.f);
+		}
+		WanderGiveUpAt = WanderPauseUntil + 35.f;
+		// Chat to whoever's nearby while we're stopped here.
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			if (*It != this && FVector::DistSquared(It->GetActorLocation(), GetActorLocation()) < FMath::Square(350.f))
+			{
+				SetActorRotation(FRotator(0.f, (It->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
+				if (FMath::FRand() < 0.25f)
+				{
+					ForceEmote(FMath::RandBool() ? 0 : 4); // wave / cheer
+				}
+				break;
+			}
+		}
 		return;
 	}
-	if (GetCharacterMovement()->MaxWalkSpeed > WanderSpeed)
 	{
-		GetCharacterMovement()->MaxWalkSpeed = WanderSpeed;
+		// Walking somewhere on purpose: a steady pace (everyone a little different).
+		const float Pace = WanderSpeed * (1.25f + 0.25f * FMath::Sin(GetUniqueID() * 1.7f));
+		GetCharacterMovement()->MaxWalkSpeed = Pace;
 	}
 	AddMovementInput(ToTarget.GetSafeNormal(), 1.f);
 }
@@ -3492,15 +3531,8 @@ void ABRCharacter::Input_Grab() { Server_Grab(); }
 bool ABRCharacter::IsHoldingProp() const { return HeldProp != nullptr; }
 void ABRCharacter::Input_Dive()
 {
-	// Clicking (fists out) = superman dive punch. Not clicking = flying DROP KICK.
-	if (bLeftDown || bRightDown)
-	{
-		Server_Dive();
-	}
-	else
-	{
-		Server_DropKick();
-	}
+	// Ctrl = DIVE (fists out if you're clicking = dive punch). The drop kick is kick (F) while you're in the air.
+	Server_Dive();
 }
 
 void ABRCharacter::StopJumping()
@@ -3836,6 +3868,7 @@ void ABRCharacter::Server_Dive_Implementation()
 	}
 	LastDiveTime = Now;
 	bDiving = true;
+	BalanceGraceUntil = Now + 2.f;
 	BlowDisguise();
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	const float MaskBoost = WornHat == EBRHat::LuchaMask ? 1.4f : 1.f; // Lucha Mask: flying dives
@@ -4493,6 +4526,30 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 	if (!Best && bContactGrabs)
 	{
 		float BestTouch = 45.f; // (generous: if your hand is on them, you've got them)
+		// A hand that's INSIDE someone's body (their capsule) is definitely touching them.
+		for (int32 h = 0; h < 2 && !Best; ++h)
+		{
+			if (!(HandMask & (1 << h)))
+			{
+				continue;
+			}
+			const FVector HandAt = GetMesh()->GetBoneLocation(h == 0 ? FName(TEXT("hand_l")) : FName(TEXT("hand_r")));
+			TArray<FOverlapResult> InBody;
+			FCollisionQueryParams TouchParams(SCENE_QUERY_STAT(BRHandTouch), false, this);
+			GetWorld()->OverlapMultiByObjectType(InBody, HandAt, FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(12.f), TouchParams);
+			for (const FOverlapResult& O : InBody)
+			{
+				ABRCharacter* Other = Cast<ABRCharacter>(O.GetActor());
+				if (Other && Other != this && Other->GetMesh() && !Other->GetCarrier() && !Other->GetCurrentBoat() && !Other->IsInCannon() && !Other->GrabbedBy
+					&& Other->GetCondition() != EPVVCondition::Detained && Other->GetCondition() != EPVVCondition::Restrained
+					&& !(NoRegrabTarget.Get() == Other && GetWorld()->GetTimeSeconds() < NoRegrabUntil))
+				{
+					Best = Other;
+					GrabContactBone = NAME_None; // (nearest bone picked below)
+					break;
+				}
+			}
+		}
 		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 		{
 			ABRCharacter* Other = *It;
@@ -5083,7 +5140,16 @@ void ABRCharacter::TickReachVisuals()
 			+ FVector(0.f, 0.f, 45.f + 90.f * FMath::Sin(Pitch));
 		if (Held)
 		{
-			Point = Held->GetActorLocation() + Held->GetActorRightVector() * Side * 14.f + FVector(0.f, 0.f, 40.f);
+			if (Held->IsRagdollActive())
+			{
+				Point = GetHoldPoint() + GetActorRightVector() * Side * 12.f; // hauling a limp body: your hands at hip height in front
+			}
+			else
+			{
+				const FName Part = (HandGrabBone != NAME_None && Held->GetMesh() && Held->GetMesh()->GetBoneIndex(HandGrabBone) != INDEX_NONE) ? HandGrabBone : FName(TEXT("spine_03"));
+				Point = Held->GetMesh() && Held->GetMesh()->GetBoneIndex(Part) != INDEX_NONE ? Held->GetMesh()->GetBoneLocation(Part) + GetActorRightVector() * Side * 8.f
+					: Held->GetActorLocation() + FVector(0.f, 0.f, 40.f);
+			}
 		}
 		else if (!HeldProp)
 		{
@@ -5114,9 +5180,9 @@ void ABRCharacter::TickReachVisuals()
 			}
 			if (bHandAnchored[i])
 			{
-				if (FVector::Dist(Shoulder, HandAnchor[i]) > 115.f)
+				if (FVector::Dist(Shoulder, HandAnchor[i]) > 230.f)
 				{
-					bHandAnchored[i] = false; // arm can't stretch that far: it slips off
+					bHandAnchored[i] = false; // yanked way too far (thrown, knocked flying): it slips off
 				}
 				else
 				{
@@ -5647,7 +5713,7 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 		if (Now >= BrawlNextMove)
 		{
 			BrawlNextMove = Now + 0.22f;
-			if (FMath::FRand() < 0.3f)
+			if (FMath::FRand() < 0.12f)
 			{
 				SetActorRotation(FRotator(0.f, (GrabbedBy->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
 				DoHeadbutt();
@@ -5820,19 +5886,23 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 			return;
 		}
 		const float Roll = FMath::FRand();
-		if (Roll < 0.55f)
+		if (Roll < 0.6f)
 		{
 			Server_PunchHand_Implementation(bBrawlLeft);
 			bBrawlLeft = !bBrawlLeft;
-			BrawlNextMove = Now + 0.35f;
+			BrawlNextMove = Now + 0.45f;
 		}
-		else if (Roll < 0.85f)
+		else if (Roll < 0.7f)
 		{
 			DoHeadbutt();
 		}
-		else
+		else if (Roll < 0.85f)
 		{
 			DoKick();
+		}
+		else
+		{
+			BrawlNextMove = Now + 0.8f; // haul them about for a moment (towards the drop - see above)
 		}
 		return;
 	}
@@ -6162,7 +6232,10 @@ void ABRCharacter::HeadbuttHit()
 		}
 		if (!Victim->bBlocking)
 		{
-			Victim->AddKO(Victim->HeadHitKO * 1.4f, this); // head-to-head: the best way to knock someone out
+			// Only a real head-to-head clash rattles them badly; a headbutt into the chest is just a shove.
+			const bool bHeadsMet = Victim->GetMesh() && Victim->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE
+				&& FVector::Dist(Victim->GetMesh()->GetBoneLocation(TEXT("head")), Head + Fwd * 25.f) < 40.f;
+			Victim->AddKO(Victim->HeadHitKO * (bHeadsMet ? 0.9f : 0.15f), this);
 		}
 		Victim->ReceiveMeleeHit(this, HeadbuttDamage, Fwd * 450.f + FVector(0.f, 0.f, 120.f));
 		Victim->Multicast_BodyHit(TEXT("head"), Fwd * HitReaction * 1.5f);
@@ -6556,7 +6629,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			if (KOVictim && !bGuarded)
 			{
 				// Head: a clean, hard shot rattles you a LOT. Body: a few weak shots barely matter.
-				const float KO = bHeadHit ? KOVictim->HeadHitKO * FMath::Lerp(0.25f, 2.4f, Curve)
+				const float KO = bHeadHit ? KOVictim->HeadHitKO * FMath::Lerp(0.3f, 1.6f, Curve)
 					: (bArmHit ? 0.f : KOVictim->BodyHitKO * FMath::Lerp(0.2f, 1.4f, Curve));
 				KOVictim->AddKO(KO, this);
 			}
@@ -7369,11 +7442,57 @@ void ABRCharacter::TickHandHang(float DeltaSeconds)
 			Anchor += HandAnchor[h];
 		}
 	}
-	if (Holding == 0 || Move->IsMovingOnGround())
+	// Any stuck hand at all (even low): you can't just walk away from it - your arm holds you there.
+	int32 AnyHeld = 0;
+	FVector AnyAnchor = FVector::ZeroVector;
+	for (int32 h = 0; h < 2; ++h)
 	{
-		bHandHanging = false; // feet on the ground: the hands just rest on the wall
+		if (bHandAnchored[h])
+		{
+			++AnyHeld;
+			AnyAnchor += HandAnchor[h];
+		}
+	}
+	if (AnyHeld > 0 && Move->IsMovingOnGround())
+	{
+		AnyAnchor /= AnyHeld;
+		const FVector FromAnchor = (GetActorLocation() - AnyAnchor) * FVector(1.f, 1.f, 0.f);
+		const float Reach = AnyHeld == 2 ? 105.f : 120.f;
+		if (FromAnchor.Size() > Reach)
+		{
+			const FVector Out = FromAnchor.GetSafeNormal();
+			const float Away = FVector::DotProduct(Move->Velocity, Out);
+			if (Away > 0.f)
+			{
+				Move->Velocity -= Out * Away; // the arm holds you back
+			}
+		}
+	}
+	if (Holding == 0)
+	{
+		bHandHanging = false;
 		HangGrip = FMath::Min(1.f, HangGrip + DeltaSeconds * 0.5f);
 		return;
+	}
+	if (Move->IsMovingOnGround())
+	{
+		// Feet on the ground, hands on the wall above you: push in (W) or look up and your arms haul you up off the floor.
+		const FVector AvgAnchor = Anchor / Holding;
+		const FVector Shoulders = GetActorLocation() + FVector(0.f, 0.f, 50.f);
+		const FVector Wish0 = Move->GetCurrentAcceleration().GetSafeNormal2D();
+		const bool bPushIn = FVector::DotProduct(Wish0, (AvgAnchor - GetActorLocation()).GetSafeNormal2D()) > 0.3f;
+		const bool bLookUp = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch) > 15.f;
+		if (AvgAnchor.Z > Shoulders.Z + 10.f && (bPushIn || bLookUp) && HangGrip > 0.1f)
+		{
+			Move->SetMovementMode(MOVE_Falling);
+			Move->Velocity.Z = Holding == 2 ? 220.f : 110.f;
+		}
+		else
+		{
+			bHandHanging = false;
+			HangGrip = FMath::Min(1.f, HangGrip + DeltaSeconds * 0.5f);
+			return;
+		}
 	}
 	bHandHanging = true;
 	Anchor /= Holding;

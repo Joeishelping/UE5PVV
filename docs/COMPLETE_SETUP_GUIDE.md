@@ -1016,6 +1016,43 @@ Punches, kicks and throws **never kill**: they knock you down and out. **Knives 
 
 **Tuning** (BP_Runner / BP_Warden, **BR | Wounds**): Knife Wound, Gun Wound, Head Wound Multiplier, Death Respawn Seconds, NPC Body Seconds.
 
+## Part 15aa: Fight pacing, real grips, climbing, doors, village life
+
+**Fights last longer and are fairer:**
+- One clean, hard punch to the head fills about a third of the knockout meter, so it takes about 3 or 4 good head shots to put someone out.
+- The KO meter drains back faster once the hits stop.
+- Only a near-perfect head shot drops someone in one punch.
+- A **headbutt** only rattles you badly if the **heads actually meet**. Into the chest, it's just a shove.
+- NPCs fight back after the **first** real hit (they used to need several).
+- NPCs fight at **arm's length** instead of nose to nose. When they've got hold of you, they mostly punch and haul you around, and headbutt rarely.
+
+**Real grips:**
+- Your hands go to the **part you grabbed** and are physically tied to it, standing or limp.
+- Dragging a knocked-out body pulls it by the part in your hand, so your hand is really on it.
+- A hand **inside** someone's body (pressed against their back, chest, anything) counts as touching them.
+- Holding a wall or a pole: your arm **holds you there**, so you can't just walk away while you grip it, and the grip doesn't slip when you move.
+
+**Climbing:**
+1. Put both hands on the wall above you and hold **W** (or look up): your arms **haul you up off the floor**.
+2. Let go of one button and hold it again: that hand reaches **up the wall** for a new hold.
+3. Keep pulling. **Space** jumps up from your hands.
+
+**Dives:** **Ctrl is always a dive** now. The drop kick is **kick while you're in the air**. Landing from a dive can't make you "lose your balance" and fall over any more.
+
+**Village:**
+- Villagers go on **errands** (market, taco stand, church, well, shops) and stop to chat and wave.
+- New grabbable, throwable clutter: **barrels**, **clay pots** (smash like bottles) and **sacks of grain**.
+
+**Buildings:**
+- The taco stand has a roof and an awning.
+- The shops have **lights inside** and **doors that swing open when you walk into them** and shut behind you.
+- The cantina has real **saloon doors** that flap open as you push through.
+
+**Day and night:**
+- Each round starts at a **random time of day** (usually daytime) with **random weather**.
+- A full day is now 14 minutes, and **nights pass 2.5× faster**.
+- Tune it in BP_BRGameMode under **BR | World**: Day Length Minutes, Night Speed Up, Random Start.
+
 ---
 
 ## Part 16: Checklist: everything you can plug in

@@ -89,7 +89,7 @@ void ABRCharacter::TickActiveRagdoll(float DeltaSeconds)
 	const float Angle = BodyLean.Size();
 	const float OffBalance = (BodyLean - LeanTarget).Size(); // only being knocked off your lean counts
 	// Too far over: you GO DOWN (the server decides).
-	if (HasAuthority() && OffBalance > FallOverAngle)
+	if (HasAuthority() && OffBalance > FallOverAngle && GetWorld()->GetTimeSeconds() >= BalanceGraceUntil)
 	{
 		const FVector Dir = (BodyLean - LeanTarget).GetSafeNormal();
 		BodyLean = FVector::ZeroVector;
@@ -108,6 +108,13 @@ void ABRCharacter::TickActiveRagdoll(float DeltaSeconds)
 	Body->SetRelativeRotation(Tilt * GetMeshRelativeTransform().GetRotation());
 	bLeanApplied = true;
 	UpdateGrabTethers();
+}
+
+namespace
+{
+	// The parts of a limp body you can drag it by.
+	const TCHAR* const DragBoneNames[] = { TEXT("hand_l"), TEXT("hand_r"), TEXT("foot_l"), TEXT("foot_r"), TEXT("spine_03"), TEXT("head") };
+	constexpr int32 NumDragBones = UE_ARRAY_COUNT(DragBoneNames);
 }
 
 void ABRCharacter::UpdateGrabTethers()
@@ -136,10 +143,14 @@ void ABRCharacter::UpdateGrabTethers()
 			Anchor = GetActorLocation() + Wall * (GetCapsuleComponent()->GetScaledCapsuleRadius() + 4.f) + Side + FVector(0.f, 0.f, bThisHigh ? 105.f : 72.f);
 			bWorld = true;
 		}
-		else if (bHandUsable && Held && !Held->IsRagdollActive() && !bLiftOverhead && (HandGrabMask & (1 << i)) && Held->GetMesh() && Held->GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
+		else if (bHandUsable && Held && !bLiftOverhead && (HandGrabMask & (1 << i)) && Held->GetMesh() && Held->GetMesh()->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
 		{
-			// Hold on to the part you actually grabbed (head, arm, leg, collar).
-			const FName Part = (HandGrabBone != NAME_None && Held->GetMesh()->GetBoneIndex(HandGrabBone) != INDEX_NONE) ? HandGrabBone : FName(TEXT("spine_03"));
+			// Hold on to the part you actually grabbed (head, arm, leg, collar) - standing OR limp: your hand is really on them.
+			FName Part = (HandGrabBone != NAME_None && Held->GetMesh()->GetBoneIndex(HandGrabBone) != INDEX_NONE) ? HandGrabBone : FName(TEXT("spine_03"));
+			if (Held->IsRagdollActive() && DragBone < NumDragBones)
+			{
+				Part = DragBoneNames[DragBone];
+			}
 			WantOther = Held->GetMesh();
 			OtherBone = Part;
 			Anchor = Held->GetMesh()->GetBoneLocation(Part) + (Body->GetBoneLocation(HandBones[i]) - Held->GetMesh()->GetBoneLocation(Part)).GetClampedToMaxSize(15.f);
@@ -185,13 +196,6 @@ void ABRCharacter::UpdateGrabTethers()
 // -------------------------------------------------------------------------------------------
 // Dragging limp bodies + lifting people over your head
 
-namespace
-{
-	// The parts of a limp body you can drag it by.
-	const TCHAR* const DragBoneNames[] = { TEXT("hand_l"), TEXT("hand_r"), TEXT("foot_l"), TEXT("foot_r"), TEXT("spine_03"), TEXT("head") };
-	constexpr int32 NumDragBones = UE_ARRAY_COUNT(DragBoneNames);
-}
-
 bool ABRCharacter::IsDraggingBody() const
 {
 	const ABRCharacter* Held = HandGrabTarget.Get();
@@ -206,8 +210,18 @@ void ABRCharacter::PickDragBone()
 	{
 		return;
 	}
-	// Whatever is closest to where your hands are.
-	const FVector Hands = GetActorLocation() + GetActorForwardVector().GetSafeNormal2D() * 70.f;
+	// The part you grabbed (if it's one we can haul by), else whatever is closest to your hands.
+	for (int32 i = 0; i < NumDragBones; ++i)
+	{
+		if (HandGrabBone == FName(DragBoneNames[i]) && Their->GetBoneIndex(DragBoneNames[i]) != INDEX_NONE)
+		{
+			DragBone = static_cast<uint8>(i);
+			ForceNetUpdate();
+			return;
+		}
+	}
+	const FVector Hands = GetMesh() && GetMesh()->GetBoneIndex(TEXT("hand_r")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("hand_r"))
+		: GetActorLocation() + GetActorForwardVector().GetSafeNormal2D() * 70.f;
 	float Best = MAX_flt;
 	uint8 Pick = 4; // spine (the collar)
 	for (int32 i = 0; i < NumDragBones; ++i)
@@ -287,7 +301,17 @@ void ABRCharacter::DragHeldBody(float DeltaSeconds)
 		return;
 	}
 	const int32 Index = DragBone < NumDragBones ? DragBone : 4;
-	Pull(DragBoneNames[Index], Target, DragStrength);
+	// Pull the part you're holding to where your gripping hand actually is.
+	FVector HandTarget = Target;
+	if (USkeletalMeshComponent* Mine = GetMesh(); Mine && bWobbleOn)
+	{
+		const FName GripHand = (HandGrabMask & 1) ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
+		if (Mine->GetBoneIndex(GripHand) != INDEX_NONE)
+		{
+			HandTarget = Mine->GetBoneLocation(GripHand);
+		}
+	}
+	Pull(DragBoneNames[Index], HandTarget, DragStrength);
 }
 
 void ABRCharacter::Server_Lift_Implementation()

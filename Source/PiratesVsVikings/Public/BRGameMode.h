@@ -144,8 +144,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Teams") float WardenRatio = 0.34f;
 
 	/** Real minutes per in-game day. 24 = one game hour per real minute. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|World") float DayLengthMinutes = 24.f;
-	/** Game starts in the afternoon so night falls around the start of the Invasion. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|World") float DayLengthMinutes = 14.f;
+	/** Nights go by this many times faster than days (so it doesn't feel like it's always night). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|World") float NightSpeedUp = 2.5f;
+	/** Each round starts at a random time of day (and random weather). Off = always StartHour, clear skies. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|World") bool bRandomStart = true;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|World") float StartHour = 14.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|World") FVector2D WeatherChangeSeconds = FVector2D(240.f, 480.f);
 	UPROPERTY(EditDefaultsOnly, Category = "BR|World") FVector ArenaLocation = FVector(0.f, 0.f, 10000.f);

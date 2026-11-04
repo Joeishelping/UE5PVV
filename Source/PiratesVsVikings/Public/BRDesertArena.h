@@ -166,6 +166,8 @@ private:
 	TMap<TWeakObjectPtr<AActor>, bool> StepLeft;
 
 	UPointLightComponent* AddNightLight(const TCHAR* Name, const FVector& Location, float Strength, float Radius);
+	/** A warm light that's always on (inside buildings). */
+	UPointLightComponent* AddRoomLight(const TCHAR* Name, const FVector& Location, float Candelas, float Radius);
 	static float LightStrength(const UPointLightComponent* Bulb);
 	UStaticMeshComponent* AddBlock(const TCHAR* Name, const FVector& Center, const FVector& SizeCm, const FLinearColor& Color, const FRotator& Rotation = FRotator::ZeroRotator, bool bCollide = true);
 	UTextRenderComponent* AddSign(const TCHAR* Name, const FString& Text, const FVector& Location, float Yaw, float Size, const FColor& Color);
