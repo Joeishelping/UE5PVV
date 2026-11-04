@@ -1184,7 +1184,8 @@ void ABRGameMode::TickClients()
 		ABRCharacter* Client = *It;
 		// An illegal local (no coyote) made it to the Safe Zone on their own: the Runners team scores.
 		if (Client->IsNPC() && !Client->Leader.IsValid() && (Client->bIllegal || Client->bCarriesContraband) && !Client->bScoredCrossing
-			&& Client->GetCondition() == EPVVCondition::Normal && !Client->GetCarrier() && !Client->GetCurrentBoat()
+			&& (Client->GetCondition() == EPVVCondition::Normal || Client->GetCondition() == EPVVCondition::KnockedDown) && !Client->IsDead()
+			&& !Client->GetCarrier() && !Client->GetCurrentBoat()
 			&& BRMap::IsInSafeZone(GetWorld(), Client->GetActorLocation()))
 		{
 			SlippedThrough.Add(Client);
@@ -1200,8 +1201,10 @@ void ABRGameMode::TickClients()
 		Free->bScoredCrossing = true;
 		OnSmuggledThrough(Free->bIllegal ? 1 : 0, Free->bCarriesContraband ? 1 : 0, Free->GetActorLocation());
 		Free->CalmDown();
+		ABRGameState::FX(this, EBRFX::PointsText, Free->GetActorLocation() + FVector(0.f, 0.f, 140.f), TEXT("MADE IT!"));
+		ABRGameState::FX(this, EBRFX::Dust, Free->GetActorLocation());
 		FTimerHandle Gone;
-		GetWorldTimerManager().SetTimer(Gone, FTimerDelegate::CreateWeakLambda(Free, [Free]() { Free->Destroy(); }), 20.f, false); // off to start a new life
+		GetWorldTimerManager().SetTimer(Gone, FTimerDelegate::CreateWeakLambda(Free, [Free]() { Free->Destroy(); }), 2.5f, false); // off to start a new life
 	}
 	for (ABRCharacter* Client : Delivered)
 	{
