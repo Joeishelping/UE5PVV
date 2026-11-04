@@ -6403,7 +6403,6 @@ void ABRCharacter::Multicast_Emote_Implementation(uint8 Index)
 // (In the .cpp on purpose: an RPC's _Implementation name written in a header stops Unreal declaring it.)
 void ABRCharacter::BotMash() { Server_Mash_Implementation(); }
 void ABRCharacter::BotEat() { Server_Eat_Implementation(); }
-void ABRCharacter::BotDive() { Server_Dive_Implementation(); }
 
 void ABRCharacter::MakeLuchador(const FString& RingName, float Toughness)
 {

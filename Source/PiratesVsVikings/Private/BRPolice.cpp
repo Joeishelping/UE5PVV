@@ -73,7 +73,7 @@ void ABRSurveillanceCamera::Tick(float DeltaSeconds)
 		FHitResult Block;
 		Params.AddIgnoredActor(C);
 		const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Block, Eye, C->GetActorLocation() + FVector(0.f, 0.f, 50.f), ECC_Visibility, Params);
-		Params.ClearIgnoredActors();
+		Params.ClearIgnoredSourceObjects();
 		Params.AddIgnoredActor(this);
 		if (bBlocked)
 		{

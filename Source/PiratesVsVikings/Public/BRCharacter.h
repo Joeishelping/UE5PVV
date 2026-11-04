@@ -246,7 +246,6 @@ public:
 	void BrawlerFinish(ABRCharacter* Foe);
 	/** AI moves (bots / luchador / NPCs). */
 	void BotReach(uint8 Hands) { ArmsReaching = Hands; }
-	void BotDive();
 	void BotDropKick() { DoDropKick(); }
 	bool IsDropKicking() const { return bDropKicking; }
 	// --- Police tools (BRPolice.cpp) ---
