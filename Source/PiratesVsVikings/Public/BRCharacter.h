@@ -1185,6 +1185,8 @@ private:
 	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> HandGrabTarget;
 	/** Which part of them you've got hold of (head, arm, leg, collar...). Grab a leg and walk away = trip them. */
 	UPROPERTY(Replicated) FName HandGrabBone;
+	/** Set by TryHandGrab: the body part the reaching hand is touching. */
+	FName GrabContactBone;
 	float LegPullTime = 0.f;
 	void TickBodyPartGrab(float DeltaSeconds);
 	float LastShoveTime = -10.f;

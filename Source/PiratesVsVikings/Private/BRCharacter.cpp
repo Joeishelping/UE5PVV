@@ -2204,21 +2204,34 @@ void ABRCharacter::OnAttackStartedNative()
 		const FName Clavicle = bPunchLeft ? FName(TEXT("clavicle_l")) : FName(TEXT("clavicle_r"));
 		if (GetMesh()->GetBoneIndex(Hand) != INDEX_NONE)
 		{
-			// Aim the fist at whoever is in front of you (a little help, like Gang Beasts' auto-aim).
+			// Gang Beasts: the fist goes in the GENERAL direction you're facing / aiming, and locks onto whoever is roughly
+			// in front of you (anyone inside ~45 degrees), going for the head first. Nobody there: straight where you aim.
 			const FVector Shoulder = GetMesh()->GetBoneLocation(Upper);
-			FVector Dir = (GetActorForwardVector() + FVector(0.f, 0.f, 0.1f)).GetSafeNormal();
-			float Best = 280.f;
+			const FRotator AimRot = GetBaseAimRotation();
+			const float AimPitch = FMath::Clamp(FRotator::NormalizeAxis(AimRot.Pitch), -25.f, 35.f) * 0.6f; // looking up/down tilts it a little
+			const FVector Aim = FRotator(AimPitch, AimRot.Yaw, 0.f).Vector();
+			FVector Dir = Aim;
+			const float AssistCos = 0.7f; // ~45 degrees either side
+			float BestAssist = AssistCos;
 			for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
 			{
 				const APVVCharacter* Other = *It;
-				// Go for the head (that's what knocks people out).
-				const FVector Chest = Other->GetMesh() && Other->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE
-					? Other->GetMesh()->GetBoneLocation(TEXT("head")) : Other->GetActorLocation() + FVector(0.f, 0.f, 70.f);
-				const float D = FVector::Dist(Chest, Shoulder);
-				if (Other != this && D < Best && FVector::DotProduct((Chest - Shoulder).GetSafeNormal2D(), GetActorForwardVector()) > 0.5f)
+				if (Other == this || FVector::DistSquared(Other->GetActorLocation(), GetActorLocation()) > FMath::Square(260.f))
 				{
-					Best = D;
-					Dir = (Chest - Shoulder).GetSafeNormal();
+					continue;
+				}
+				// Judge "in front" flat (left/right only), then aim at their head (or chest if there's no head bone).
+				const FName Spot = Other->GetMesh() && Other->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? FName(TEXT("head")) : FName(TEXT("spine_03"));
+				if (!Other->GetMesh() || Other->GetMesh()->GetBoneIndex(Spot) == INDEX_NONE)
+				{
+					continue;
+				}
+				const FVector SpotAt = Other->GetMesh()->GetBoneLocation(Spot);
+				const float Along = FVector::DotProduct((SpotAt - Shoulder).GetSafeNormal2D(), Aim.GetSafeNormal2D());
+				if (Along > BestAssist)
+				{
+					BestAssist = Along;
+					Dir = (SpotAt - Shoulder).GetSafeNormal();
 				}
 			}
 			// Let the arm go loose for a moment so it really flies out, then fling it.
@@ -4282,6 +4295,10 @@ void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 		ForceNetUpdate();
 	}
 	StopEmote();
+	if (!bIsNPC && Controller && !bClimbing && !GetCurrentBoat())
+	{
+		SetActorRotation(FRotator(0.f, GetControlRotation().Yaw, 0.f)); // square up to where you're aiming
+	}
 	Multicast_PunchHand(bLeft);
 	BotAttack(); // same punch as before, just with the hand you chose
 }
@@ -4330,7 +4347,49 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 	}
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	ABRCharacter* Best = HandGrabTarget.Get();
-	if (!Best)
+	GrabContactBone = NAME_None;
+	// Wobbly bodies: you grab whatever part your reaching HAND is actually touching - their arm, head, collar, leg...
+	const bool bContactGrabs = bWobbleOn && Cast<APlayerController>(GetController()) && GetMesh() && GetMesh()->GetBoneIndex(TEXT("hand_l")) != INDEX_NONE; // (NPCs / bots keep the simpler reach-grab)
+	if (!Best && bContactGrabs)
+	{
+		float BestTouch = 32.f;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			ABRCharacter* Other = *It;
+			if (Other == this || !Other->GetMesh() || Other->GetCarrier() || Other->GetCurrentBoat() || Other->IsInCannon() || Other->GrabbedBy
+				|| Other->GetCondition() == EPVVCondition::Detained || Other->GetCondition() == EPVVCondition::Restrained
+				|| FVector::DistSquared(Other->GetActorLocation(), GetActorLocation()) > FMath::Square(300.f))
+			{
+				continue;
+			}
+			for (int32 h = 0; h < 2; ++h)
+			{
+				if (!(HandMask & (1 << h)))
+				{
+					continue;
+				}
+				const FVector HandAt = GetMesh()->GetBoneLocation(h == 0 ? FName(TEXT("hand_l")) : FName(TEXT("hand_r")));
+				for (const TCHAR* BoneName : { TEXT("head"), TEXT("neck_01"), TEXT("spine_03"), TEXT("spine_02"), TEXT("pelvis"), TEXT("upperarm_l"), TEXT("upperarm_r"),
+					TEXT("lowerarm_l"), TEXT("lowerarm_r"), TEXT("hand_l"), TEXT("hand_r"), TEXT("thigh_l"), TEXT("thigh_r"), TEXT("calf_l"), TEXT("calf_r"), TEXT("foot_l"), TEXT("foot_r") })
+				{
+					if (Other->GetMesh()->GetBoneIndex(BoneName) == INDEX_NONE)
+					{
+						continue;
+					}
+					// Fat torsos: count the chest/belly as touched from a little further out.
+					const bool bTorso = FCString::Strstr(BoneName, TEXT("spine")) || FCString::Strstr(BoneName, TEXT("pelvis"));
+					const float D = FVector::Dist(Other->GetMesh()->GetBoneLocation(BoneName), HandAt) - (bTorso ? 18.f : 0.f);
+					if (D < BestTouch)
+					{
+						BestTouch = D;
+						Best = Other;
+						GrabContactBone = BoneName;
+					}
+				}
+			}
+		}
+	}
+	else if (!Best)
 	{
 		float BestDist = 170.f;
 		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
@@ -4351,7 +4410,7 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 		}
 	}
 	// Nobody right in front: anyone your HAND is actually touching (Gang Beasts - grab whatever you touch).
-	if (!Best && GetMesh())
+	if (!Best && GetMesh() && !bContactGrabs)
 	{
 		for (TActorIterator<ABRCharacter> It(GetWorld()); It && !Best; ++It)
 		{
@@ -4408,6 +4467,13 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 	{
 		// Grab whatever part your hand actually closed on.
 		const FName MyHand = (HandMask & 1) ? FName(TEXT("hand_l")) : FName(TEXT("hand_r"));
+		if (GrabContactBone != NAME_None)
+		{
+			HandGrabBone = GrabContactBone;
+			LegPullTime = 0.f;
+		}
+		else
+		{
 		const FVector HandAt = GetMesh()->GetBoneIndex(MyHand) != INDEX_NONE ? GetMesh()->GetBoneLocation(MyHand) : GetActorLocation() + GetActorForwardVector() * 60.f;
 		HandGrabBone = TEXT("spine_03");
 		float BestBone = 1.e9f;
@@ -4425,6 +4491,7 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 			}
 		}
 		LegPullTime = 0.f;
+		}
 	}
 	if (bNew)
 	{

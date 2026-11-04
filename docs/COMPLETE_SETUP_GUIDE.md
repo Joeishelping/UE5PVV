@@ -958,6 +958,9 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 - **Rocked:** when your KO meter is high you **stumble about**. That's the moment to grab them.
 - **NPC haymakers:** brawling NPCs wind up to one side and **swing both arms through you**. Like player swings, they only hurt if they land.
 
+- **Grab what you touch:** hold a button to reach (players). If your hand touches **any part** of someone (their arm, head, collar, leg), you grab that part. You don't magnetically grab people who are just near you.
+- **Punch direction (Gang Beasts style):** a punch goes in the **general direction you're facing/aiming** and **locks onto whoever's roughly in front of you** (inside about 45°), going for the head. Nobody there: it goes straight where you aim. Holding the button just puts your arm out that way (reach / grab / climb). Swinging the mouse is the sweeping weapon.
+
 **Climbing (players):** there's no climb mode any more.
 1. Jump at a wall and **hold a mouse button**: your hand sticks.
 2. **Your hands hold you up like ropes.** With two hands you hang. With one hand you slowly slide down.
