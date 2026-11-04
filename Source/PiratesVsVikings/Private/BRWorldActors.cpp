@@ -4818,6 +4818,8 @@ void ABRFX::BeginPlay()
 	BlobSize = 45.f;
 	if (Kind == EBRFX::Splash) { Color = FLinearColor(0.75f, 0.88f, 1.f); BlobSize = 35.f; Life = 0.8f; }
 	if (Kind == EBRFX::Smoke) { Color = FLinearColor(0.35f, 0.35f, 0.37f); BlobSize = 80.f; Life = 1.6f; }
+	if (Kind == EBRFX::Blood) { Color = FLinearColor(0.45f, 0.02f, 0.02f); BlobSize = 14.f; Life = 0.7f; }
+	if (Kind == EBRFX::BloodPool) { Color = FLinearColor(0.25f, 0.01f, 0.01f); BlobSize = 60.f; Life = 45.f; }
 	for (UStaticMeshComponent* B : Blobs)
 	{
 		B->SetHiddenInGame(bText);
@@ -4829,8 +4831,12 @@ void ABRFX::BeginPlay()
 			}
 		}
 		FVector D = FMath::VRand();
-		D.Z = Kind == EBRFX::Splash ? FMath::Abs(D.Z) * 2.5f : FMath::Abs(D.Z) * 0.6f;
-		Drift.Add(D * (Kind == EBRFX::Smoke ? 120.f : 160.f));
+		D.Z = (Kind == EBRFX::Splash || Kind == EBRFX::Blood) ? FMath::Abs(D.Z) * 2.5f : FMath::Abs(D.Z) * 0.6f;
+		if (Kind == EBRFX::BloodPool)
+		{
+			D = FVector(D.X, D.Y, 0.f) * 0.25f; // the pool spreads a little on the ground
+		}
+		Drift.Add(D * (Kind == EBRFX::Smoke ? 120.f : (Kind == EBRFX::Blood ? 220.f : 160.f)));
 	}
 	if (bText && Popup)
 	{
@@ -4857,13 +4863,28 @@ void ABRFX::Tick(float DeltaSeconds)
 		}
 		return;
 	}
-	// Puffs swell, drift, then shrink away.
+	if (Kind == EBRFX::BloodPool)
+	{
+		// A flat dark puddle: spreads out fast, stays, then fades away at the very end.
+		const float Spread = FMath::Clamp(Age / 2.5f, 0.f, 1.f) * (T > 0.9f ? (1.f - T) * 10.f : 1.f);
+		for (int32 i = 0; i < Blobs.Num(); ++i)
+		{
+			if (UStaticMeshComponent* B = Blobs[i].Get())
+			{
+				B->SetRelativeLocation(Drift[i] * FMath::Min(1.f, Age / 2.5f) + FVector(0.f, 0.f, 1.f + i * 0.3f));
+				const float R = FMath::Max(0.01f, BlobSize / 100.f * Spread * (0.6f + 0.12f * i));
+				B->SetRelativeScale3D(FVector(R, R, 0.02f));
+			}
+		}
+		return;
+	}
+	// Puffs swell, drift, then shrink away (blood droplets arc and fall).
 	const float Size = BlobSize / 100.f * FMath::Sin(T * UE_PI) * (0.6f + T);
 	for (int32 i = 0; i < Blobs.Num(); ++i)
 	{
 		if (UStaticMeshComponent* B = Blobs[i].Get())
 		{
-			B->SetRelativeLocation(Drift[i] * T + (Kind == EBRFX::Splash ? FVector(0.f, 0.f, -300.f * T * T) : FVector::ZeroVector));
+			B->SetRelativeLocation(Drift[i] * T + ((Kind == EBRFX::Splash || Kind == EBRFX::Blood) ? FVector(0.f, 0.f, -300.f * T * T) : FVector::ZeroVector));
 			B->SetRelativeScale3D(FVector(FMath::Max(0.01f, Size * (0.7f + 0.1f * i))));
 		}
 	}

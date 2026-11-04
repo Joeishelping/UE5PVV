@@ -592,6 +592,17 @@ void ABRHUD::DrawHUD()
 		Bar(SX * 0.5f - 140.f, SY - 46.f, 280.f, 9.f, Me->SprintStamina, StamColor);
 	}
 
+	// --- Health (only knives and bullets hurt it - shows once you're wounded)
+	if (Me->bDead)
+	{
+		Centered(TEXT("YOU'RE DEAD"), SY * 0.4f, Red, Big, 2.f);
+	}
+	else if (Me->Health < 99.5f)
+	{
+		Centered(Me->Health < 35.f ? TEXT("HEALTH  - BLEEDING BADLY!") : TEXT("HEALTH"), SY - 128.f, Me->Health < 35.f ? Red : White, Small, 1.f);
+		Bar(SX * 0.5f - 110.f, SY - 106.f, 220.f, 10.f, Me->Health / 100.f, Me->Health < 35.f ? FLinearColor(0.9f, 0.1f, 0.1f) : FLinearColor(0.75f, 0.15f, 0.15f));
+	}
+
 	// --- Shovel wear (breaks after a few digs - buy a new one)
 	if (const ABRPlayerState* ShovelPS = Me->GetBRPlayerState(); ShovelPS && ShovelPS->HasItem(EBRItem::Shovel))
 	{

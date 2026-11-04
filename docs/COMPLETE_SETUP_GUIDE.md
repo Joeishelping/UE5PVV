@@ -971,6 +971,23 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 - The map's **outer walls can't be grabbed**.
 - NPCs and bots still use the simple climb.
 
+## Part 15z: Blood, wounds and death (knives and guns)
+
+Punches, kicks and throws **never kill**: they knock you down and out. **Knives and bullets do real damage:**
+- **Blood:** red spray where it went in, and a dark puddle on the ground. Badly hurt people drip a blood trail for a while.
+- **Health:** a red **HEALTH** bar appears once you're wounded. It heals slowly once you've stopped bleeding (about 15 s after the last wound).
+- **How much damage:**
+  - **Knife:** only hurts when the stab actually lands (same contact rule as punches). 2 to 5 stabs kill, depending on how hard they are.
+  - **Bullet:** about 2 shots kill.
+  - **Headshots** (stab or shot) do double.
+- **Who it hits:** works on **players and NPCs**, with any real gun: a Runner's pistol, an NPC's gun, or Border Patrol in **LETHAL** mode. The Border Patrol taser stays non-lethal.
+- **Dead players** lie there as a floppy body that can be dragged around, then **respawn after 12 seconds**. **Dead NPCs** stay for 45 seconds, then they're gone.
+- The kill feed says who **SHOT** or **STABBED** who. Border Patrol's scandal / approval rules for shooting people still apply.
+
+**Optional:** Project Settings → Border Run → Effects → **Blood Effect**: drop in a Niagara blood system to replace the built-in red droplets.
+
+**Tuning** (BP_Runner / BP_Warden, **BR | Wounds**): Knife Wound, Gun Wound, Head Wound Multiplier, Death Respawn Seconds, NPC Body Seconds.
+
 ---
 
 ## Part 16: Checklist: everything you can plug in

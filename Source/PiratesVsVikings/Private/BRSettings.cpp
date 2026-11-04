@@ -66,6 +66,7 @@ UNiagaraSystem* UBRSettings::GetEffect(EBRFX Kind) const
 	case EBRFX::PunchHit:       Slot = &PunchHitEffect; break;
 	case EBRFX::CigaretteSmoke: Slot = &CigaretteSmokeEffect; break;
 	case EBRFX::Sparks:         Slot = &SparksEffect; break;
+	case EBRFX::Blood:          Slot = &BloodEffect; break;
 	default: break;
 	}
 	return Slot && !Slot->IsNull() ? Slot->LoadSynchronous() : nullptr;

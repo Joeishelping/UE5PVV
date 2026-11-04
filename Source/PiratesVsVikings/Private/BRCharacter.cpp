@@ -195,6 +195,8 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, DragBone);
 	DOREPLIFETIME(ABRCharacter, HandGrabTarget);
 	DOREPLIFETIME(ABRCharacter, HandGrabBone);
+	DOREPLIFETIME(ABRCharacter, Health);
+	DOREPLIFETIME(ABRCharacter, bDead);
 	DOREPLIFETIME(ABRCharacter, GrabbedBy);
 	DOREPLIFETIME(ABRCharacter, GrabStruggle);
 	DOREPLIFETIME(ABRCharacter, bClimbing);
@@ -1108,6 +1110,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 					Multicast_Shot(Muzzle, bBlocked ? FVector(Hit.ImpactPoint) : Aim, true, bHitFoe);
 					if (bHitFoe)
 					{
+						Foe->Wound(GunWound * (FMath::FRand() < 0.15f ? HeadWoundMultiplier : 1.f), this, Aim, ToFoe.GetSafeNormal(), true);
 						Foe->ApplyKnockdown(this, ToFoe.GetSafeNormal() * 300.f + FVector(0.f, 0.f, 150.f));
 						Foe->LastTosser = this;
 						Foe->LastTossTime = Now;
@@ -2137,6 +2140,23 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 
 	const FVector Muzzle = GetMuzzleLocation();
 	Multicast_Shot(Muzzle, bHit ? FVector(Hit.ImpactPoint) : End, bLethal || bRunnerGun, bHostileHit);
+	// Real bullets (a Runner's pistol, or Border Patrol in LETHAL mode) wound whoever they hit - players and NPCs.
+	if ((bLethal || bRunnerGun) && Victim && Victim != this)
+	{
+		bool bHeadshot = Hit.BoneName.ToString().Contains(TEXT("head")) || Hit.BoneName.ToString().Contains(TEXT("neck"));
+		if (!bHeadshot && Victim->GetMesh() && Victim->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE)
+		{
+			bHeadshot = FMath::PointDistToLine(Victim->GetMesh()->GetBoneLocation(TEXT("head")), FVector(Direction), Start) < 18.f;
+		}
+		if (ABRCharacter* Shot = Cast<ABRCharacter>(Victim))
+		{
+			Shot->Wound(GunWound * (bHeadshot ? HeadWoundMultiplier : 1.f), this, Hit.ImpactPoint, FVector(Direction), true);
+			if (bHeadshot && Shot->IsDead())
+			{
+				ABRGameState::FX(this, EBRFX::PointsText, Hit.ImpactPoint + FVector(0.f, 0.f, 40.f), TEXT("HEADSHOT"));
+			}
+		}
+	}
 	if (bLethal || bRunnerGun)
 	{
 		GS->Multicast_NoisePing(GetActorLocation());
@@ -2158,7 +2178,7 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 			GM->HandleLethalShot(Victim, this);
 		}
 	}
-	else
+	else if (!Victim->IsDead())
 	{
 		Victim->ApplyKnockdown(this, Push);
 	}
@@ -3037,6 +3057,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		{
 			TickSearchWait();
 		}
+		TickWounds(DeltaSeconds);
 		TickBrawl(DeltaSeconds);
 		TickThrown();
 		TickNPCStruggle();
@@ -6278,6 +6299,11 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			const FVector Dir = HandVel.GetSafeNormal();
 			const FVector Push = Dir.GetSafeNormal2D() * FMath::Lerp(90.f, bHeadHit ? 420.f : 600.f, Curve) + FVector(0.f, 0.f, 60.f + 120.f * Curve);
 			Victim->ReceiveMeleeHit(this, Damage, Push);
+			// A KNIFE that lands actually cuts: blood, and enough stabs kill.
+			if (HeldItem == EBRItem::Knife && KOVictim && !bGuarded)
+			{
+				KOVictim->Wound(KnifeWound * FMath::Lerp(0.5f, 1.2f, Curve) * (bHeadHit ? HeadWoundMultiplier : 1.f), this, HitPoint, Dir, false);
+			}
 			// A HARD clean shot to the head drops them on the spot (wobbly bodies fold).
 			if (bHeadHit && !bGuarded && Power >= HeadKnockdownPower && Victim->GetCondition() == EPVVCondition::Normal)
 			{
@@ -7188,5 +7214,124 @@ void ABRCharacter::TickBodyPartGrab(float DeltaSeconds)
 	else
 	{
 		LegPullTime = FMath::Max(0.f, LegPullTime - DeltaSeconds);
+	}
+}
+
+// -------------------------------------------------------------------------------------------
+// Wounds: knives and guns draw blood, and can kill (players respawn, NPC bodies stay a while)
+
+void ABRCharacter::Wound(float Amount, APVVCharacter* By, const FVector& At, const FVector& Dir, bool bGun)
+{
+	if (!HasAuthority() || bDead || Amount <= 0.f)
+	{
+		return;
+	}
+	Health = FMath::Max(0.f, Health - Amount);
+	LastWoundTime = GetWorld()->GetTimeSeconds();
+	// Blood: a spurt where it went in, and a splash on the ground under them.
+	ABRGameState::FX(this, EBRFX::Blood, At);
+	FHitResult Floor;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRBloodFloor), false, this);
+	if (GetWorld()->LineTraceSingleByChannel(Floor, GetActorLocation(), GetActorLocation() - FVector(0.f, 0.f, 400.f), ECC_Visibility, Params))
+	{
+		ABRGameState::FX(this, EBRFX::BloodPool, Floor.ImpactPoint + Dir.GetSafeNormal2D() * 40.f);
+	}
+	Multicast_BodyHit(bGun ? FName(TEXT("spine_03")) : FName(TEXT("spine_02")), Dir.GetSafeNormal() * HitReaction * (bGun ? 1.4f : 0.8f));
+	ForceNetUpdate();
+	if (Health <= 0.f)
+	{
+		Die(By, bGun);
+	}
+	else if (Health < 35.f)
+	{
+		Notify(LOCTEXT("BadlyHurt", "You're BLEEDING badly - get away and lay low!"));
+	}
+}
+
+void ABRCharacter::Die(APVVCharacter* By, bool bGun)
+{
+	if (!HasAuthority() || bDead)
+	{
+		return;
+	}
+	bDead = true;
+	Health = 0.f;
+	ReleaseHandGrab();
+	if (APVVCharacter* Carrier = GetCarrier())
+	{
+		Carrier->DropCarried();
+	}
+	if (GetCurrentBoat())
+	{
+		GetCurrentBoat()->Unseat(this);
+	}
+	if (bClimbing)
+	{
+		StopClimbing(true);
+	}
+	// Limp: down for good (Recover / zip-ties ignore the dead).
+	const FVector Push = By ? (GetActorLocation() - By->GetActorLocation()).GetSafeNormal2D() * 300.f + FVector(0.f, 0.f, 80.f) : FVector(0.f, 0.f, 50.f);
+	if (GetCondition() == EPVVCondition::Normal)
+	{
+		ApplyKnockdown(By, Push);
+	}
+	SetKnockdownTimeLeft(100000.f);
+	ABRGameState::FX(this, EBRFX::BloodPool, GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 5.f));
+	ForceNetUpdate();
+	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
+	if (GM)
+	{
+		const FString Killer = By ? By->GetPlayerDisplayName() : FString(TEXT("Someone"));
+		GM->Feed(FString::Printf(bGun ? TEXT("%s SHOT %s DEAD") : TEXT("%s STABBED %s TO DEATH"), *Killer, *GetPlayerDisplayName()));
+	}
+	if (bIsNPC)
+	{
+		SetNPCHeldItem(EBRItem::None);
+		FTimerHandle Gone;
+		GetWorldTimerManager().SetTimer(Gone, FTimerDelegate::CreateWeakLambda(this, [this]() { Destroy(); }), NPCBodySeconds, false);
+		return;
+	}
+	Notify(FText::Format(LOCTEXT("YouDiedW", "You're DEAD. Back in {0} seconds..."), FMath::RoundToInt(DeathRespawnSeconds)));
+	if (GM)
+	{
+		GM->RespawnAfterDeath(this, DeathRespawnSeconds);
+	}
+}
+
+void ABRCharacter::Revive()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	bDead = false;
+	Health = 100.f;
+	LastWoundTime = -100.f;
+	ForceNetUpdate();
+}
+
+void ABRCharacter::TickWounds(float DeltaSeconds)
+{
+	if (bDead || Health >= 100.f)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float Since = Now - LastWoundTime;
+	// Bleeding: badly hurt people leave a trail for a while.
+	if (Health < 60.f && Since < 25.f && Now >= NextBleedTime && GetCondition() != EPVVCondition::Detained)
+	{
+		NextBleedTime = Now + FMath::FRandRange(1.2f, 2.2f);
+		FHitResult Floor;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRBleed), false, this);
+		if (GetWorld()->LineTraceSingleByChannel(Floor, GetActorLocation(), GetActorLocation() - FVector(0.f, 0.f, 400.f), ECC_Visibility, Params))
+		{
+			ABRGameState::FX(this, EBRFX::Blood, Floor.ImpactPoint + FVector(0.f, 0.f, 10.f)); // drip, drip
+		}
+	}
+	// Stopped bleeding: heal slowly.
+	if (Since > 15.f)
+	{
+		Health = FMath::Min(100.f, Health + 3.f * DeltaSeconds);
 	}
 }

@@ -53,6 +53,27 @@ public:
 	void StartBrawling(ABRCharacter* Target, float Seconds, float Aggression = 0.5f);
 	/** NPC busted at the checkpoint (no papers / contraband): fight, pull a knife, run, or give up - random, by how bad they are. */
 	void ReactToBust(ABRCharacter* Cop, bool bMinorOffense);
+
+	// --- Wounds (knives & guns) ---------------------------------------------------------
+	/** Real wounds from stabbing / shooting (punches never kill). 0 = dead. Heals slowly once you stop bleeding. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Wounds") float Health = 100.f;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR|Wounds") bool bDead = false;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Wounds") float KnifeWound = 30.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Wounds") float GunWound = 55.f;
+	/** Shots and stabs to the head do this much more. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Wounds") float HeadWoundMultiplier = 2.f;
+	/** Seconds before a dead player is back at their start. Dead NPC bodies are cleared after NPCBodySeconds. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Wounds") float DeathRespawnSeconds = 12.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Wounds") float NPCBodySeconds = 45.f;
+	/** Server: stab / bullet wound at this spot. Bleeds, and kills at 0. */
+	void Wound(float Amount, APVVCharacter* By, const FVector& At, const FVector& Dir, bool bGun);
+	void Die(APVVCharacter* By, bool bGun);
+	/** Server: back to full health and alive (respawning). */
+	void Revive();
+	virtual bool IsDead() const override { return bDead; }
+	float LastWoundTime = -100.f;
+	float NextBleedTime = 0.f;
+	void TickWounds(float DeltaSeconds);
 	/** Server (NPCs): climb the Border Wall if it's right in front of us, going this way. True if climbing (or already). */
 	bool NPCClimbBorderWall(const FVector& Direction);
 	/** Server (NPCs): stepped out of their van at the checkpoint to be searched. Clean people get back in once searched;

@@ -582,8 +582,6 @@ void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter
 	{
 		Announce(FText::Format(LOCTEXT("NPCSelfDefense", "{0} shot an attacker in self-defense."), FText::FromString(NameOf(Shooter))));
 		Victim->ApplyKnockdown(Shooter, FVector(0.f, 0.f, 200.f));
-		FTimerHandle Gone;
-		GetWorldTimerManager().SetTimer(Gone, FTimerDelegate::CreateWeakLambda(Victim, [Victim]() { Victim->Destroy(); }), 10.f, false);
 		return;
 	}
 	if (const ABRCharacter* NPC = Cast<ABRCharacter>(Victim); NPC && NPC->IsNPC())
@@ -591,8 +589,6 @@ void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter
 		ChangeApproval(-ScandalPenalty);
 		Announce(FText::Format(LOCTEXT("CivilianShot", "SCANDAL! {0} shot an innocent citizen! Approval -{1}"), FText::FromString(NameOf(Shooter)), FMath::RoundToInt(ScandalPenalty)));
 		Victim->ApplyKnockdown(Shooter, FVector(0.f, 0.f, 200.f));
-		FTimerHandle Handle;
-		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(Victim, [Victim]() { Victim->Destroy(); }), 10.f, false);
 		return;
 	}
 	ABRPlayerState* PS = Victim ? Cast<ABRPlayerState>(Victim->GetPVVPlayerState()) : nullptr;
@@ -613,15 +609,14 @@ void ABRGameMode::HandleLethalShot(APVVCharacter* Victim, APVVCharacter* Shooter
 			FText::FromString(NameOf(Shooter)), FText::FromString(NameOf(Victim)), FMath::RoundToInt(ScandalPenalty)));
 	}
 
+	if (Victim->IsDead())
+	{
+		return; // the wound killed them: Die() handles the body and the respawn
+	}
 	if (Victim->GetCondition() == EPVVCondition::Normal)
 	{
 		Victim->ApplyKnockdown(Shooter, (Victim->GetActorLocation() - Shooter->GetActorLocation()).GetSafeNormal2D() * 400.f);
 	}
-	if (ABRCharacter* BRC = Cast<ABRCharacter>(Victim))
-	{
-		BRC->Notify(LOCTEXT("YouDied", "You were shot. Respawning in town..."));
-	}
-	SendHomeLater(Victim, RunnerRespawnSeconds);
 }
 
 void ABRGameMode::SendHomeLater(APVVCharacter* Character, float Seconds)
@@ -1606,6 +1601,10 @@ void ABRGameMode::RespawnRunner(TWeakObjectPtr<APVVCharacter> Runner)
 	if (!PS || C->GetCondition() == EPVVCondition::Detained)
 	{
 		return;
+	}
+	if (ABRCharacter* Body = Cast<ABRCharacter>(C))
+	{
+		Body->Revive(); // back from the dead (if they were)
 	}
 	if (C->GetFaction() == BR::Runners)
 	{

@@ -42,6 +42,8 @@ public:
 	virtual void NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause) override;
 	/** Kill-feed line on everyone's screen. */
 	void Feed(const FString& Line);
+	/** A player died: back to their side's start after this many seconds. */
+	void RespawnAfterDeath(APVVCharacter* Character, float Seconds) { SendHomeLater(Character, Seconds); }
 	/** Server: someone started trouble (punched a local, kicked off a bar fight). Too much = a bounty on them. */
 	void AddTrouble(class ABRCharacter* Who, int32 Amount);
 	/** Server: cash / an item on the ground (ReservedFor = only that player can pick it up). */

@@ -111,6 +111,8 @@ public:
 	virtual float ModifyIncomingHit(APVVCharacter* Attacker, float Damage, FVector& Impulse) { return Damage; }
 	void ApplyKnockdown(AActor* Cause, const FVector& Impulse);
 	void Recover(float BalanceFraction = 0.5f);
+	/** Dead (stabbed / shot to death): stays down until respawned. */
+	virtual bool IsDead() const { return false; }
 	void Restrain(APVVCharacter* Captor);
 	/** Back to Normal from Restrained. Rescuer null = struggled free. */
 	void Release(APVVCharacter* Rescuer);

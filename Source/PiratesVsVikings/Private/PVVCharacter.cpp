@@ -574,7 +574,7 @@ void APVVCharacter::SetKnockdownTimeLeft(float Seconds)
 
 void APVVCharacter::Recover(float BalanceFraction)
 {
-	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown)
+	if (!HasAuthority() || Condition != EPVVCondition::KnockedDown || IsDead())
 	{
 		return;
 	}
@@ -589,7 +589,7 @@ void APVVCharacter::Recover(float BalanceFraction)
 void APVVCharacter::Restrain(APVVCharacter* Captor)
 {
 	// Knocked down, or held in the captor's hands (they lost the struggle).
-	if (!HasAuthority() || (Condition != EPVVCondition::KnockedDown && !(Condition == EPVVCondition::Normal && IsHeldByHands(Captor))))
+	if (!HasAuthority() || IsDead() || (Condition != EPVVCondition::KnockedDown && !(Condition == EPVVCondition::Normal && IsHeldByHands(Captor))))
 	{
 		return;
 	}

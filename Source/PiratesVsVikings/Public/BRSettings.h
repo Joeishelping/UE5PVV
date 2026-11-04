@@ -158,6 +158,8 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> CigaretteSmokeEffect;
 	/** Cannon fuse sparks. */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> SparksEffect;
+	/** Blood spurt when someone is stabbed or shot (empty = built-in red droplets). */
+	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> BloodEffect;
 	/** Rain (follows your camera; empty = simple built-in streaks). */
 	UPROPERTY(Config, EditAnywhere, Category = "Effects") TSoftObjectPtr<UNiagaraSystem> RainEffect;
 	/** Sandstorm (follows your camera; empty = simple built-in blowing sand). */
