@@ -646,6 +646,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 300.f;
 	/** Hold a mouse button at least this long and it's a REACH (arm stays out, hand glues on). Shorter = a punch. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HoldToReachSeconds = 0.18f;
+	/** Gang Beasts pacing: each hand can only throw a punch this often. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchCooldown = 0.42f;
 	/** Hand / foot speed (cm/s, into the target) that counts as a full-power hit. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HardHitSpeed = 1500.f;
 	/** A head shot at least this hard (0-1 power) knocks them down on the spot. */
@@ -1154,6 +1156,13 @@ private:
 	void TickRope();
 	void DrawRope(const FVector& From, const FVector& To);
 	float BrawlNextMove = 0.f;
+	/** NPC fighting personality: 0 brawler (rushes in), 1 grappler (grabs, drags to the river, throws),
+	 *  2 sneak (circles round behind, cheap shots), 3 coward (keeps away, hits you when you're busy). */
+	uint8 FightStyle = 0;
+	/** Where the nearest drop / water is to drag someone into (or ZeroVector). */
+	FVector HazardPoint() const;
+	float NextPunchAt[2] = { 0.f, 0.f };
+	float NextBumpTime = 0.f;
 	float BrawlSpinUntil = 0.f;
 	float BrawlHoldUntil = 0.f;
 	bool bBrawlLeft = false;

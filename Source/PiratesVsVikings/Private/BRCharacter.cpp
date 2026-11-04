@@ -431,6 +431,10 @@ void ABRCharacter::InitAsNPC(float SkinToneMin, float SkinToneMax)
 {
 	AutoFillSlots(); // NPCs pick random clothes from these lists right away
 	bIsNPC = true;
+	{
+		const float Roll = FMath::FRand();
+		FightStyle = Roll < 0.4f ? 0 : (Roll < 0.65f ? 1 : (Roll < 0.85f ? 2 : 3));
+	}
 	KnockdownDuration = NPCKnockdownSeconds; // stay down long enough to be zip-tied
 	DefaultFaction = BR::Runners;
 	// Every NPC gets a random look so the crowd isn't all clones (and players can blend in).
@@ -4314,6 +4318,16 @@ void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 	{
 		return; // seeing birds
 	}
+	{
+		// Gang Beasts pacing: no machine-gun fists - each arm needs a moment to come back.
+		const float NowP = GetWorld()->GetTimeSeconds();
+		float& Ready = NextPunchAt[bLeft ? 0 : 1];
+		if (NowP < Ready)
+		{
+			return;
+		}
+		Ready = NowP + PunchCooldown;
+	}
 	if (bBlocking)
 	{
 		// Punch out of your guard (like a real fight): the guard drops for the punch, then comes back up if you're still holding block.
@@ -5454,8 +5468,14 @@ void ABRCharacter::BrawlerFinish(ABRCharacter* Foe)
 			BrawlHoldUntil = Now + LiftSeconds + FMath::FRandRange(0.4f, 1.2f);
 			return;
 		}
-		// ...dragging them a couple of steps first.
-		AddMovementInput(-ToFoe.GetSafeNormal(), 0.6f);
+		// ...dragging them a couple of steps first (towards the river / an edge if there's one near).
+		const FVector Hazard = HazardPoint();
+		const FVector DragTo = Hazard.IsZero() ? -ToFoe.GetSafeNormal() : ((Hazard - GetActorLocation()) * FVector(1.f, 1.f, 0.f)).GetSafeNormal();
+		AddMovementInput(DragTo, 0.6f);
+		if (!Hazard.IsZero())
+		{
+			SetActorRotation(FRotator(0.f, DragTo.Rotation().Yaw, 0.f));
+		}
 		return;
 	}
 	// Walk up and grab the body.
@@ -5530,14 +5550,35 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 	{
 		return;
 	}
-	float Pace = FMath::Lerp(1.f, 0.35f, FMath::Clamp(Aggression, 0.f, 1.f));
+	float Pace = FMath::Lerp(1.15f, 0.45f, FMath::Clamp(Aggression, 0.f, 1.f)); // (Gang Beasts fights breathe a bit)
 	if (Foe->IsDazed())
 	{
 		Pace *= 0.45f; // they're seeing birds: finish them
 	}
 	BrawlNextMove = Now + Pace * FMath::FRandRange(0.7f, 1.3f);
-	// Hurt: back off with the guard up for a moment (then come back swinging).
-	if (GetBalanceFraction() < 0.3f && !Foe->IsDazed() && Dist < 350.f && FMath::FRand() < 0.45f)
+	const bool bFoeBusy = Foe->HandGrabTarget.Get() != nullptr && Foe->HandGrabTarget.Get() != this; // fighting someone else
+	const bool bFoeFacingMe = FVector::DotProduct(Foe->GetActorForwardVector().GetSafeNormal2D(), -ToFoe.GetSafeNormal()) > 0.4f;
+	// SNEAK: don't walk into their fists - circle round behind them (or wait till they're busy), then strike.
+	if (FightStyle == 2 && !Foe->IsDazed() && !bFoeBusy && bFoeFacingMe && Dist < 450.f && HandGrabTarget.Get() != Foe)
+	{
+		const FVector Around = FVector::CrossProduct(ToFoe.GetSafeNormal(), FVector::UpVector) * (bBrawlLeft ? 1.f : -1.f);
+		LaunchCharacter(Around * 380.f + ToFoe.GetSafeNormal() * (Dist > 250.f ? 120.f : -80.f), true, false);
+		BrawlNextMove = Now + 0.45f;
+		return;
+	}
+	// COWARD: keeps their distance until you're busy or groggy, then darts in.
+	if (FightStyle == 3 && !Foe->IsDazed() && !bFoeBusy && Foe->GetCondition() == EPVVCondition::Normal && HandGrabTarget.Get() != Foe)
+	{
+		if (Dist < 260.f)
+		{
+			BotBlock(FMath::FRandRange(0.4f, 0.8f));
+			LaunchCharacter(-ToFoe.GetSafeNormal() * 380.f, true, false);
+		}
+		BrawlNextMove = Now + 0.6f;
+		return;
+	}
+	// Hurt (or rattled - KO meter high): back off with the guard up for a moment (then come back swinging).
+	if ((GetBalanceFraction() < 0.3f || KOMeter > 0.55f) && !Foe->IsDazed() && Dist < 350.f && FMath::FRand() < (FightStyle == 0 ? 0.3f : 0.6f))
 	{
 		BotBlock(FMath::FRandRange(0.6f, 1.1f));
 		LaunchCharacter(-ToFoe.GetSafeNormal() * 350.f, true, false);
@@ -5583,9 +5624,37 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 		}
 		return;
 	}
-	// Got them in your hands: beat on them, then THROW them.
+	// GRAPPLER up close: grab first, ask questions later.
+	if (FightStyle == 1 && Dist < 170.f && HandGrabTarget.Get() != Foe && FMath::FRand() < 0.6f)
+	{
+		ArmsReaching = 3;
+		if (TryHandGrab(3))
+		{
+			BrawlHoldUntil = Now + FMath::FRandRange(1.8f, 3.2f);
+		}
+		else
+		{
+			ArmsReaching = 0;
+		}
+		return;
+	}
+	// Got them in your hands: beat on them, drag them towards the water / an edge, then THROW them.
 	if (HandGrabTarget.Get() == Foe)
 	{
+		const FVector Hazard = HazardPoint();
+		if (!Hazard.IsZero())
+		{
+			const FVector ToHazard = (Hazard - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			if (ToHazard.Size() > 250.f && Now < BrawlHoldUntil)
+			{
+				// Walk backwards towards the drop, hauling them along (they'll go in first).
+				AddMovementInput(ToHazard.GetSafeNormal(), FightStyle == 1 ? 0.9f : 0.5f);
+			}
+			else if (Now >= BrawlHoldUntil)
+			{
+				SetActorRotation(FRotator(0.f, ToHazard.Rotation().Yaw, 0.f)); // face the drop: in you go
+			}
+		}
 		// They're seeing birds and we've got both hands on them: UP over the head (then hurl - see BrawlerFinish).
 		if (HandGrabMask == 3 && Foe->IsDazed() && !bLiftOverhead && Aggression >= 0.7f)
 		{
@@ -7212,6 +7281,32 @@ void ABRCharacter::TickBodyPartGrab(float DeltaSeconds)
 		LaunchCharacter(Stumble, false, false);
 		AddLean(Stumble * 2.f, nullptr);
 	}
+	// Body check: barrel into someone at a run and you both stagger (they get the worst of it).
+	if (GetCondition() == EPVVCondition::Normal && Now >= NextBumpTime && GetVelocity().Size2D() > 430.f && !GetCurrentBoat() && !bClimbing)
+	{
+		const FVector Fwd = GetVelocity().GetSafeNormal2D();
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			ABRCharacter* Other = *It;
+			const FVector To = (Other->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			if (Other != this && Other->GetCondition() == EPVVCondition::Normal && !Other->GetCurrentBoat() && Other != HandGrabTarget.Get()
+				&& To.Size() < 95.f && FVector::DotProduct(To.GetSafeNormal(), Fwd) > 0.55f && FMath::Abs(Other->GetActorLocation().Z - GetActorLocation().Z) < 80.f)
+			{
+				NextBumpTime = Now + 0.7f;
+				const float Force = FMath::Clamp((GetVelocity().Size2D() - 300.f) / 400.f, 0.3f, 1.f);
+				Other->LaunchCharacter(Fwd * 380.f * Force + FVector(0.f, 0.f, 60.f), true, false);
+				Other->AddLean(Fwd * 900.f * Force, this);
+				Other->Multicast_BodyHit(TEXT("spine_03"), Fwd * HitReaction * 0.5f * Force);
+				AddLean(-Fwd * 500.f * Force, nullptr);
+				LaunchCharacter(-Fwd * 120.f * Force, false, false);
+				if (Force > 0.85f && Other->KOMeter > 0.4f)
+				{
+					Other->ApplyKnockdown(this, Fwd * 300.f + FVector(0.f, 0.f, 100.f)); // already wobbly: bowled over
+				}
+				break;
+			}
+		}
+	}
 	// Holding someone's LEG and walking away from them: you pull their feet out from under them.
 	ABRCharacter* Held = HandGrabTarget.Get();
 	const FString Bone = HandGrabBone.ToString();
@@ -7357,6 +7452,21 @@ void ABRCharacter::TickWounds(float DeltaSeconds)
 	{
 		Health = FMath::Min(100.f, Health + 3.f * DeltaSeconds);
 	}
+}
+
+FVector ABRCharacter::HazardPoint() const
+{
+	// The river on the test map: the nearest point on its middle line (if it's within ~25 m).
+	for (TActorIterator<ABRDesertArena> It(GetWorld()); It; ++It)
+	{
+		const FVector Local = GetActorLocation() - It->GetActorLocation();
+		if (FMath::Abs(Local.X) < ABRDesertArena::RiverHalfWidth + 2500.f && FMath::Abs(Local.X) > ABRDesertArena::RiverHalfWidth * 0.5f)
+		{
+			return It->GetActorLocation() + FVector(FMath::Sign(Local.X) * ABRDesertArena::RiverHalfWidth * 0.6f, Local.Y, Local.Z);
+		}
+		break;
+	}
+	return FVector::ZeroVector;
 }
 
 #undef LOCTEXT_NAMESPACE

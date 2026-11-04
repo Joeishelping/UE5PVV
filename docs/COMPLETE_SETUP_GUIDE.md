@@ -969,6 +969,17 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 - **Climbing:** hold both buttons on the wall and hold **W** (or look up) to pull yourself up. While hanging, let go of one button and hold it again: that hand reaches **up the wall** for the next hold, hand over hand. **Space** = jump up from your hands.
 - **Tuning:** BP_Runner / BP_Warden → **BR | Brawl** → **Hold To Reach Seconds** (0.18): how long a press has to be to count as a hold instead of a punch.
 
+**Round 5: Gang Beasts pacing and NPC brains**
+- **Pacing:** each hand can throw a punch about every 0.4 s (no machine-gun clicking). NPC fights breathe a little more too. Tune it with **BR | Brawl → Punch Cooldown**.
+- **Body checks:** run into someone at full speed and you both stagger (they get the worst of it). If they're already rocked, they get **bowled over**.
+- **NPC fighting styles** (each NPC gets one at random):
+  - **Brawler:** rushes in swinging.
+  - **Grappler:** grabs you, **drags you towards the river**, and throws you in.
+  - **Sneak:** circles round behind you and hits you when you're not looking (or when you're busy with someone else).
+  - **Coward:** keeps their distance with the guard up and only darts in when you're busy or groggy.
+- NPCs **back off and block when they're rattled** (high KO meter), not just when they're nearly out.
+- NPCs who knock you down and pick you up **drag you towards the water** before throwing.
+
 **Climbing (players):** there's no climb mode any more.
 1. Jump at a wall and **hold a mouse button**: your hand sticks.
 2. **Your hands hold you up like ropes.** With two hands you hang. With one hand you slowly slide down.
