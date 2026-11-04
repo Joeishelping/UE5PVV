@@ -919,6 +919,20 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 - Anyone standing in a section you fill gets shoved out of it and knocked down.
 - When **every** section is filled, the tunnel is gone and you get the seizure points. That spot can then be dug again from scratch.
 
+## Part 15x: Checkpoint searches, NPC wall climbing, dives, sticky hands
+
+**Checkpoint vans:** scan everyone in the van. Then **everybody gets out** and waits beside it.
+- Hold **E** on each person to **search them for weapons**. Clean people get back into their seat. The van drives on once everyone is back in.
+- Anyone with **no papers** doesn't wait long: after a few seconds they fight, run or put their hands up.
+- If a search finds a weapon or contraband, it's taken and they react the same way.
+- If nobody searches them for 2 minutes, they get back in by themselves.
+
+**NPCs climb the Wall:** smuggling clients follow their coyote up and over the Wall, the same way players climb (no more teleporting after you). Suspects who **run** from the checkpoint head for the Wall and climb it. The **fighting kind** stay and fight you instead.
+
+**Dives:** a missed dive no longer knocks you down. You just belly-flop and scramble back up. You only go down if you dive **head-first into something** (wall, car, fence): **BONK**.
+
+**Sticky hands:** hold a mouse button to reach. If that hand touches anything (wall, car, fence, crate), it **sticks there** like in Gang Beasts, until you let go or walk too far away.
+
 ---
 
 ## Part 16: Checklist: everything you can plug in

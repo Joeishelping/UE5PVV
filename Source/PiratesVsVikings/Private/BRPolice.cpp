@@ -200,6 +200,7 @@ void ABRCharacter::Frisk(ABRCharacter* Cop)
 		return;
 	}
 	LastFriskedTime = GetWorld()->GetTimeSeconds();
+	const bool bWasWaiting = IsWaitingForSearch();
 	const bool bHadPassport = GetBRPlayerState() && GetBRPlayerState()->HasItem(EBRItem::FakePassport);
 	const int32 Found = Confiscate();
 	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
@@ -215,6 +216,8 @@ void ABRCharacter::Frisk(ABRCharacter* Cop)
 		{
 			GM->OnContrabandSeized(Cop, Found);
 		}
+		SearchWaitTruck = nullptr; // not getting back in that van
+		BustReactAt = -1.f;
 		if (bIsNPC && !IsBrawling())
 		{
 			ReactToBust(Cop, !bIllegal); // caught red-handed: fight, run or give up
@@ -224,6 +227,10 @@ void ABRCharacter::Frisk(ABRCharacter* Cop)
 	{
 		ABRGameState::Sfx(this, EBRSfx::ScanOK, GetActorLocation());
 		Cop->Notify(LOCTEXT("FriskClean", "SEARCH: nothing on them."));
+		if (bWasWaiting && !bIllegal)
+		{
+			ReturnToTruckAfterSearch(); // clean: back in the van
+		}
 		if (GM)
 		{
 			GM->OnVehicleSearched(Cop, IsSuspect() ? 1 : 0); // searching clean citizens is harassment
@@ -325,3 +332,70 @@ void ABRCharacter::TickOfficer(float DeltaSeconds)
 }
 
 #undef LOCTEXT_NAMESPACE
+
+// -------------------------------------------------------------------------------------------
+// NPCs searched at the checkpoint: out of the van, wait to be searched, back in
+
+void ABRCharacter::WaitForSearch(ABRTruck* Truck, int32 Seat, ABRCharacter* SuspectCop)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	SearchWaitTruck = Truck;
+	SearchWaitSeat = Seat;
+	SearchWaitSince = Now;
+	BustCop = SuspectCop;
+	// No papers: they won't just stand there for long (fight, run or hands up). Everyone else waits to be searched.
+	BustReactAt = bIllegal ? Now + FMath::FRandRange(3.f, 6.f) : -1.f;
+	bWandering = false;
+	FleeUntil = 0.f;
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->bRunPhysicsWithNoController = true;
+}
+
+void ABRCharacter::ReturnToTruckAfterSearch()
+{
+	ABRTruck* Truck = SearchWaitTruck.Get();
+	const int32 Seat = SearchWaitSeat;
+	SearchWaitTruck = nullptr;
+	SearchWaitSeat = INDEX_NONE;
+	BustReactAt = -1.f;
+	if (Truck && GetCondition() == EPVVCondition::Normal && !GetCarrier())
+	{
+		Truck->ReturnFromSearch(this, Seat);
+	}
+}
+
+void ABRCharacter::TickSearchWait()
+{
+	ABRTruck* Truck = SearchWaitTruck.Get();
+	if (!Truck)
+	{
+		return;
+	}
+	if (GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || IsBrawling())
+	{
+		SearchWaitTruck = nullptr; // zip-tied, grabbed, fighting...: not waiting any more
+		BustReactAt = -1.f;
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (BustReactAt > 0.f && Now >= BustReactAt)
+	{
+		ABRCharacter* Cop = BustCop.Get();
+		SearchWaitTruck = nullptr;
+		BustReactAt = -1.f;
+		ReactToBust(Cop, !bIllegal);
+		return;
+	}
+	if (Now - SearchWaitSince > 120.f)
+	{
+		ReturnToTruckAfterSearch(); // nobody bothered to search them: they get back in
+		return;
+	}
+	// Stand by the van (walk back if they got shoved away).
+	const FVector ToTruck = (Truck->GetActorLocation() - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+	if (ToTruck.Size() > 650.f)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = WanderSpeed;
+		AddMovementInput(ToTruck.GetSafeNormal(), 1.f);
+	}
+}

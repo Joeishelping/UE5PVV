@@ -6,6 +6,7 @@
 #include "BRCar.generated.h"
 
 class APlayerState;
+class ABRCharacter;
 class UAudioComponent;
 class UInputAction;
 class USoundBase;
@@ -162,6 +163,8 @@ public:
 	void FloorIt();
 	/** Server: Border Patrol just scanned someone aboard as illegal / carrying contraband: they react in a moment. */
 	void OnSuspectScanned();
+	/** Server: a passenger who stepped out to be searched climbs back into their old seat (or any free one). */
+	void ReturnFromSearch(APVVCharacter* Passenger, int32 Seat);
 
 protected:
 	/** Steering wheel in front of the driver. Move it in your truck Blueprint so it lines up with your driving animation's hands. */
@@ -199,6 +202,12 @@ private:
 	float NextHonk = 0.f;
 	float ReactAt = -1.f;
 	bool bReacted = false;
+	/** Checkpoint: everybody got out to be searched; the truck waits until they're all back in (or gone). */
+	bool bSteppedOut = false;
+	TArray<TWeakObjectPtr<APVVCharacter>> WaitingOutside;
+	/** When the "fed up waiting" clock started (restarts once everybody is back in after a search). */
+	float FedUpFrom = -1.f;
+	void StepOutForSearch(ABRCharacter* Inspector);
 	bool bRunningGate = false;
 
 	void DriveNPC(float DeltaSeconds);

@@ -249,6 +249,7 @@ void ABRCharacter::ReactToBust(ABRCharacter* Cop, bool bMinorOffense)
 	if (bCarriesContraband && ContrabandItem == EBRItem::IllegalGun)
 	{
 		SetNPCHeldItem(EBRItem::IllegalGun);
+		bAggressiveSuspect = true;
 		StartBrawling(Cop, 90.f, 1.f);
 		if (GM)
 		{
@@ -269,6 +270,7 @@ void ABRCharacter::ReactToBust(ABRCharacter* Cop, bool bMinorOffense)
 			Multicast_Sfx(3);
 		}
 		// Comes out swinging, and keeps at it (Gang Beasts: a real scrap, not one punch and run).
+		bAggressiveSuspect = true;
 		StartBrawling(Cop, 90.f, FMath::FRandRange(0.8f, 1.f));
 		if (GM)
 		{
@@ -532,7 +534,8 @@ void ABRCharacter::Landed(const FHitResult& Hit)
 				return;
 			}
 		}
-		ApplyKnockdown(nullptr, GetActorForwardVector() * 650.f); // missed: belly flop and SLIDE
+		// Missed: belly flop and scramble back up (no knockdown - you only go down if you dive head-first into something).
+		ApplySlow(0.6f, 0.4f);
 	}
 	if (!HasAuthority() || !bFlying)
 	{
@@ -1043,14 +1046,23 @@ void ABRCharacter::TickFollow(float DeltaSeconds)
 		LeaderRide->TryBoard(this); // jump in the truck / boat with them
 		return;
 	}
-	if (Dist > 3500.f && !LeaderRide)
+	if (bClimbing)
 	{
-		// Leader went over the Wall, through a tunnel or flew: the client scrambles after them.
+		return; // on the Wall: TickClimb takes them up and over
+	}
+	if (Dist > 9000.f && !LeaderRide)
+	{
+		// Leader flew off in a balloon / went a very long way: the client catches up.
 		TeleportTo(L->GetActorLocation() - L->GetActorForwardVector() * 200.f + FVector(0.f, 0.f, 30.f), L->GetActorRotation());
 		return;
 	}
 	if (Dist > 250.f)
 	{
+		// The Wall is between us and our coyote: climb it, the same way players do.
+		if (NPCClimbBorderWall(ToLeader.GetSafeNormal()))
+		{
+			return;
+		}
 		const bool bWhistled = GetWorld()->GetTimeSeconds() < WhistleRunUntil;
 		GetCharacterMovement()->MaxWalkSpeed = bWhistled ? 760.f : (Dist > 900.f ? 650.f : 420.f);
 		AddMovementInput(ToLeader.GetSafeNormal(), 1.f);
@@ -1146,6 +1158,28 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		{
 			Away = (GetActorLocation() - WanderHome) * FVector(1.f, 1.f, 0.f);
 		}
+		// Busted near the Wall (and not the fighting kind)? Make for the Wall and climb it, like a player would.
+		if (!bAggressiveSuspect)
+		{
+			for (TActorIterator<ABRWall> WallIt(GetWorld()); WallIt; ++WallIt)
+			{
+				const FVector WallLocal = WallIt->GetActorTransform().InverseTransformPositionNoScale(GetActorLocation());
+				if (WallLocal.X < 0.f && WallLocal.X > -3500.f)
+				{
+					const FVector ToWall = WallIt->GetActorForwardVector().GetSafeNormal2D();
+					Away = ToWall * 1.5f + Away.GetSafeNormal() * 0.5f;
+					if (NPCClimbBorderWall(ToWall))
+					{
+						return;
+					}
+				}
+				else if (WallLocal.X >= 0.f && WallLocal.X < 1500.f)
+				{
+					WanderHome = GetActorLocation(); // made it over: hang around this side now
+				}
+				break;
+			}
+		}
 		const FVector Wiggle = FVector::CrossProduct(Away.GetSafeNormal(), FVector::UpVector) * FMath::Sin(Now * 2.3f) * 0.7f;
 		if (Closest < 260.f && FMath::FRand() < 0.04f)
 		{
@@ -1208,6 +1242,7 @@ void ABRCharacter::BeginPlay()
 	if (PhysicalAnimation && GetMesh())
 	{
 		PhysicalAnimation->AddTickPrerequisiteComponent(GetMesh()); // muscles read the pose only after it's been made this frame
+		PhysicalAnimation->AddTickPrerequisiteActor(this); // ...and after our Tick's safety check (MusclesSafe) has run
 	}
 	if (bHeavyMovement)
 	{
@@ -2600,8 +2635,9 @@ void ABRCharacter::EnableWobble()
 	{
 		return; // switched on again when you get out (balloon / wheelbarrow rides switch collision off, so the body has no physics then)
 	}
-	// The bones must have been posed at least once, or the physics reads bones that don't exist yet (crash).
-	if (MeshComp->GetComponentSpaceTransforms().Num() < MeshComp->GetNumBones() || !MeshComp->IsRegistered())
+	// The bones must have been posed at least once, and the body must have its physics bodies, or the physics reads
+	// bones / bodies that don't exist (engine crash: "index 2 into an array of size 0").
+	if (!MusclesSafe())
 	{
 		bWobblePending = true;
 		return;
@@ -2984,6 +3020,10 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickPrisonBreak(DeltaSeconds);
 		TickWander(DeltaSeconds);
 		TickFollow(DeltaSeconds);
+		if (bIsNPC)
+		{
+			TickSearchWait();
+		}
 		TickBrawl(DeltaSeconds);
 		TickThrown();
 		TickNPCStruggle();
@@ -3081,8 +3121,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	}
 	// Safety: if the body ever loses its posed bones (mesh swapped, re-registered), switch the muscles off
 	// before the physics reads bones that aren't there, and switch them back on once it's posed again.
-	if (PhysicalAnimation && PhysicalAnimation->GetSkeletalMesh() && GetMesh()
-		&& (!GetMesh()->IsRegistered() || GetMesh()->GetComponentSpaceTransforms().Num() < GetMesh()->GetNumBones()))
+	if (PhysicalAnimation && PhysicalAnimation->GetSkeletalMesh() && !MusclesSafe())
 	{
 		if (bWobbleOn)
 		{
@@ -3790,6 +3829,24 @@ void ABRCharacter::TickBrawl(float DeltaSeconds)
 		}
 	}
 
+	// Diving head-first into a wall / car / fence: BONK - that one knocks you down.
+	if (bDiving && HasAuthority() && GetVelocity().Size2D() > 250.f)
+	{
+		const FVector DiveDir = GetVelocity().GetSafeNormal2D();
+		const FVector HeadAt = GetMesh() && GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? GetMesh()->GetBoneLocation(TEXT("head"))
+			: GetActorLocation() + FVector(0.f, 0.f, 60.f);
+		FHitResult Bonk;
+		FCollisionQueryParams BonkParams(SCENE_QUERY_STAT(BRDiveBonk), false, this);
+		if (GetWorld()->LineTraceSingleByChannel(Bonk, HeadAt, HeadAt + DiveDir * 60.f, ECC_Visibility, BonkParams)
+			&& !Cast<APawn>(Bonk.GetActor()) && FMath::Abs(Bonk.ImpactNormal.Z) < 0.5f)
+		{
+			bDiving = false;
+			ABRGameState::FX(this, EBRFX::PointsText, Bonk.ImpactPoint + FVector(0.f, 0.f, 40.f), TEXT("BONK!"));
+			Multicast_Sfx(1);
+			AddKO(HeadHitKO, nullptr);
+			ApplyKnockdown(nullptr, -DiveDir * 250.f + FVector(0.f, 0.f, 100.f));
+		}
+	}
 	// Dive tackle: knock over the first person we fly into.
 	if (bDiving)
 	{
@@ -4681,6 +4738,13 @@ bool ABRCharacter::TryWallGrab(uint8 Hands)
 void ABRCharacter::TickReachVisuals()
 {
 	USkeletalMeshComponent* Body = GetMesh();
+	for (int32 h = 0; h < 2; ++h)
+	{
+		if (!(ArmsReaching & (1 << h)) || bClimbing || GetCondition() != EPVVCondition::Normal)
+		{
+			bHandAnchored[h] = false; // let go: the hand comes off whatever it was stuck to
+		}
+	}
 	// Local player: tell the server when a mouse button has been held long enough to reach.
 	if (IsLocallyControlled() && Cast<APlayerController>(GetController()))
 	{
@@ -4760,6 +4824,36 @@ void ABRCharacter::TickReachVisuals()
 		if (Held)
 		{
 			Point = Held->GetActorLocation() + Held->GetActorRightVector() * Side * 14.f + FVector(0.f, 0.f, 40.f);
+		}
+		else if (!HeldProp)
+		{
+			// Gang Beasts sticky hands: a reaching hand that touches anything (wall, car, fence, crate...) sticks to it
+			// for as long as you hold the button, until you walk too far away for the arm to stay on.
+			const FName ShoulderBone = i == 0 ? FName(TEXT("upperarm_l")) : FName(TEXT("upperarm_r"));
+			const FVector Shoulder = Body->GetBoneIndex(ShoulderBone) != INDEX_NONE ? Body->GetBoneLocation(ShoulderBone)
+				: GetActorLocation() + GetActorRightVector() * Side * 20.f + FVector(0.f, 0.f, 50.f);
+			if (!bHandAnchored[i])
+			{
+				FHitResult Touch;
+				FCollisionQueryParams TouchParams(SCENE_QUERY_STAT(BRHandStick), false, this);
+				const FVector ReachDir = (Point - Shoulder).GetSafeNormal();
+				if (GetWorld()->LineTraceSingleByChannel(Touch, Shoulder, Point + ReachDir * 12.f, ECC_Visibility, TouchParams) && !Cast<APawn>(Touch.GetActor()))
+				{
+					bHandAnchored[i] = true;
+					HandAnchor[i] = Touch.ImpactPoint + Touch.ImpactNormal * 6.f;
+				}
+			}
+			if (bHandAnchored[i])
+			{
+				if (FVector::Dist(Shoulder, HandAnchor[i]) > 115.f)
+				{
+					bHandAnchored[i] = false; // arm can't stretch that far: it slips off
+				}
+				else
+				{
+					Point = HandAnchor[i];
+				}
+			}
 		}
 		const FVector Hand = Body->GetBoneLocation(HandBones[i]);
 		Body->SetPhysicsLinearVelocity(((Point - Hand) * 9.f).GetClampedToMaxSize(900.f), false, HandBones[i]);
@@ -5772,6 +5866,11 @@ void ABRCharacter::TickClimb(float DeltaSeconds)
 		bHanging = true;
 		Notify(LOCTEXT("ClimbTop", "At the top! SPACE to pull yourself up."));
 	}
+	if (bHanging && !Cast<APlayerController>(GetController()))
+	{
+		Server_ClimbJump_Implementation(); // NPCs / bots pull themselves over
+		return;
+	}
 	// Climbed/slid back down to the ground: just stand up.
 	if (Vz < 0.f)
 	{
@@ -6595,3 +6694,39 @@ void ABRCharacter::TickHeadTag()
 }
 
 #undef LOCTEXT_NAMESPACE
+
+bool ABRCharacter::MusclesSafe() const
+{
+	const USkeletalMeshComponent* MeshComp = GetMesh();
+	return MeshComp && MeshComp->IsRegistered() && MeshComp->GetSkeletalMeshAsset() && GetActorEnableCollision()
+		&& MeshComp->GetComponentSpaceTransforms().Num() >= MeshComp->GetNumBones() && MeshComp->GetNumBones() > 0
+		&& MeshComp->IsPhysicsStateCreated() && MeshComp->Bodies.Num() > 0
+		&& !bOnRide && !bInCannon;
+}
+
+bool ABRCharacter::NPCClimbBorderWall(const FVector& Direction)
+{
+	if (bClimbing)
+	{
+		return true;
+	}
+	if (!HasAuthority() || !bIsNPC || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat())
+	{
+		return false;
+	}
+	const FVector Dir = Direction.GetSafeNormal2D();
+	if (Dir.IsNearlyZero())
+	{
+		return false;
+	}
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRNPCWallCheck), false, this);
+	const FVector From = GetActorLocation() + FVector(0.f, 0.f, 40.f);
+	if (!GetWorld()->LineTraceSingleByChannel(Hit, From, From + Dir * 110.f, ECC_Visibility, Params)
+		|| !Hit.GetActor() || !(Hit.GetActor()->IsA<ABRWall>() || Hit.GetActor()->IsA<ABRWallSegment>()))
+	{
+		return false;
+	}
+	SetActorRotation(FRotator(0.f, Dir.Rotation().Yaw, 0.f));
+	return StartWallClimb();
+}

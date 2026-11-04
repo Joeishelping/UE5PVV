@@ -1186,8 +1186,22 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 				bAnySuspect |= BRC->IsSuspect();
 			}
 		}
+		// Everybody scanned: they ALL step out and wait by the van to be searched (hold E on each).
+		// Clean people get back in once searched; anyone with no papers reacts (fight, run or hands up).
+		if (bAllScanned && !bSteppedOut && !bRunningGate)
+		{
+			bSteppedOut = true;
+			bReacted = true; // suspects react on foot now, not from inside the truck
+			StepOutForSearch(Inspector);
+			return;
+		}
+		if (WaitingOutside.Num() > 0)
+		{
+			FedUpFrom = Now; // nobody gets fed up while they're being searched
+			return;
+		}
 		const bool bCleared = bAllScanned && !bAnySuspect;
-		const bool bFedUp = Now - CheckpointArrivalTime > MaxCheckpointWait;
+		const bool bFedUp = Now - FMath::Max(CheckpointArrivalTime, FedUpFrom) > MaxCheckpointWait;
 		// Scanned and somebody's dirty: give Border Patrol a few seconds to order them out, then they react.
 		if (bAllScanned && bAnySuspect && !bReacted)
 		{
@@ -1342,9 +1356,14 @@ void ABRTruck::FloorIt()
 
 void ABRTruck::TickDriverTakeover(float Now)
 {
-	if (GetDriver())
+	WaitingOutside.RemoveAll([this](const TWeakObjectPtr<APVVCharacter>& W)
 	{
-		NoDriverSince = -1.f;
+		const ABRCharacter* C = Cast<ABRCharacter>(W.Get());
+		return !C || C->SearchWaitTruck.Get() != this;
+	});
+	if (GetDriver() || WaitingOutside.Num() > 0)
+	{
+		NoDriverSince = -1.f; // (people out being searched: nobody takes the wheel, nobody tows it)
 		return;
 	}
 	if (NoDriverSince < 0.f)
@@ -1442,3 +1461,45 @@ void ABRTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
 }
 
 #undef LOCTEXT_NAMESPACE
+
+void ABRTruck::StepOutForSearch(ABRCharacter* Inspector)
+{
+	TArray<TPair<ABRCharacter*, int32>> Out;
+	for (int32 i = 0; i < Occupants.Num(); ++i)
+	{
+		ABRCharacter* C = Cast<ABRCharacter>(Occupants[i]);
+		if (C && C->IsNPC() && C->GetCondition() == EPVVCondition::Normal)
+		{
+			Out.Emplace(C, i);
+		}
+	}
+	for (const TPair<ABRCharacter*, int32>& P : Out)
+	{
+		Unseat(P.Key);
+		P.Key->WaitForSearch(this, P.Value, P.Key->bIllegal ? Inspector : nullptr);
+		WaitingOutside.Add(P.Key);
+	}
+	if (Out.Num() > 0 && Inspector)
+	{
+		Inspector->Notify(NSLOCTEXT("BRCar", "StepOut", "Everybody out! SEARCH each of them for weapons (hold E). They get back in once they're clean."));
+	}
+	ForceNetUpdate();
+}
+
+void ABRTruck::ReturnFromSearch(APVVCharacter* Passenger, int32 Seat)
+{
+	if (!HasAuthority() || !Passenger || Passenger->GetCurrentBoat())
+	{
+		return;
+	}
+	WaitingOutside.Remove(Passenger);
+	if (Occupants.IsValidIndex(Seat) && !Occupants[Seat])
+	{
+		SeatCharacter(Passenger, Seat);
+	}
+	else if (const int32 Free = FindFreePassengerSeat(); Free != INDEX_NONE)
+	{
+		SeatCharacter(Passenger, Free);
+	}
+	ForceNetUpdate();
+}

@@ -6,6 +6,7 @@
 #include "BRCharacter.generated.h"
 
 class ABRDesertArena;
+class ABRTruck;
 class ABRGameState;
 class ABRPlayerState;
 class UInputAction;
@@ -52,6 +53,21 @@ public:
 	void StartBrawling(ABRCharacter* Target, float Seconds, float Aggression = 0.5f);
 	/** NPC busted at the checkpoint (no papers / contraband): fight, pull a knife, run, or give up - random, by how bad they are. */
 	void ReactToBust(ABRCharacter* Cop, bool bMinorOffense);
+	/** Server (NPCs): climb the Border Wall if it's right in front of us, going this way. True if climbing (or already). */
+	bool NPCClimbBorderWall(const FVector& Direction);
+	/** Server (NPCs): stepped out of their van at the checkpoint to be searched. Clean people get back in once searched;
+	 *  a suspect (no papers / contraband) reacts after a few seconds instead (fight, run or hands up). */
+	void WaitForSearch(ABRTruck* Truck, int32 Seat, ABRCharacter* SuspectCop);
+	bool IsWaitingForSearch() const { return SearchWaitTruck.IsValid(); }
+	void ReturnToTruckAfterSearch();
+	void TickSearchWait();
+	TWeakObjectPtr<ABRTruck> SearchWaitTruck;
+	int32 SearchWaitSeat = INDEX_NONE;
+	float SearchWaitSince = 0.f;
+	float BustReactAt = -1.f;
+	TWeakObjectPtr<ABRCharacter> BustCop;
+	/** Picked a fight with Border Patrol when busted (the aggressive kind - they don't run for the Wall). */
+	bool bAggressiveSuspect = false;
 
 	// --- NPC secrets (server) -------------------------------------------------------------
 	/** No papers. Border Patrol score for catching them; Runners score for smuggling them through. */
@@ -1108,6 +1124,11 @@ private:
 	FTimerHandle MoveHitTimer;
 	// Wall climbing (Gang Beasts): Z at a wall, then alternate left / right click.
 	bool StartWallClimb();
+	/** Is the body in a state where the wobbly-body muscles can safely read it? (posed bones, physics bodies, collision on) */
+	bool MusclesSafe() const;
+	/** Sticky hands: where each reaching hand is stuck to a surface (left, right). */
+	FVector HandAnchor[2];
+	bool bHandAnchored[2] = { false, false };
 	UFUNCTION(Server, Reliable) void Server_ClimbStep(bool bLeft);
 	UFUNCTION(Server, Reliable) void Server_ClimbJump();
 	UFUNCTION() void OnRep_Climbing();
