@@ -1989,8 +1989,11 @@ void ABRCharacter::UpdateAimCamera(float DeltaSeconds)
 	const float Speed = 12.f;
 	// Holding someone over your head: pull the camera back and up so they're not in your face.
 	const bool bLiftCam = bLiftOverhead && !bZoom;
-	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, (bZoom ? AimArmLength : DefaultArmLength) + (bLiftCam ? 170.f : 0.f), DeltaSeconds, Speed * 0.5f);
-	CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, (bZoom ? FVector(0.f, 55.f, 65.f) : DefaultSocketOffset) + (bLiftCam ? FVector(0.f, 0.f, 120.f) : FVector::ZeroVector), DeltaSeconds, Speed * 0.5f);
+	// Riding as a passenger: pull the camera back and up so you see the vehicle and the road, not the inside of the cab.
+	const bool bRideCam = GetCurrentBoat() != nullptr && !bZoom;
+	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, (bZoom ? AimArmLength : DefaultArmLength) + (bLiftCam ? 170.f : 0.f) + (bRideCam ? 550.f : 0.f), DeltaSeconds, Speed * 0.5f);
+	CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, (bZoom ? FVector(0.f, 55.f, 65.f) : DefaultSocketOffset) + (bLiftCam ? FVector(0.f, 0.f, 120.f) : FVector::ZeroVector)
+		+ (bRideCam ? FVector(0.f, 0.f, 220.f) : FVector::ZeroVector), DeltaSeconds, Speed * 0.5f);
 	KOPunch = FMath::Max(0.f, KOPunch - DeltaSeconds * 2.5f);
 	FollowCamera->SetFieldOfView(FMath::FInterpTo(FollowCamera->FieldOfView, (bZoom ? AimFOV : DefaultFOV) - 14.f * KOPunch, DeltaSeconds, Speed));
 }

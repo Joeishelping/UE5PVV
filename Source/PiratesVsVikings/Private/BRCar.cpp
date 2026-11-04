@@ -1,4 +1,5 @@
 #include "BRCar.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "BRAudio.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
@@ -125,6 +126,28 @@ void ABRCar::BeginPlay()
 		Fuel = 1.f;
 	}
 	OnRep_ForSale();
+
+	// Camera: the car body never blocks the camera (otherwise the camera snaps INSIDE the cab), and a steadier,
+	// higher chase view that clears the roof.
+	{
+		TArray<UPrimitiveComponent*> Parts;
+		GetComponents<UPrimitiveComponent>(Parts);
+		for (UPrimitiveComponent* Part : Parts)
+		{
+			Part->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+		}
+		if (CameraBoom)
+		{
+			CameraBoom->TargetArmLength = 1050.f;
+			CameraBoom->SocketOffset = FVector(0.f, 0.f, 320.f);
+			CameraBoom->ProbeSize = 20.f;
+			CameraBoom->bEnableCameraLag = true;
+			CameraBoom->CameraLagSpeed = 9.f;
+			CameraBoom->bEnableCameraRotationLag = true;
+			CameraBoom->CameraRotationLagSpeed = 10.f;
+			CameraBoom->bInheritRoll = false;
+		}
+	}
 
 	// Paint the greybox: hull + "Body*" parts in the paint colour, wheels black, lights yellow.
 	TArray<UStaticMeshComponent*> Meshes;
