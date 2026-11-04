@@ -1927,14 +1927,10 @@ void ABRCharacter::Input_AimStart()
 			}
 			return;
 		}
-		// Fists: right hand. Tap = punch, hold = reach out and grab.
+		// Fists: right hand. TAP = punch (thrown when you let go), HOLD = arm out, and the hand glues to whatever it touches.
 		bRightIsAim = false;
 		bRightDown = true;
 		RightDownAt = GetWorld()->GetTimeSeconds();
-		if (CanAttack())
-		{
-			Server_PunchHand(false);
-		}
 		return;
 	}
 	bRightIsAim = true;
@@ -3978,21 +3974,23 @@ void ABRCharacter::Input_LeftHandStart()
 		}
 		return;
 	}
+	// TAP = punch (thrown when you let go), HOLD = arm out, and the hand glues to whatever it touches.
 	bLeftDown = true;
 	LeftDownAt = GetWorld()->GetTimeSeconds();
-	if (CanAttack())
-	{
-		Server_PunchHand(true);
-	}
 }
 
 void ABRCharacter::Input_LeftHandStop()
 {
+	const bool bWasDown = bLeftDown;
 	bLeftDown = false;
 	if (SentReach & 1)
 	{
 		SentReach = static_cast<uint8>(SentReach & ~1);
 		Server_HandHold(1, false);
+	}
+	else if (bWasDown && !bClimbing && CanAttack() && GetWorld()->GetTimeSeconds() - LeftDownAt < HoldToReachSeconds)
+	{
+		Server_PunchHand(true); // a quick tap: PUNCH
 	}
 	if (bClimbing && !bRightDown)
 	{
@@ -4002,11 +4000,16 @@ void ABRCharacter::Input_LeftHandStop()
 
 void ABRCharacter::Input_RightHandStop()
 {
+	const bool bWasDown = bRightDown;
 	bRightDown = false;
 	if (SentReach & 2)
 	{
 		SentReach = static_cast<uint8>(SentReach & ~2);
 		Server_HandHold(2, false);
+	}
+	else if (bWasDown && !bClimbing && !bRightIsAim && CanAttack() && GetWorld()->GetTimeSeconds() - RightDownAt < HoldToReachSeconds)
+	{
+		Server_PunchHand(false); // a quick tap: PUNCH
 	}
 	if (bClimbing && !bLeftDown)
 	{
@@ -4382,6 +4385,7 @@ bool ABRCharacter::TryHandGrab(uint8 HandMask)
 		{
 			ABRCharacter* Other = *It;
 			if (Other == this || !Other->GetMesh() || Other->GetCarrier() || Other->GetCurrentBoat() || Other->IsInCannon() || Other->GrabbedBy
+				|| (NoRegrabTarget.Get() == Other && GetWorld()->GetTimeSeconds() < NoRegrabUntil)
 				|| Other->GetCondition() == EPVVCondition::Detained || Other->GetCondition() == EPVVCondition::Restrained
 				|| FVector::DistSquared(Other->GetActorLocation(), GetActorLocation()) > FMath::Square(300.f))
 			{
@@ -4552,7 +4556,11 @@ void ABRCharacter::ReleaseHandGrab()
 	HandGrabTarget = nullptr;
 	HandGrabMask = 0;
 	DragBone = 255;
-	ArmsReaching = 0; // let go completely (press again to grab again)
+	if (!Cast<APlayerController>(GetController()))
+	{
+		ArmsReaching = 0; // AI: let go completely
+	}
+	// (Players: the arm stays out for as long as you hold the button - and glues to the next thing it touches.)
 	ForceNetUpdate();
 }
 
@@ -4649,6 +4657,8 @@ void ABRCharacter::Server_GrabStruggle_Implementation()
 	GrabStruggle += Holder->HandGrabMask == 3 ? 0.07f : 0.12f;
 	if (GrabStruggle >= 1.f)
 	{
+		Holder->NoRegrabTarget = this;
+		Holder->NoRegrabUntil = Now + 1.2f;
 		Holder->ReleaseHandGrab();
 		Holder->LaunchCharacter((Holder->GetActorLocation() - GetActorLocation()).GetSafeNormal2D() * 300.f, true, false);
 		Notify(LOCTEXT("WriggledFree", "You wriggled free!"));
@@ -4876,12 +4886,12 @@ void ABRCharacter::TickReachVisuals()
 	if (IsLocallyControlled() && Cast<APlayerController>(GetController()))
 	{
 		const float Now = GetWorld()->GetTimeSeconds();
-		if (bLeftDown && !(SentReach & 1) && Now - LeftDownAt > 0.15f)
+		if (bLeftDown && !(SentReach & 1) && Now - LeftDownAt >= HoldToReachSeconds)
 		{
 			SentReach = static_cast<uint8>(SentReach | 1);
 			Server_HandHold(1, true);
 		}
-		if (bRightDown && !(SentReach & 2) && Now - RightDownAt > 0.15f)
+		if (bRightDown && !(SentReach & 2) && Now - RightDownAt >= HoldToReachSeconds)
 		{
 			SentReach = static_cast<uint8>(SentReach | 2);
 			Server_HandHold(2, true);
@@ -4955,6 +4965,13 @@ void ABRCharacter::TickReachVisuals()
 		}
 		else if (!HeldProp)
 		{
+			// Hanging off a wall: a free hand reaches UP the wall for the next hold (hand over hand).
+			if (bHandHanging && !bHandAnchored[i])
+			{
+				const int32 Other = 1 - i;
+				const FVector WallDir = bHandAnchored[Other] ? (HandAnchor[Other] - GetActorLocation()).GetSafeNormal2D() : GetActorForwardVector().GetSafeNormal2D();
+				Point = GetActorLocation() + WallDir * 65.f + GetActorRightVector() * Side * 22.f + FVector(0.f, 0.f, 120.f);
+			}
 			// Gang Beasts sticky hands: a reaching hand that touches anything (wall, car, fence, crate...) sticks to it
 			// for as long as you hold the button, until you walk too far away for the arm to stay on.
 			const FName ShoulderBone = i == 0 ? FName(TEXT("upperarm_l")) : FName(TEXT("upperarm_r"));
@@ -7123,8 +7140,11 @@ void ABRCharacter::TickHandHang(float DeltaSeconds)
 		V += Dir * (Dist - ArmLen) * 12.f;
 	}
 	// Look up and your arms PULL you up towards your hands (until your shoulders reach them - then re-grab higher).
+	// Pull with W (pushing towards the wall) or by looking up.
 	const float LookPitch = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch);
-	const bool bPulling = LookPitch > 15.f && ToAnchor.Z > 20.f && HangGrip > 0.f;
+	const FVector Wish = Move->GetCurrentAcceleration().GetSafeNormal2D();
+	const bool bPushingIn = FVector::DotProduct(Wish, Dir.GetSafeNormal2D()) > 0.3f;
+	const bool bPulling = (LookPitch > 15.f || bPushingIn) && ToAnchor.Z > 20.f && HangGrip > 0.f;
 	if (bPulling)
 	{
 		const float Pull = (Holding == 2 ? 170.f : 75.f) * FMath::Lerp(0.4f, 1.f, HangGrip);

@@ -644,6 +644,8 @@ protected:
 	/** Flailing hands faster than this (cm/s, relative to you) smack people they hit. 0 = off. */
 	/** Any hand moving faster than this (cm/s, compared to your body) hits whoever it touches - Gang Beasts style. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 300.f;
+	/** Hold a mouse button at least this long and it's a REACH (arm stays out, hand glues on). Shorter = a punch. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HoldToReachSeconds = 0.18f;
 	/** Hand / foot speed (cm/s, into the target) that counts as a full-power hit. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HardHitSpeed = 1500.f;
 	/** A head shot at least this hard (0-1 power) knocks them down on the spot. */
@@ -1166,6 +1168,9 @@ private:
 	bool bHandAnchored[2] = { false, false };
 	/** Hanging off your stuck hands (no climb mode - your arms hold you like ropes). */
 	bool bHandHanging = false;
+	/** Someone who just wriggled out of your grip can't be re-grabbed for a moment. */
+	TWeakObjectPtr<ABRCharacter> NoRegrabTarget;
+	float NoRegrabUntil = 0.f;
 	float HangGrip = 1.f;
 	float LastHangJump = -10.f;
 	void TickHandHang(float DeltaSeconds);

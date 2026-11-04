@@ -962,6 +962,13 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 - **Grab what you touch:** hold a button to reach (players). If your hand touches **any part** of someone (their arm, head, collar, leg), you grab that part. You don't magnetically grab people who are just near you.
 - **Punch direction (Gang Beasts style):** a punch goes in the **general direction you're facing/aiming** and **locks onto whoever's roughly in front of you** (inside about 45°), going for the head. Nobody there: it goes straight where you aim. Holding the button just puts your arm out that way (reach / grab / climb). Swinging the mouse is the sweeping weapon.
 
+**Hands (round 4):**
+- **Tap** a mouse button = **punch** with that hand (thrown when you let go).
+- **Hold** a mouse button = that **arm stays out** for as long as you hold it, and the hand **glues** to whatever it touches: a person (the part you touched), a crate, a wall. Let go of the button to let go. Losing a grip doesn't drop your arm; it glues to the next thing it touches.
+- Someone who wriggles free (mashing Space) can't be re-grabbed for about a second.
+- **Climbing:** hold both buttons on the wall and hold **W** (or look up) to pull yourself up. While hanging, let go of one button and hold it again: that hand reaches **up the wall** for the next hold, hand over hand. **Space** = jump up from your hands.
+- **Tuning:** BP_Runner / BP_Warden → **BR | Brawl** → **Hold To Reach Seconds** (0.18): how long a press has to be to count as a hold instead of a punch.
+
 **Climbing (players):** there's no climb mode any more.
 1. Jump at a wall and **hold a mouse button**: your hand sticks.
 2. **Your hands hold you up like ropes.** With two hands you hang. With one hand you slowly slide down.
