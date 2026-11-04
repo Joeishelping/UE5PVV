@@ -933,6 +933,33 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 
 **Sticky hands:** hold a mouse button to reach. If that hand touches anything (wall, car, fence, crate), it **sticks there** like in Gang Beasts, until you let go or walk too far away.
 
+## Part 15y: Gang Beasts fighting and climbing (round 3)
+
+**Hits only count when they land.** A fist or foot has to physically touch someone to do anything.
+- **How hard** depends on how fast your hand or foot was moving **into** them, plus your own running speed. A slow tap does almost nothing; a fast swing or a full punch hurts.
+- **Where** matters:
+  - **Head:** big damage, and it fills the KO meter fast. A **hard, clean head shot knocks them down on the spot ("CRACK!")**.
+  - **Body:** mostly shoves them back. A few weak body shots won't drop anyone.
+  - **Arms:** mostly blocked.
+- **Every hit shows:** the part that got hit snaps back (a hard head shot whips the head round), and your own arm bounces off them.
+- **Punches** wind up, the shoulders turn in, the arm goes out to full length, and you take a small step into it.
+- **Reaching arms** sit out in front, low and wide (gorilla style). Swing the mouse and they sweep through whoever's in front of you.
+- **Kicks** aim at the nearest person's **leg**. If they're moving, or it's a hard kick, they're **TRIPPED**. Otherwise they limp for a second. A kick to the body is a big shove.
+- Holding someone with one hand: your free hand still has to actually land a punch.
+
+**Tuning** (BP_Runner / BP_Warden, **BR | Brawl**): Hard Hit Speed, Head Knockdown Power, Punch Reach, Punch Step, Arm Swing Max Speed.
+
+**NPC drivers** slow down, stop and honk for people in the road instead of running them over. Only gate runners still floor it.
+
+**Climbing (players):** there's no climb mode any more.
+1. Jump at a wall and **hold a mouse button**: your hand sticks.
+2. **Your hands hold you up like ropes.** With two hands you hang. With one hand you slowly slide down.
+3. **Look up** to pull yourself towards your hands. When your shoulders reach your hands, let go of one button and grab again higher: hand over hand.
+4. **Your grip wears out** the longer you hang, faster on one hand.
+5. **Space while hanging** is a real jump that pushes you up and in towards the wall. You still have to make it over the top yourself, or you fall.
+- The map's **outer walls can't be grabbed**.
+- NPCs and bots still use the simple climb.
+
 ---
 
 ## Part 16: Checklist: everything you can plug in

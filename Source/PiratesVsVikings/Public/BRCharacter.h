@@ -226,12 +226,12 @@ public:
 	/** Head and shoulders bob/jiggle on every step. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float StepBob = 40.f;
 	/** Punches: the arm pulls back this long before it's flung out (seconds). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float PunchWindup = 0.1f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float PunchWindup = 0.14f;
 	/** Also play the Punch animation on top of the physics fling (off = pure physics punches, like Gang Beasts). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") bool bPunchAnimWithPhysics = false;
 	/** KO meter: how much one clean hit to the HEAD fills it (1 = knocked out). Body hits mostly just shove. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HeadHitKO = 0.3f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float BodyHitKO = 0.05f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float BodyHitKO = 0.04f;
 	/** Body hits do this much of their normal damage (head hits do full). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float BodyHitDamageScale = 0.6f;
 	/** KO meter drains at this rate once you haven't been hit for KORecoverDelay seconds. */
@@ -351,7 +351,7 @@ public:
 	bool bWarnedClimbTired = false;
 	// --- Fluid physical attacks ---------------------------------------------------------
 	/** Punch: the fist is steered out to the target this long (then stays out if you keep holding the button). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float PunchExtendSeconds = 0.3f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float PunchExtendSeconds = 0.42f;
 	/** Kick: the leg is steered through the kick this long. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float KickExtendSeconds = 0.35f;
 	/** Swinging your arms out (move the mouse while holding the buttons) hits people if the hand is fast enough. */
@@ -623,6 +623,15 @@ protected:
 	/** Flailing hands faster than this (cm/s, relative to you) smack people they hit. 0 = off. */
 	/** Any hand moving faster than this (cm/s, compared to your body) hits whoever it touches - Gang Beasts style. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float SlapSpeed = 300.f;
+	/** Hand / foot speed (cm/s, into the target) that counts as a full-power hit. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HardHitSpeed = 1500.f;
+	/** A head shot at least this hard (0-1 power) knocks them down on the spot. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HeadKnockdownPower = 0.82f;
+	/** How far a punch reaches from the shoulder (cm), and the little step you take into it. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchReach = 110.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchStep = 260.f;
+	/** Top speed of a reaching hand following your mouse (higher = faster, harder swings). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float ArmSwingMaxSpeed = 1600.f;
 	/** Balance damage for the slowest / fastest hand hit (a full punch always does at least Attack Damage). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HandHitMinDamage = 5.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HandHitMaxDamage = 22.f;
@@ -1100,6 +1109,11 @@ private:
 	void KickHit();
 	void HeadbuttHit();
 	float LastKickTime = -100.f;
+	/** Physics kick: the foot is "live" until this time; it hurts only if it touches someone. */
+	float KickHitUntil = -1.f;
+	FVector LastFootPos = FVector::ZeroVector;
+	bool bFootTracked = false;
+	void TickKickContact(float DeltaSeconds);
 	// Hiding, box, lasso, leash
 	UPROPERTY(ReplicatedUsing = OnRep_HiddenInSpot) bool bHiddenInSpot = false;
 	UPROPERTY(ReplicatedUsing = OnRep_Box) bool bInBox = false;
@@ -1129,6 +1143,14 @@ private:
 	/** Sticky hands: where each reaching hand is stuck to a surface (left, right). */
 	FVector HandAnchor[2];
 	bool bHandAnchored[2] = { false, false };
+	/** Hanging off your stuck hands (no climb mode - your arms hold you like ropes). */
+	bool bHandHanging = false;
+	float HangGrip = 1.f;
+	float LastHangJump = -10.f;
+	void TickHandHang(float DeltaSeconds);
+	UFUNCTION(Server, Reliable) void Server_HangJump();
+	/** Upward push of a jump while hanging from your hands (cm/s). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|GangBeasts") float HangJumpUp = 560.f;
 	UFUNCTION(Server, Reliable) void Server_ClimbStep(bool bLeft);
 	UFUNCTION(Server, Reliable) void Server_ClimbJump();
 	UFUNCTION() void OnRep_Climbing();

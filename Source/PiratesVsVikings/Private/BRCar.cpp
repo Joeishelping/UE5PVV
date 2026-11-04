@@ -1262,6 +1262,38 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 	const float Cruise = 0.75f * DriverSpeedTaste * (1.f + 0.12f * FMath::Sin(Now * 0.23f + DriverPhase)); // eases on and off the gas
 	ThrottleInput = FMath::Clamp(Cruise * (1.f - FMath::Abs(Delta) / 120.f), 0.25f, bNearCheckpoint ? 0.35f : FMath::Min(1.f, Cruise));
 
+	// Somebody walking in the road ahead? Slow down, stop and lean on the horn - don't plough through them
+	// (only a gate runner or a Runner at the wheel runs people over).
+	{
+		const float Speed = GetVelocity().Size2D();
+		const float LookAhead = 500.f + Speed * 1.2f;
+		bool bPedestrian = false;
+		bool bClose = false;
+		for (TActorIterator<APVVCharacter> It(GetWorld()); It; ++It)
+		{
+			const APVVCharacter* P = *It;
+			if (P->GetCurrentBoat() || P->GetCarrier())
+			{
+				continue;
+			}
+			const FVector Rel = GetActorTransform().InverseTransformPositionNoScale(P->GetActorLocation());
+			if (Rel.X > 150.f && Rel.X < LookAhead && FMath::Abs(Rel.Y) < 330.f && FMath::Abs(Rel.Z) < 300.f)
+			{
+				bPedestrian = true;
+				bClose |= Rel.X < 650.f;
+			}
+		}
+		if (bPedestrian)
+		{
+			ThrottleInput = bClose ? (Speed > 80.f ? -0.6f : 0.f) : FMath::Min(ThrottleInput, 0.15f);
+			if (Now >= NextHonk)
+			{
+				NextHonk = Now + FMath::FRandRange(2.5f, 5.f);
+				HonkHorn();
+			}
+			return;
+		}
+	}
 	// Keep a big gap to whatever's in front in my lane (spaced-out queue at the border, no pile-ups).
 	if (IsLaneBlocked(Lane, bNearCheckpoint ? 1250.f : 1500.f, 0.f))
 	{
