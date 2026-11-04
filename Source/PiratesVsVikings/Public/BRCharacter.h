@@ -95,6 +95,8 @@ public:
 	TWeakObjectPtr<ABRCharacter> BustCop;
 	/** Picked a fight with Border Patrol when busted (the aggressive kind - they don't run for the Wall). */
 	bool bAggressiveSuspect = false;
+	/** Part of a BORDER RUSH crowd: storms the Wall, climbs it, runs for the Safe Zone. */
+	bool bHordeRunner = false;
 
 	// --- NPC secrets (server) -------------------------------------------------------------
 	/** No papers. Border Patrol score for catching them; Runners score for smuggling them through. */

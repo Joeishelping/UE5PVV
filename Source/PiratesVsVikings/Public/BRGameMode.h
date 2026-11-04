@@ -174,6 +174,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxTrucksInLine = 3;
 	/** Chance an NPC truck is a box truck (cargo hold to search). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") float BoxTruckChance = 0.25f;
+	/** BORDER RUSH: every so often a crowd comes out of the river and storms the Wall all at once (seconds between rushes). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") FVector2D BorderRushEverySeconds = FVector2D(150.f, 260.f);
+	/** How many in each rush (random between these). 0 = no rushes. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") FIntPoint BorderRushSize = FIntPoint(10, 14);
+	/** Seconds of warning before they come out of the river. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") float BorderRushWarning = 10.f;
 	/** NPCs per truck (driver included). Up to 4 seats - empty seats are where Runners hide. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FIntPoint NPCsPerTruck = FIntPoint(1, 3);
 	/**
@@ -232,6 +238,13 @@ private:
 	FTimerHandle TickTimer;
 	float NextWeatherChange = 0.f;
 	float NextNPCTruck = 30.f;
+	float NextBorderRush = 120.f;
+	float RushSpawnIn = -1.f;
+	FVector RushSpot = FVector::ZeroVector;
+	int32 RushSpawned = 0;
+	TArray<TWeakObjectPtr<class ABRCharacter>> RushCrowd;
+	void TickBorderRush(class ABRGameState* GS);
+	void SpawnBorderRush();
 	bool bCarKeyGiven = false;
 	bool bAnnouncedDroneLoss = false;
 	bool bAnnouncedGunLoss = false;

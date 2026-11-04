@@ -423,6 +423,12 @@ void ABRHUD::DrawHUD()
 	{
 		DrawText(FString::Printf(TEXT("GOV. BUDGET $%d"), GS->WardenBudget), Green, 20.f, SY - 118.f, Big, 1.3f);
 	}
+	if (GS->RushLeft > 0)
+	{
+		const float Pulse = 0.75f + 0.25f * FMath::Sin(Now * 6.f);
+		Centered(FString::Printf(TEXT("BORDER RUSH: %d still loose%s"), GS->RushLeft, bWarden ? TEXT(" - run them down, tase them, set the dogs on them") : TEXT(" - blend in and go over with them!")),
+			118.f, FLinearColor(1.f, 0.5f * Pulse, 0.1f), Big, 1.2f);
+	}
 	if (GS->BountyTarget && GS->Phase == EBRPhase::Invasion)
 	{
 		const bool bMe = GS->BountyTarget == PS;

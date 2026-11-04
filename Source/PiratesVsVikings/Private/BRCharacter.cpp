@@ -1205,6 +1205,32 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			bPastWall = WallIt->GetActorTransform().InverseTransformPositionNoScale(GetActorLocation()).X > 150.f;
 			break;
 		}
+		// BORDER RUSH: the crowd charges straight at the Wall and goes over it (dodging Border Patrol a little).
+		if (!bPastWall && bHordeRunner)
+		{
+			for (TActorIterator<ABRWall> WallIt(GetWorld()); WallIt; ++WallIt)
+			{
+				const FVector ToWall = WallIt->GetActorForwardVector().GetSafeNormal2D();
+				if (NPCClimbBorderWall(ToWall))
+				{
+					return;
+				}
+				FVector Dodge = FVector::ZeroVector;
+				for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+				{
+					const FVector From = (GetActorLocation() - It->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+					if (It->IsWarden() && From.Size() < 700.f)
+					{
+						Dodge += From.GetSafeNormal() * (1.f - From.Size() / 700.f);
+					}
+				}
+				const float Weave = FMath::Sin(GetWorld()->GetTimeSeconds() * 1.7f + GetActorLocation().Y * 0.01f) * 0.35f;
+				const FVector Side = FVector::CrossProduct(ToWall, FVector::UpVector);
+				GetCharacterMovement()->MaxWalkSpeed = FleeSpeed;
+				AddMovementInput((ToWall + Side * Weave + Dodge * 1.2f).GetSafeNormal(), 1.f);
+				return;
+			}
+		}
 		if (bPastWall && !BRMap::IsInSafeZone(GetWorld(), GetActorLocation()))
 		{
 			FVector Goal = (BRMap::GetSafeZoneGoal(GetWorld(), GetActorLocation()) - GetActorLocation()) * FVector(1.f, 1.f, 0.f);

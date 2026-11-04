@@ -194,6 +194,7 @@ void ABRGameMode::TickBR()
 	if (GS->Phase == EBRPhase::Invasion)
 	{
 		TickBounty(GS);
+		TickBorderRush(GS);
 		NextNPCTruck -= 1.f;
 		if (NextNPCTruck <= 0.f)
 		{
@@ -227,6 +228,8 @@ void ABRGameMode::AdvancePhase()
 		GS->PhaseSecondsLeft = InvasionSeconds;
 		GS->RunnersNeeded = FMath::Max(1, FMath::DivideAndRoundUp(GS->CountPlayers(BR::Runners), 2));
 		NextNPCTruck = 3.f;
+		NextBorderRush = FMath::FRandRange(BorderRushEverySeconds.X * 0.6f, BorderRushEverySeconds.Y * 0.8f);
+		RushSpawnIn = -1.f;
 		ABRGameState::Sfx(this, EBRSfx::RoundStart, FVector::ZeroVector, true);
 		Announce(FText::Format(LOCTEXT("Invasion", "THE LINE IS OPEN! {0}: cross, smuggle, score. {1}: catch, scan, score. Most points wins!"),
 			FText::FromString(BR::RunnerName()), FText::FromString(BR::WardenName())));
@@ -1710,6 +1713,100 @@ void ABRGameMode::OnBribeFilmed(APVVCharacter* Warden, int32 Amount)
 	AddBudget(-Amount); // the fine eats the bribe and then some
 	Announce(FText::Format(LOCTEXT("BribeFilmed", "SCANDAL: {0} was CAUGHT ON CAMERA taking a ${1} bribe! Approval -{2}"),
 		FText::FromString(NameOf(Warden)), Amount, FMath::RoundToInt(BribeScandalPenalty)));
+}
+
+// ===========================================================================================
+// BORDER RUSH: a crowd storms the Wall
+
+void ABRGameMode::TickBorderRush(ABRGameState* GS)
+{
+	// Count who's still loose (not caught, not across, not dead).
+	int32 Loose = 0;
+	int32 Made = 0;
+	RushCrowd.RemoveAll([](const TWeakObjectPtr<ABRCharacter>& W) { return !W.IsValid(); });
+	for (const TWeakObjectPtr<ABRCharacter>& W : RushCrowd)
+	{
+		const ABRCharacter* C = W.Get();
+		if (C->bScoredCrossing)
+		{
+			++Made;
+		}
+		else if (!C->IsDead() && C->GetCondition() != EPVVCondition::Restrained && C->GetCondition() != EPVVCondition::Detained && !C->GetCarrier())
+		{
+			++Loose;
+		}
+	}
+	if (GS->RushLeft != Loose)
+	{
+		GS->RushLeft = Loose;
+		if (Loose == 0 && RushSpawned > 0)
+		{
+			Announce(FText::Format(LOCTEXT("RushOver", "The border rush is over: {0} of {1} made it across."), Made, RushSpawned));
+			RushSpawned = 0;
+			RushCrowd.Reset();
+		}
+	}
+	if (BorderRushSize.Y <= 0 || !Arena || !Arena->bBuildTestMap)
+	{
+		return; // (the built-in map knows where the river and the Wall are)
+	}
+	if (RushSpawnIn > 0.f)
+	{
+		RushSpawnIn -= 1.f;
+		if (RushSpawnIn <= 0.f)
+		{
+			RushSpawnIn = -1.f;
+			SpawnBorderRush();
+		}
+		return;
+	}
+	if (Loose > 0)
+	{
+		return; // one at a time
+	}
+	NextBorderRush -= 1.f;
+	if (NextBorderRush > 0.f)
+	{
+		return;
+	}
+	NextBorderRush = FMath::FRandRange(BorderRushEverySeconds.X, BorderRushEverySeconds.Y);
+	// A crowd gathers in the river: warn everyone, then they come out swinging.
+	const FVector O = Arena->GetActorLocation();
+	RushSpot = O + FVector(1800.f, FMath::FRandRange(-5000.f, 5000.f), ABRDesertArena::Ground + 120.f);
+	RushSpawnIn = BorderRushWarning;
+	GS->Multicast_NoisePing(RushSpot);
+	ABRGameState::Sfx(this, EBRSfx::TripwireAlarm, FVector::ZeroVector, true);
+	Announce(FText::Format(LOCTEXT("RushWarn", "BORDER RUSH! A big crowd is gathering in the river - they'll hit the Wall in {0} seconds! (Runners: blend in with them!)"),
+		FMath::RoundToInt(BorderRushWarning)));
+}
+
+void ABRGameMode::SpawnBorderRush()
+{
+	const int32 Count = FMath::RandRange(FMath::Max(1, BorderRushSize.X), FMath::Max(BorderRushSize.X, BorderRushSize.Y));
+	RushSpawned = 0;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const FVector At = RushSpot + FVector(FMath::FRandRange(-350.f, 150.f), (i - Count * 0.5f) * 140.f + FMath::FRandRange(-40.f, 40.f), 0.f);
+		ABRCharacter* NPC = SpawnNPC(FTransform(FRotator::ZeroRotator, At));
+		if (!NPC)
+		{
+			continue;
+		}
+		NPC->bIllegal = true;
+		NPC->bHordeRunner = true;
+		NPC->bAggressiveSuspect = FMath::FRand() < 0.25f; // a few of them fight back
+		NPC->bCarriesContraband = FMath::FRand() < 0.15f;
+		NPC->StartWandering(At, 500.f);
+		RushCrowd.Add(NPC);
+		++RushSpawned;
+		ABRGameState::FX(this, EBRFX::Splash, At);
+	}
+	if (ABRGameState* GS = GetBRGameState())
+	{
+		GS->RushLeft = RushSpawned;
+		GS->Multicast_NoisePing(RushSpot);
+	}
+	Announce(FText::Format(LOCTEXT("RushGo", "HERE THEY COME! {0} people are storming the Wall! Run them down, tase them, set the dogs on them!"), RushSpawned));
 }
 
 #undef LOCTEXT_NAMESPACE

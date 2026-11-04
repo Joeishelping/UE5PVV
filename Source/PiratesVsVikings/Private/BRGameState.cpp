@@ -29,6 +29,7 @@ void ABRGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRGameState, RunnerScore);
 	DOREPLIFETIME(ABRGameState, WardenScore);
 	DOREPLIFETIME(ABRGameState, WardenBudget);
+	DOREPLIFETIME(ABRGameState, RushLeft);
 	DOREPLIFETIME(ABRGameState, BonusTraps);
 	DOREPLIFETIME(ABRGameState, FencePowerUntil);
 	DOREPLIFETIME(ABRGameState, FencePowerCutUntil);

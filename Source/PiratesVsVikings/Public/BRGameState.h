@@ -55,6 +55,10 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 WardenBudget = 0;
 
+	/** BORDER RUSH event: how many of the crowd are still loose (0 = no rush on). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 RushLeft = 0;
+
 	/** Extra traps the team bought on top of each Warden's Max Team Traps. */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 BonusTraps = 0;

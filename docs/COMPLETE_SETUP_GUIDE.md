@@ -1173,6 +1173,24 @@ Each SPEED level also gives you 15% more sprint.
 - **Fire before DRAW:** you're shot.
 - **Walk off your mark:** you're a coward and he takes your money.
 
+## Part 15ad: Border Rush (horde event)
+
+Nothing to plug in. This only happens on the built-in test map.
+
+- **How often:** every 2½ to 4½ minutes once the Line is open.
+- **Warning:** the announcer shouts **BORDER RUSH!** and pings the spot on the map. Ten seconds later, **10 to 14 people** splash out of the river and charge the Wall together.
+- **What they do:** they weave around Border Patrol, climb the Wall, then run for the Safe Zone. About 1 in 4 fights back if you grab them.
+- **Counter:** the top of the screen shows how many are still loose.
+- **Border Patrol:**
+  - Run them over with a truck. It knocks them flat but never kills them.
+  - Tase them and zip-tie them.
+  - The **dogs** go straight for them and drag them down.
+  - Traps, glue and the spotlight all help too.
+  - Every one you catch counts like any other catch.
+- **Runners:** run in with the crowd. You blend right in, and Border Patrol have their hands full.
+- **Scoring:** every rusher who reaches the Safe Zone scores for the Runners.
+- **Tuning:** **BP_BRGameMode → BR | Border Rush** has *Border Rush Every Seconds*, *Border Rush Size* (set it to 0 to switch rushes off) and *Border Rush Warning*.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

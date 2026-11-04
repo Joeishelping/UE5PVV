@@ -136,7 +136,13 @@ void ABRDog::Think()
 		}
 		else if (bHunting)
 		{
-			const bool bScannedBad = C->IsSuspect() && C->LastScannedTime > -999.f && ServerNow - C->LastScannedTime < ScanMemorySeconds;
+			// BORDER RUSH crowd: the dogs go straight for them (and take them down).
+			if (C->bHordeRunner && Dist < SmellRange * 2.f)
+			{
+				Score = Dist * 0.5f;
+				bResisting = true;
+			}
+			const bool bScannedBad = !C->bHordeRunner && C->IsSuspect() && C->LastScannedTime > -999.f && ServerNow - C->LastScannedTime < ScanMemorySeconds;
 			const bool bRunning = C->IsNPC() ? C->IsFleeing() : C->IsSprinting();
 			// 2) Scanned as illegal / contraband and now running or fighting: chase them down.
 			if (bScannedBad && (bRunning || C->IsBrawling()) && Dist < SmellRange * 2.f)
