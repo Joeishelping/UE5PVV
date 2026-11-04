@@ -4676,8 +4676,8 @@ void ABRHidingSpot::OnInteract_Implementation(APVVCharacter* Interactor)
 	if (!Hider)
 	{
 		Hider = BRC;
+		BRC->SetHideAt(GetActorLocation() + FVector(0.f, 0.f, 100.f)); // inside it
 		BRC->SetHiddenInSpot(true, Out);
-		BRC->TeleportTo(GetActorLocation() + FVector(0.f, 0.f, 100.f), BRC->GetActorRotation(), false, true);
 		Tell(Interactor, LOCTEXT("Hidden", "Hidden! Border Patrol can't see you. Press E to climb out."));
 		ForceNetUpdate();
 	}

@@ -120,9 +120,14 @@ ABRCharacter::ABRCharacter()
 		BoxMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BoxMesh"));
 		BoxMesh->SetupAttachment(GetCapsuleComponent());
 		BoxMesh->SetStaticMesh(BoxCube.Object);
-		BoxMesh->SetRelativeLocation(FVector(0.f, 0.f, -15.f));
-		BoxMesh->SetRelativeScale3D(FVector(0.95f, 0.95f, 1.25f));
+		BoxMesh->SetRelativeLocation(FVector(0.f, 0.f, -28.f));
+		BoxMesh->SetRelativeScale3D(FVector(1.15f, 1.15f, 1.35f)); // big enough to hide all of you, crouched inside
 		BoxMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// When you're in it, it shoves loose stuff (crates, barrels, packages) around physically.
+		BoxMesh->SetCollisionObjectType(ECC_WorldDynamic);
+		BoxMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		BoxMesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+		BoxMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 		BoxMesh->SetVisibility(false);
 		CigaretteMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CigaretteMesh"));
 		CigaretteMesh->SetupAttachment(GetMesh(), TEXT("hand_r"));
@@ -205,6 +210,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, GrabStruggle);
 	DOREPLIFETIME(ABRCharacter, bClimbing);
 	DOREPLIFETIME(ABRCharacter, bHiddenInSpot);
+	DOREPLIFETIME(ABRCharacter, HideAt);
 	DOREPLIFETIME(ABRCharacter, ActiveEmote);
 	DOREPLIFETIME(ABRCharacter, bInBox);
 	DOREPLIFETIME(ABRCharacter, LeashedDog);
@@ -1681,6 +1687,10 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 void ABRCharacter::Input_Crouch()
 {
+	if (bInBox)
+	{
+		return; // stay down inside the box (F gets you out)
+	}
 	if (bIsCrouched)
 	{
 		UnCrouch();
@@ -3203,6 +3213,17 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (IsLocallyControlled())
 	{
 		TickCameraView();
+	}
+	TickBox(DeltaSeconds);
+	// Hiding: stay right where the hiding spot is (no sneaking off while invisible).
+	if (bHiddenInSpot && !HideAt.IsZero() && FVector::DistSquared(GetActorLocation(), HideAt) > 30.f * 30.f)
+	{
+		SetActorLocation(HideAt, false, nullptr, ETeleportType::TeleportPhysics);
+		GetCharacterMovement()->StopMovementImmediately();
+		if (GetCharacterMovement()->MovementMode != MOVE_None)
+		{
+			GetCharacterMovement()->DisableMovement();
+		}
 	}
 
 	ABRGameState* GS = GetBRGameState();
@@ -5465,22 +5486,46 @@ void ABRCharacter::SetHiddenInSpot(bool bHide, const FVector& ExitAt)
 	if (bHide)
 	{
 		ReleaseHandGrab();
-		GetCharacterMovement()->StopMovementImmediately();
-		GetCharacterMovement()->DisableMovement();
-	}
-	else
-	{
-		TeleportTo(ExitAt, GetActorRotation(), false, true);
-		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		if (bInBox)
+		{
+			ToggleBox();
+		}
+		if (HideAt.IsZero())
+		{
+			HideAt = GetActorLocation();
+		}
 	}
 	OnRep_HiddenInSpot();
+	if (!bHide)
+	{
+		TeleportTo(ExitAt, GetActorRotation(), false, true);
+		HideAt = FVector::ZeroVector;
+	}
 	ForceNetUpdate();
 }
 
 void ABRCharacter::OnRep_HiddenInSpot()
 {
+	// Hidden = you're really IN there: tucked away at the spot, can't walk off, invisible, nothing bumps into you.
+	// (Done on every machine, including your own, so you can't run around the map while "hidden".)
 	SetActorHiddenInGame(bHiddenInSpot);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, bHiddenInSpot ? ECR_Ignore : ECR_Block);
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (bHiddenInSpot)
+	{
+		Move->StopMovementImmediately();
+		Move->DisableMovement();
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		if (!HideAt.IsZero())
+		{
+			SetActorLocation(HideAt, false, nullptr, ETeleportType::TeleportPhysics);
+		}
+	}
+	else
+	{
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Move->SetMovementMode(MOVE_Walking);
+	}
 }
 
 void ABRCharacter::ToggleBox()
@@ -5500,11 +5545,51 @@ void ABRCharacter::ToggleBox()
 	ForceNetUpdate();
 }
 
+void ABRCharacter::TickBox(float DeltaSeconds)
+{
+	if (!bInBox || !BoxMesh || DeltaSeconds <= 0.f)
+	{
+		return;
+	}
+	// Sits on the floor around you (follows the capsule as you crouch).
+	const float Half = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const float BoxHalf = 67.5f;
+	// Wobbles like a real box being shoved along: tips back when you start moving, forward when you stop, rocks side to side.
+	const FVector Vel = GetVelocity();
+	const FVector Accel = (Vel - BoxLastVelocity) / DeltaSeconds;
+	BoxLastVelocity = Vel;
+	const FVector LocalAccel = GetActorTransform().InverseTransformVectorNoScale(Accel);
+	const FVector2D Push(-LocalAccel.X * 0.012f, LocalAccel.Y * 0.012f); // (pitch, roll) kicks
+	BoxTiltSpeed += (Push - BoxTilt * 60.f) * DeltaSeconds;	// spring back upright
+	BoxTiltSpeed *= FMath::Exp(-6.f * DeltaSeconds);			// damping
+	BoxTilt += BoxTiltSpeed * DeltaSeconds * 60.f;
+	BoxTilt.X = FMath::Clamp(BoxTilt.X, -12.f, 12.f);
+	BoxTilt.Y = FMath::Clamp(BoxTilt.Y, -10.f, 10.f);
+	const float Shuffle = Vel.Size2D() > 40.f ? FMath::Sin(GetWorld()->GetTimeSeconds() * 11.f) * 1.5f : 0.f; // scuffing along
+	BoxMesh->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -Half + BoxHalf - 2.f), FRotator(BoxTilt.X, 0.f, BoxTilt.Y + Shuffle));
+}
+
 void ABRCharacter::OnRep_Box()
 {
 	if (BoxMesh)
 	{
 		BoxMesh->SetVisibility(bInBox);
+		BoxMesh->SetCollisionEnabled(bInBox ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+	}
+	// You're crouched down INSIDE the box (nothing sticks out of the top).
+	if (bInBox)
+	{
+		Crouch();
+	}
+	else
+	{
+		UnCrouch();
+		if (BoxMesh)
+		{
+			BoxMesh->SetRelativeRotation(FRotator::ZeroRotator);
+		}
+		BoxTilt = FVector2D::ZeroVector;
+		BoxTiltSpeed = FVector2D::ZeroVector;
 	}
 	UpdateMovementSpeed();
 }

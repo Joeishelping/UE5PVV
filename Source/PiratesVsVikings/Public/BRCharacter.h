@@ -556,6 +556,8 @@ public:
 	/** Hiding in a dumpster / porta-potty, or standing still in a cardboard box: Border Patrol can't see you. */
 	bool IsHiddenFromPatrol() const;
 	bool IsHidingInSpot() const { return bHiddenInSpot; }
+	/** Server: where you'll be tucked away (set before SetHiddenInSpot(true)). */
+	void SetHideAt(const FVector& At) { HideAt = At; }
 	bool IsInBox() const { return bInBox; }
 	/** Server: hide inside / come out of a hiding spot. */
 	void SetHiddenInSpot(bool bHide, const FVector& ExitAt);
@@ -1193,6 +1195,8 @@ private:
 	bool bFootTracked = false;
 	void TickKickContact(float DeltaSeconds);
 	// Hiding, box, lasso, leash
+	/** Where you're tucked away inside the hiding spot (you stay put there, hidden, until you climb out). */
+	UPROPERTY(Replicated) FVector_NetQuantize HideAt = FVector::ZeroVector;
 	UPROPERTY(ReplicatedUsing = OnRep_HiddenInSpot) bool bHiddenInSpot = false;
 	UPROPERTY(ReplicatedUsing = OnRep_Box) bool bInBox = false;
 	UPROPERTY(Replicated) TObjectPtr<class ABRDog> LeashedDog;
@@ -1202,6 +1206,10 @@ private:
 	UFUNCTION(NetMulticast, Unreliable) void Multicast_LassoRope(FVector_NetQuantize End);
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> RopeMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BoxMesh;
+	FVector BoxLastVelocity = FVector::ZeroVector;
+	FVector2D BoxTilt = FVector2D::ZeroVector;
+	FVector2D BoxTiltSpeed = FVector2D::ZeroVector;
+	void TickBox(float DeltaSeconds);
 	float LassoRopeUntil = -1.f;
 	FVector LassoRopeEnd = FVector::ZeroVector;
 	float LastLassoTime = -100.f;
