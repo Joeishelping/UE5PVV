@@ -1259,6 +1259,18 @@ Nothing drives through the checkpoint on its own any more. At the truck:
 - **Duel:** you get a loaner revolver for the duel only. It comes out at DRAW and goes away when the duel ends.
 - **Mexico gym:** moved west so it isn't inside a house any more.
 
+## Part 15ah: More Gang Beasts moves
+
+- **Charge punch:** punch while sprinting. You lunge in with your whole weight behind it, and it sends them flying back ("CHARGE!"). If they're already rocked, it drops them.
+- **Uppercut:** crouch (C) and then punch. You spring up into it and their head snaps back ("UPPERCUT!"). It's a big hit to the KO meter.
+- **Punch them off a ledge:** hit someone who's hanging by their hands.
+  - Every punch loosens their grip.
+  - A fist that lands on a **hand** knocks that hand off, and it takes them a moment to grab on again.
+  - Keep going and they fall.
+- **Wall slam:** a body thrown hard into a wall, truck or post gets rattled ("WALL SLAM!"). It's a big hit to the KO meter, and they stay down a bit longer.
+- **Trip:** running flat out into something low (a crate, a sack, a low wall, someone lying on the floor) sends you over it ("TRIP!"). You're back up in about a second.
+- **Recruits** at the sparring mat now wear the Border Patrol uniform and cap.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

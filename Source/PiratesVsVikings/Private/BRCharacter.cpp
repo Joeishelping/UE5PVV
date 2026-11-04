@@ -3279,6 +3279,10 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickCameraView();
 	}
 	TickBox(DeltaSeconds);
+	if (HasAuthority())
+	{
+		TickTrip();
+	}
 	// Hiding: stay right where the hiding spot is (no sneaking off while invisible).
 	if (bHiddenInSpot && !HideAt.IsZero() && FVector::DistSquared(GetActorLocation(), HideAt) > 30.f * 30.f)
 	{
@@ -4662,6 +4666,21 @@ void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 	{
 		SetActorRotation(FRotator(0.f, GetControlRotation().Yaw, 0.f)); // square up to where you're aiming
 	}
+	{
+		const float NowC = GetWorld()->GetTimeSeconds();
+		// Sprinting punch = CHARGE: you lunge in and your whole body weight goes behind it.
+		if (IsSprinting() && GetCharacterMovement()->IsMovingOnGround() && GetVelocity().Size2D() > 350.f)
+		{
+			ChargePunchUntil = NowC + 0.55f;
+			LaunchCharacter(GetActorForwardVector().GetSafeNormal2D() * 380.f, false, false);
+		}
+		// Crouched punch = UPPERCUT: comes up under the chin.
+		if (bIsCrouched)
+		{
+			UppercutUntil = NowC + 0.6f;
+			UnCrouch(); // you spring up into it
+		}
+	}
 	Multicast_PunchHand(bLeft);
 	BotAttack(); // same punch as before, just with the hand you chose
 }
@@ -4953,6 +4972,7 @@ void ABRCharacter::MarkThrown(ABRCharacter* By)
 	ThrownBy = By;
 	ThrownUntil = GetWorld()->GetTimeSeconds() + 1.6f;
 	BowledOver.Reset();
+	bWallSlammed = false;
 }
 
 void ABRCharacter::TickThrown()
@@ -4968,6 +4988,28 @@ void ABRCharacter::TickThrown()
 	const FVector Pos = bRag ? Body->GetBoneLocation(TEXT("pelvis")) : GetActorLocation();
 	const FVector Vel = bRag ? Body->GetPhysicsLinearVelocity(TEXT("pelvis")) : GetVelocity();
 	const bool bDropKick = bDropKicking && Now < DropKickHitUntil;
+	// WALL SLAM: thrown hard into a wall (or a truck, a post...) - that hurts.
+	if (!bWallSlammed && !bDropKick && Vel.Size() > 750.f && GetCondition() == EPVVCondition::KnockedDown)
+	{
+		FHitResult Wall;
+		FCollisionQueryParams WallParams(SCENE_QUERY_STAT(BRWallSlam), false, this);
+		FCollisionObjectQueryParams WallTypes;
+		WallTypes.AddObjectTypesToQuery(ECC_WorldStatic);
+		WallTypes.AddObjectTypesToQuery(ECC_WorldDynamic);
+		WallTypes.AddObjectTypesToQuery(ECC_Vehicle);
+		if (GetWorld()->SweepSingleByObjectType(Wall, Pos, Pos + Vel * 0.06f, FQuat::Identity, WallTypes, FCollisionShape::MakeSphere(30.f), WallParams)
+			&& FVector::DotProduct(Wall.ImpactNormal, -Vel.GetSafeNormal()) > 0.55f && Wall.ImpactNormal.Z < 0.6f)
+		{
+			bWallSlammed = true;
+			AddKO(HeadHitKO * FMath::GetMappedRangeValueClamped(FVector2D(750.f, 1500.f), FVector2D(0.6f, 1.6f), Vel.Size()), ThrownBy.Get());
+			ExtendKnockdown(0.8f);
+			ReceiveMeleeHit(ThrownBy.Get(), 4.f, FVector::ZeroVector);
+			ABRGameState::FX(this, EBRFX::PointsText, Wall.ImpactPoint + FVector(0.f, 0.f, 60.f), TEXT("WALL SLAM!"));
+			ABRGameState::FX(this, EBRFX::Dust, Wall.ImpactPoint);
+			Multicast_Sfx(1);
+			AddShake(0.5f);
+		}
+	}
 	if (Vel.Size() < (bDropKick ? 200.f : 450.f))
 	{
 		return;
@@ -5397,7 +5439,7 @@ void ABRCharacter::TickReachVisuals()
 			const FName ShoulderBone = i == 0 ? FName(TEXT("upperarm_l")) : FName(TEXT("upperarm_r"));
 			const FVector Shoulder = Body->GetBoneIndex(ShoulderBone) != INDEX_NONE ? Body->GetBoneLocation(ShoulderBone)
 				: GetActorLocation() + GetActorRightVector() * Side * 20.f + FVector(0.f, 0.f, 50.f);
-			if (!bHandAnchored[i])
+			if (!bHandAnchored[i] && GetWorld()->GetTimeSeconds() >= NoStickUntil[i])
 			{
 				FHitResult Touch;
 				FCollisionQueryParams TouchParams(SCENE_QUERY_STAT(BRHandStick), false, this);
@@ -6919,9 +6961,11 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			const FVector HitPoint = VictimBody && VictimBody->GetBoneIndex(HitBone) != INDEX_NONE ? VictimBody->GetBoneLocation(HitBone) : Victim->GetActorLocation();
 			const FVector Into = (HitPoint - Pos).IsNearlyZero() ? HandVel.GetSafeNormal() : (HitPoint - Pos).GetSafeNormal();
 			const float Closing = FMath::Max(0.f, FVector::DotProduct(HandVel, Into));
-			const float Effective = 0.35f * Speed + 0.65f * Closing + FMath::Max(0.f, FVector::DotProduct(GetVelocity(), Into)) * 0.3f;
-			// (a thrown punch that connects always counts for something - at least a third of full power)
-			const float Power = FMath::Clamp((Effective - SlapSpeed) / FMath::Max(100.f, HardHitSpeed - SlapSpeed), bPunching ? 0.35f : 0.f, 1.f);
+			const bool bCharge = bPunching && Now < ChargePunchUntil;
+			const bool bUppercut = bPunching && Now < UppercutUntil && bHeadHit;
+			const float Effective = 0.35f * Speed + 0.65f * Closing + FMath::Max(0.f, FVector::DotProduct(GetVelocity(), Into)) * (bCharge ? 0.75f : 0.3f);
+			// (a thrown punch that connects always counts for something - at least a third of full power; charges and uppercuts more)
+			const float Power = FMath::Clamp((Effective - SlapSpeed) / FMath::Max(100.f, HardHitSpeed - SlapSpeed), bPunching ? ((bCharge || bUppercut) ? 0.6f : 0.35f) : 0.f, 1.f);
 			const float Curve = Power * Power; // weak taps do very little, real swings do a lot
 			if (!bPunching && Effective < SlapSpeed * 0.8f)
 			{
@@ -6964,7 +7008,37 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 				KOVictim->AddKO(KO, this);
 			}
 			const FVector Dir = HandVel.GetSafeNormal();
-			const FVector Push = Dir.GetSafeNormal2D() * FMath::Lerp(90.f, bHeadHit ? 420.f : 600.f, Curve) + FVector(0.f, 0.f, 60.f + 120.f * Curve);
+			FVector Push = Dir.GetSafeNormal2D() * FMath::Lerp(90.f, bHeadHit ? 420.f : 600.f, Curve) + FVector(0.f, 0.f, 60.f + 120.f * Curve);
+			if (bUppercut)
+			{
+				Push = Dir.GetSafeNormal2D() * 150.f + FVector(0.f, 0.f, 520.f); // their head snaps UP
+				ABRGameState::FX(this, EBRFX::PointsText, HitPoint + FVector(0.f, 0.f, 50.f), TEXT("UPPERCUT!"));
+				if (KOVictim)
+				{
+					KOVictim->AddKO(KOVictim->HeadHitKO * 0.8f, this);
+					KOVictim->Multicast_BodyHit(TEXT("head"), FVector(0.f, 0.f, HitReaction * 1.8f));
+				}
+				UppercutUntil = -1.f;
+			}
+			else if (bCharge)
+			{
+				Push *= 1.6f; // running punch: sends them flying back
+				ABRGameState::FX(this, EBRFX::PointsText, HitPoint + FVector(0.f, 0.f, 50.f), TEXT("CHARGE!"));
+				ChargePunchUntil = -1.f;
+				if (KOVictim && KOVictim->KOMeter > 0.35f && Victim->GetCondition() == EPVVCondition::Normal)
+				{
+					Victim->ApplyKnockdown(this, Dir.GetSafeNormal2D() * 550.f + FVector(0.f, 0.f, 180.f));
+				}
+			}
+			// Hanging off a ledge by your hands? Punches loosen your grip (Gang Beasts: punch their hands off!).
+			if (KOVictim && (KOVictim->bHandAnchored[0] || KOVictim->bHandAnchored[1]))
+			{
+				const bool bOnHand = HitBone.ToString().StartsWith(TEXT("hand")) || HitBone.ToString().Contains(TEXT("lowerarm"));
+				const uint8 Mask = bOnHand ? (HitBone.ToString().EndsWith(TEXT("_l")) ? 1 : 2) : 0; // a fist on the hand knocks THAT hand loose
+				KOVictim->KnockHandsLoose(Mask, (bOnHand ? 0.4f : 0.2f) + 0.25f * Curve);
+				KOVictim->LastTosser = this;
+				KOVictim->LastTossTime = Now;
+			}
 			Victim->ReceiveMeleeHit(this, Damage, Push);
 			if (KOVictim)
 			{
@@ -7897,6 +7971,89 @@ void ABRCharacter::TickHandHang(float DeltaSeconds)
 			Notify(LOCTEXT("GripGone", "Your grip gave out!"));
 		}
 	}
+}
+
+void ABRCharacter::TickTrip()
+{
+	// Gang Beasts: run full tilt into something low (a crate, a sack, a low wall, a body on the floor) and you go over it.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextTripCheck || Now < TripCooldownUntil || Now < BalanceGraceUntil)
+	{
+		return;
+	}
+	NextTripCheck = Now + 0.1f;
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	const FVector Vel = GetVelocity() * FVector(1.f, 1.f, 0.f);
+	if (!Move || !Move->IsMovingOnGround() || Vel.Size() < 420.f || GetCondition() != EPVVCondition::Normal || GetCurrentBoat() || GetCarrier()
+		|| bClimbing || bInBox || bHiddenInSpot || GetCarriedCharacter())
+	{
+		return;
+	}
+	const FVector Dir = Vel.GetSafeNormal();
+	const float Feet = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const FVector Base(GetActorLocation().X, GetActorLocation().Y, 0.f);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRTrip), false, this);
+	FHitResult Low;
+	// Something at shin height right in front of you...
+	const FVector ShinFrom = Base + FVector(0.f, 0.f, Feet + 38.f);
+	if (!GetWorld()->LineTraceSingleByChannel(Low, ShinFrom, ShinFrom + Dir * 75.f, ECC_Visibility, Params) || FMath::Abs(Low.ImpactNormal.Z) > 0.35f)
+	{
+		return;
+	}
+	if (Cast<APawn>(Low.GetActor()) && !(Cast<APVVCharacter>(Low.GetActor()) && Cast<APVVCharacter>(Low.GetActor())->GetCondition() == EPVVCondition::KnockedDown))
+	{
+		return; // (people standing up are a bump, not a trip)
+	}
+	// ...and nothing at hip height (it's LOW, so you go over it instead of into it).
+	FHitResult High;
+	const FVector HipFrom = Base + FVector(0.f, 0.f, Feet + 85.f);
+	if (GetWorld()->LineTraceSingleByChannel(High, HipFrom, HipFrom + Dir * 95.f, ECC_Visibility, Params))
+	{
+		return;
+	}
+	TripCooldownUntil = Now + 3.f;
+	ApplyKnockdown(nullptr, Dir * FMath::Min(Vel.Size(), 700.f) * 0.8f + FVector(0.f, 0.f, 260.f));
+	if (GetCondition() == EPVVCondition::KnockedDown && !bKnockedOut)
+	{
+		SetKnockdownTimeLeft(1.1f); // up again quickly
+	}
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 110.f), TEXT("TRIP!"));
+}
+
+void ABRCharacter::KnockHandsLoose(uint8 Mask, float GripLoss)
+{
+	// Server + the owner's machine (hand holds are worked out on both).
+	const float Now = GetWorld()->GetTimeSeconds();
+	HangGrip -= GripLoss;
+	if (HangGrip <= 0.f)
+	{
+		Mask = 3;
+		HangGrip = 0.f;
+	}
+	for (int32 h = 0; h < 2; ++h)
+	{
+		if (Mask & (1 << h))
+		{
+			bHandAnchored[h] = false;
+			NoStickUntil[h] = Now + 0.7f; // takes a moment to get a hold again
+		}
+	}
+	if (HasAuthority())
+	{
+		if (Mask == 3)
+		{
+			Notify(LOCTEXT("PunchedLoose", "They punched you off!"));
+		}
+		if (!IsLocallyControlled() && Cast<APlayerController>(GetController()))
+		{
+			Client_KnockHandsLoose(Mask, GripLoss);
+		}
+	}
+}
+
+void ABRCharacter::Client_KnockHandsLoose_Implementation(uint8 Mask, float GripLoss)
+{
+	KnockHandsLoose(Mask, GripLoss);
 }
 
 void ABRCharacter::Server_SetHangPull_Implementation(bool bHeld)

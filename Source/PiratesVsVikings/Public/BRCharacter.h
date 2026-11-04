@@ -1059,6 +1059,13 @@ private:
 	int32 NextTrapType = 0;
 	int32 CameraViewIndex = -1;
 	int32 AppliedGymSpeed = 0;
+	/** Gang Beasts extras: sprint-punch charge, crouch-punch uppercut, wall slams, tripping over low stuff. */
+	float ChargePunchUntil = -1.f;
+	float UppercutUntil = -1.f;
+	bool bWallSlammed = false;
+	float NextTripCheck = 0.f;
+	float TripCooldownUntil = 0.f;
+	void TickTrip();
 	int32 CameraViewCount = 0;
 	TWeakObjectPtr<AActor> ViewingCamera;
 	FVector CameraViewFrom = FVector::ZeroVector;
@@ -1276,6 +1283,10 @@ private:
 	void TickHandHang(float DeltaSeconds);
 	UFUNCTION(Server, Reliable) void Server_HangJump();
 	UFUNCTION(Server, Reliable) void Server_SetHangPull(bool bHeld);
+	/** Punched while hanging: lose grip, and Mask's hands (1 = left, 2 = right) come off. Server calls it; it reaches the owner too. */
+	void KnockHandsLoose(uint8 Mask, float GripLoss);
+	UFUNCTION(Client, Reliable) void Client_KnockHandsLoose(uint8 Mask, float GripLoss);
+	float NoStickUntil[2] = { 0.f, 0.f };
 	/** Holding SPACE while your hands are stuck above you: heave yourself up (owner + server copy). */
 	bool bHangPullHeld = false;
 	/** Upward push of a jump while hanging from your hands (cm/s). */

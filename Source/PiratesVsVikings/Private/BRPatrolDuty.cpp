@@ -270,6 +270,15 @@ void ABRCharacter::MakeSparringPartner(ABRCharacter* Opponent, int32 Level)
 	FightStyle = FMath::RandRange(0, 1); // a brawler or a grappler - never a coward
 	FightToughness *= 1.f + 0.2f * FMath::Min(Level, 6);
 	SetHat(EBRHat::PatrolCap);
+	// Dressed like Border Patrol (a cadet in uniform), not a local.
+	SetNPCPoncho(false);
+	FBRLook Uniform = Look;
+	Uniform.ShirtStyle = 0;
+	Uniform.PantsStyle = 0;
+	Uniform.ShirtColor = 0.36f; // olive green
+	Uniform.PantsColor = 0.62f; // dark navy
+	Uniform.Glasses = 0;
+	SetLook(Uniform);
 	StartBrawling(Opponent, 90.f, FMath::Min(0.7f + 0.05f * Level, 0.95f));
 }
 
