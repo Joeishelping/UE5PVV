@@ -16,8 +16,8 @@ class UPointLightComponent;
  * Border Patrol: the seismic sensors tell them it's coming. They break ground at the exit pit (USA side) and dig their own
  * section after section towards the Mexicans - to meet them in the middle. Once the two meet (or the Runners get all the way
  * through) the tunnel is COMPLETE, and only then can Border Patrol fill it: standing inside, facing the next open section,
- * hold E ("FILL WITH DIRT"). They can fill in either direction from anywhere - from the middle out to the USA end and back
- * to the Mexican entrance. Filling an end section seals that pit. When every section is filled, the tunnel is gone.
+ * hold E ("FILL WITH DIRT") - from inside OR standing at either opening. The dirt starts in the middle and grows toward
+ * both ends at once, so nobody gets trapped between two walls of dirt. Filling an end section seals that pit. When every section is filled, the tunnel is gone.
  * Runners with a shovel can dig a filled section back out.
  *
  * The arena cuts the holes for the two pits in its sand floor (see GetHoleRects); lids cover them while they're closed.
@@ -54,7 +54,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float DigSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float BreakGroundSeconds = 4.f;
 	/** Seconds of holding E for Border Patrol to fill one section with dirt. */
-	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float FillSeconds = 2.f;
+	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float FillSeconds = 3.f;
 	/** Once the Runners' corridor is this long, seismic sensors hear the digging (the river is in the way). */
 	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float DetectAfter = 2200.f;
 
@@ -104,6 +104,11 @@ protected:
 	int32 SectionAt(float LocalX) const;
 	bool IsInside(const FVector& Local) const;
 	void FillSection(int32 Section, int32 FromSide, APVVCharacter* By);
+	/** Border Patrol fill: the dirt plug starts in the MIDDLE and grows one section toward BOTH ends each time,
+	 *  so the open part always leads out to a pit (nobody gets sealed in between two dirt walls). */
+	void FillStep(APVVCharacter* By, int32 FillerSide);
+	/** Lowest / highest filled section (-1 if none). */
+	void GetPlug(int32& OutLo, int32& OutHi) const;
 	void ShoveOutOf(int32 Section, int32 Dir, APVVCharacter* Except);
 	void ResetTunnel();
 	void SetPiece(UStaticMeshComponent* M, bool bOn);

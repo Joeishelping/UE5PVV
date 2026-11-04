@@ -905,7 +905,7 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 4. If you dig all the way, the last dig breaks into a ramp on the USA side past the Wall. Walk up and out.
 - Teammates can walk through without a shovel.
 - While you're down there, Border Patrol can't spot you.
-- If Border Patrol fill a section with dirt, you can **dig it back out** (face the dirt, hold E). That uses up shovel too.
+- If Border Patrol fill a section with dirt, you can **dig it back out** from the edge of the plug (face the dirt, hold E). That uses up shovel too.
 
 **Border Patrol: digging to meet them**
 1. When the Runners' digging passes under the river, the seismic sensors go off: an **alarm**, a **map ping**, and a pile of **fresh dirt** above the end of their tunnel.
@@ -913,10 +913,11 @@ There are two tunnel spots on the Mexican side, a little past the line, each wit
 3. Walk down and **hold E at the dirt** to dig towards Mexico, section by section, to meet them.
 4. When the two diggings meet (or the Runners dig all the way through), the tunnel is **complete**. Everyone gets an alarm, and you'll probably have a fight underground.
 
-**Border Patrol: filling it in** (only a complete tunnel, only from inside it)
-- Stand inside the tunnel, face the next section, and **hold E: "FILL WITH DIRT"** (2 s). That section fills up with dirt.
-- You can fill **in either direction** from wherever you are: from the middle out to the USA end, and back the other way to the Mexican entrance.
-- Filling the end section on either side **seals that pit**, so nobody gets in or out that way.
+**Border Patrol: filling it in** (only a complete tunnel)
+- Stand at **either opening** (the pit or ramp on the Mexican or USA side), or anywhere inside, and **hold E: "FILL WITH DIRT"** (3 s).
+- The first load of dirt goes in the **middle** of the tunnel. After that, every fill grows the dirt plug **one section toward both ends at once**. Keep filling from the opening and you never have to go down there.
+- Because the plug grows outward from the middle, the open part always leads to an exit. Nobody gets trapped between two walls of dirt.
+- When the plug reaches an end it **seals that pit**. When every section is full, the tunnel is gone.
 - Anyone standing in a section you fill gets shoved out of it and knocked down.
 - When **every** section is filled, the tunnel is gone and you get the seizure points. That spot can then be dug again from scratch.
 

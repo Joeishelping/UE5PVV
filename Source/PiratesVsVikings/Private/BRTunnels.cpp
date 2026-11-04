@@ -317,12 +317,14 @@ ABRDigTunnel::EJob ABRDigTunnel::JobFor(const APVVCharacter* C, int32* OutSectio
 			}
 			return EJob::None;
 		}
-		// Complete tunnel: fill the next open section in front of you with dirt.
-		if (bInside && bNearNext && IsOpen(Next))
+		// Complete tunnel: fill it with dirt - from inside, or standing at either opening (no need to go down there).
+		const bool bAtMexMouth = L.X > -RampRun - 400.f && L.X < 300.f && FMath::Abs(L.Y) < HoleHalfWidth + 350.f;
+		const bool bAtUSAMouth = L.X > N * SectionLength - 300.f && L.X < N * SectionLength + RampRun + 400.f && FMath::Abs(L.Y) < HoleHalfWidth + 350.f;
+		if ((bInside || bAtMexMouth || bAtUSAMouth) && !AllFilled())
 		{
 			if (OutSection)
 			{
-				*OutSection = Next;
+				*OutSection = Here;
 			}
 			return EJob::Fill;
 		}
@@ -366,7 +368,7 @@ FText ABRDigTunnel::GetInteractPrompt_Implementation(APVVCharacter* Interactor) 
 		{
 			Open += IsOpen(i) ? 1 : 0;
 		}
-		return FText::Format(LOCTEXT("TFill", "FILL WITH DIRT (hold) - {0} sections left"), Open);
+		return FText::Format(LOCTEXT("TFill", "FILL WITH DIRT (hold) - fills from the middle out toward both ends, {0} sections left"), Open);
 	}
 	default: return FText::GetEmpty();
 	}
@@ -454,10 +456,9 @@ void ABRDigTunnel::OnInteract_Implementation(APVVCharacter* Interactor)
 		break;
 
 	case EJob::Fill:
-		if (Section != INDEX_NONE)
 		{
 			const FVector L = GetActorTransform().InverseTransformPositionNoScale(Interactor->GetActorLocation());
-			FillSection(Section, SectionAt(L.X) < Section ? -1 : 1, Interactor);
+			FillStep(Interactor, L.X < NumSections() * SectionLength * 0.5f ? -1 : 1);
 		}
 		break;
 
@@ -528,6 +529,52 @@ void ABRDigTunnel::ShoveOutOf(int32 Section, int32 Dir, APVVCharacter* Except)
 				BRC->Notify(LOCTEXT("TBuried", "Border Patrol are filling the tunnel in on you!"));
 			}
 		}
+	}
+}
+
+void ABRDigTunnel::GetPlug(int32& OutLo, int32& OutHi) const
+{
+	OutLo = -1;
+	OutHi = -1;
+	for (int32 i = 0; i < NumSections(); ++i)
+	{
+		if (IsFilled(i))
+		{
+			OutLo = OutLo < 0 ? i : OutLo;
+			OutHi = i;
+		}
+	}
+}
+
+void ABRDigTunnel::FillStep(APVVCharacter* By, int32 FillerSide)
+{
+	const int32 N = NumSections();
+	if (N <= 0)
+	{
+		return;
+	}
+	int32 Lo, Hi;
+	GetPlug(Lo, Hi);
+	if (Lo < 0)
+	{
+		// First load goes in the middle; anyone standing there is shoved toward the filler's end (an exit).
+		FillSection(N / 2, -FillerSide, By);
+		return;
+	}
+	// Grow the plug one section toward EACH end. People in a section being filled are pushed outward, toward the exits.
+	const int32 Down = Lo - 1;
+	const int32 Up = Hi + 1;
+	if (Down >= 0)
+	{
+		FillSection(Down, 1, By); // shove toward Mexico
+		if (FilledMask == 0)
+		{
+			return; // that finished it (tunnel reset)
+		}
+	}
+	if (Up < N)
+	{
+		FillSection(Up, -1, By); // shove toward the USA
 	}
 }
 
