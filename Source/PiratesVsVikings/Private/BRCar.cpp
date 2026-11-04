@@ -1,6 +1,7 @@
 #include "BRCar.h"
 #include "BRPolice.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
 #include "BRAudio.h"
 #include "BRCharacter.h"
 #include "BRDesertArena.h"
@@ -183,6 +184,16 @@ void ABRCar::BeginPlay()
 void ABRCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (IsLocallyControlled() && CameraBoom)
+	{
+		// Aiming out of the window: pull the camera in over the cab so you can line up a shot.
+		const float Default = 1050.f; // (set in BeginPlay)
+		CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, bDriveAiming ? Default * 0.55f : Default, DeltaSeconds, 6.f);
+		if (bDriveAiming && !Cast<ABRCharacter>(GetDriver()))
+		{
+			bDriveAiming = false;
+		}
+	}
 	if (HasAuthority() && !bInfiniteFuel && GetDriver() && Fuel > 0.f)
 	{
 		Fuel = FMath::Max(0.f, Fuel - FMath::Abs(ThrottleInput) * FuelPerSecond * DeltaSeconds);
@@ -718,6 +729,13 @@ void ABRCar::EnsureDefaultInput()
 	PVVInput::Map(BoatMappingContext, RadioOffAction, EKeys::Gamepad_DPad_Down);
 	PVVInput::Map(BoatMappingContext, HornAction, EKeys::H);
 	PVVInput::Map(BoatMappingContext, HornAction, EKeys::Gamepad_LeftThumbstick);
+	// Shooting out of the window while you drive: hold right mouse to aim, left click to fire.
+	DriveAimAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	DriveFireAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	PVVInput::Map(BoatMappingContext, DriveAimAction, EKeys::RightMouseButton);
+	PVVInput::Map(BoatMappingContext, DriveAimAction, EKeys::Gamepad_LeftTrigger);
+	PVVInput::Map(BoatMappingContext, DriveFireAction, EKeys::LeftMouseButton);
+	PVVInput::Map(BoatMappingContext, DriveFireAction, EKeys::Gamepad_RightTrigger);
 }
 
 void ABRCar::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -732,6 +750,50 @@ void ABRCar::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	if (RadioPrevAction) Input->BindAction(RadioPrevAction, ETriggerEvent::Started, this, &ABRCar::Input_RadioPrev);
 	if (RadioOffAction) Input->BindAction(RadioOffAction, ETriggerEvent::Started, this, &ABRCar::Input_RadioOff);
 	if (HornAction) Input->BindAction(HornAction, ETriggerEvent::Started, this, &ABRCar::Input_Horn);
+	if (DriveAimAction)
+	{
+		Input->BindAction(DriveAimAction, ETriggerEvent::Started, this, &ABRCar::Input_DriveAimStart);
+		Input->BindAction(DriveAimAction, ETriggerEvent::Completed, this, &ABRCar::Input_DriveAimStop);
+	}
+	if (DriveFireAction) Input->BindAction(DriveFireAction, ETriggerEvent::Started, this, &ABRCar::Input_DriveFire);
+}
+
+void ABRCar::Input_DriveAimStart()
+{
+	const ABRCharacter* Driver = Cast<ABRCharacter>(GetDriver());
+	bDriveAiming = Driver && Driver->CanShootFromVehicle();
+}
+
+void ABRCar::Input_DriveAimStop()
+{
+	bDriveAiming = false;
+}
+
+void ABRCar::Input_DriveFire()
+{
+	if (!bDriveAiming || !Camera)
+	{
+		return;
+	}
+	// Whatever's under the crosshair (not your own car).
+	const FVector From = Camera->GetComponentLocation();
+	const FVector To = From + Camera->GetForwardVector() * 9000.f;
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRDriveAim), false, this);
+	if (APVVCharacter* Driver = GetDriver())
+	{
+		Params.AddIgnoredActor(Driver);
+	}
+	const FVector AimPoint = GetWorld()->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Params) ? FVector(Hit.ImpactPoint) : To;
+	Server_DriverFire(AimPoint);
+}
+
+void ABRCar::Server_DriverFire_Implementation(FVector_NetQuantize AimPoint)
+{
+	if (ABRCharacter* Driver = Cast<ABRCharacter>(GetDriver()))
+	{
+		Driver->FireFromVehicle(AimPoint);
+	}
 }
 
 void ABRCar::Input_RadioNext() { Server_ChangeStation(1, false); }

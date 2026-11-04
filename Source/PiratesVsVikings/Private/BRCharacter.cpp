@@ -2192,6 +2192,32 @@ void ABRCharacter::Input_FireIfAiming()
 	AddControllerYawInput(FMath::FRandRange(-0.3f, 0.3f));
 }
 
+void ABRCharacter::FireFromVehicle(const FVector& AimPoint)
+{
+	if (!HasAuthority() || !CanShootFromVehicle())
+	{
+		return;
+	}
+	if (!bWeaponDrawn)
+	{
+		bWeaponDrawn = true;
+		bLethalMode = IsRunner() || bLethalMode;
+		ForceNetUpdate();
+	}
+	if (GetAmmo() <= 0)
+	{
+		Server_Reload_Implementation(); // reload one-handed at the wheel
+		return;
+	}
+	// Out of the window: from your head toward what the crosshair is on.
+	const FVector Start = GetActorLocation() + FVector(0.f, 0.f, 70.f);
+	const FVector Dir = (AimPoint - Start).GetSafeNormal();
+	if (!Dir.IsNearlyZero())
+	{
+		Server_Fire_Implementation(Start, FMath::VRandCone(Dir, FMath::DegreesToRadians(AimSpreadDegrees * 1.8f))); // shooting while driving is wild
+	}
+}
+
 void ABRCharacter::Input_Reload()
 {
 	if (!HasWeapon())

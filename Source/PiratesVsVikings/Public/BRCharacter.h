@@ -207,6 +207,10 @@ public:
 	/** Server: fire a shot at Target (duel pistolero) - visuals only, the duel decides who dies. */
 	void DuelShoot(ABRCharacter* Target, bool bHit);
 	void SetWeaponDrawn(bool bDrawn) { bWeaponDrawn = bDrawn; }
+	/** Driving: can you shoot out the window (you have a gun)? */
+	bool CanShootFromVehicle() const { return OwnsWeapon() && GetCondition() == EPVVCondition::Normal; }
+	/** Server: fire out of the vehicle's window toward AimPoint (the driver can't use the normal on-foot controls). */
+	void FireFromVehicle(const FVector& AimPoint);
 	void FillRunnerAmmo() { AmmoRunnerGun = 6; }
 	/** Server (NPC): become a sparring recruit and square up to Opponent. Level = wins in a row (tougher each time). */
 	void MakeSparringPartner(ABRCharacter* Opponent, int32 Level);

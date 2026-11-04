@@ -1191,6 +1191,19 @@ Nothing to plug in. This only happens on the built-in test map.
 - **Scoring:** every rusher who reaches the Safe Zone scores for the Runners.
 - **Tuning:** **BP_BRGameMode → BR | Border Rush** has *Border Rush Every Seconds*, *Border Rush Size* (set it to 0 to switch rushes off) and *Border Rush Warning*.
 
+## Part 15ae: Shooting from vehicles
+
+- **Driving:** if you have a gun (Border Patrol always do; Runners need the Illegal Gun):
+  - **Hold right mouse** to aim out of the window. The camera pulls in and a crosshair appears.
+  - **Left click** to shoot at whatever's under the crosshair.
+  - Shooting while you drive is less accurate.
+  - When you're empty, the next click reloads.
+- **Passengers:** same as on foot.
+  1. Press **X** to get your gun out.
+  2. **Hold right mouse** to aim.
+  3. **Left click** to shoot.
+- The bullets never hit your own vehicle.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

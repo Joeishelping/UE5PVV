@@ -102,6 +102,17 @@ protected:
 	UPROPERTY() TObjectPtr<UInputAction> RadioPrevAction;
 	UPROPERTY() TObjectPtr<UInputAction> RadioOffAction;
 	UPROPERTY() TObjectPtr<UInputAction> HornAction;
+	UPROPERTY() TObjectPtr<UInputAction> DriveAimAction;
+	UPROPERTY() TObjectPtr<UInputAction> DriveFireAction;
+public:
+	/** Driver holding right mouse to aim a gun out the window (local only). */
+	bool IsDriveAiming() const { return bDriveAiming; }
+protected:
+	bool bDriveAiming = false;
+	void Input_DriveAimStart();
+	void Input_DriveAimStop();
+	void Input_DriveFire();
+	UFUNCTION(Server, Reliable) void Server_DriverFire(FVector_NetQuantize AimPoint);
 
 private:
 	UPROPERTY(ReplicatedUsing = OnRep_Radio) int32 RadioStation = -1;

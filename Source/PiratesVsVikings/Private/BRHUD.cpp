@@ -396,6 +396,24 @@ void ABRHUD::DrawHUD()
 			Centered(FString::Printf(TEXT("RADIO: %s"), *Car->GetStationName()), SY - 125.f, FLinearColor(0.6f, 0.9f, 1.f), Big, 1.1f);
 		}
 		Centered(Info, SY - 60.f, Yellow, Big, 1.2f);
+		// Gun out the window.
+		if (const ABRCharacter* Driver = Cast<ABRCharacter>(Vehicle->GetDriver()); Driver && Driver->CanShootFromVehicle())
+		{
+			const ABRCar* ShootCar = Cast<ABRCar>(Vehicle);
+			if (ShootCar && ShootCar->IsDriveAiming())
+			{
+				const float CX = SX * 0.5f, CY = SY * 0.5f;
+				DrawRect(White, CX - 12.f, CY - 1.f, 8.f, 2.f);
+				DrawRect(White, CX + 4.f, CY - 1.f, 8.f, 2.f);
+				DrawRect(White, CX - 1.f, CY - 12.f, 2.f, 8.f);
+				DrawRect(White, CX - 1.f, CY + 4.f, 2.f, 8.f);
+				Centered(FString::Printf(TEXT("%s   %d / %d   (left click: shoot)"), *Driver->GetWeaponName(), Driver->GetAmmo(), Driver->GetMagSize()), SY - 160.f, Red, Big, 1.1f);
+			}
+			else
+			{
+				Centered(TEXT("Hold RIGHT MOUSE to aim your gun out the window"), SY - 160.f, FLinearColor(0.8f, 0.8f, 0.8f), Small, 1.1f);
+			}
+		}
 		return;
 	}
 
