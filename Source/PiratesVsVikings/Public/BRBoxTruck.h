@@ -48,7 +48,7 @@ public:
 	/** Server: NPC traffic - fill the back with crates, maybe smuggling packages and stowaways. */
 	void LoadNPCCargo();
 	/** Server: spawn a cargo prop (shape 0 crate / 5 package) at a world spot. */
-	ABRPhysicsProp* SpawnCargo(const FVector& At, bool bPackage, class ABRPlayerState* Owner);
+	ABRPhysicsProp* SpawnCargo(const FVector& At, bool bPackage, class ABRPlayerState* CargoOwner);
 	/** The client's coyote owns a box truck nearby with its doors open: climb in the back. */
 	static ABRBoxTruck* FindHoldForClient(const ABRCharacter* Client);
 

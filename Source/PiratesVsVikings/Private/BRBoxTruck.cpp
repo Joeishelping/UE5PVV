@@ -266,7 +266,7 @@ void ABRBoxTruck::TickDoors(float DeltaSeconds)
 // ---------------------------------------------------------------------------------------------
 // Cargo + stowaways
 
-ABRPhysicsProp* ABRBoxTruck::SpawnCargo(const FVector& At, bool bPackage, ABRPlayerState* Owner)
+ABRPhysicsProp* ABRBoxTruck::SpawnCargo(const FVector& At, bool bPackage, ABRPlayerState* CargoOwner)
 {
 	const FTransform T(FRotator(0.f, FMath::FRandRange(-20.f, 20.f), 0.f), At);
 	ABRPhysicsProp* Prop = GetWorld()->SpawnActorDeferred<ABRPhysicsProp>(ABRPhysicsProp::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
@@ -276,7 +276,7 @@ ABRPhysicsProp* ABRBoxTruck::SpawnCargo(const FVector& At, bool bPackage, ABRPla
 	}
 	Prop->PropShape = bPackage ? 5 : 0;
 	Prop->bContraband = bPackage;
-	Prop->ContrabandOwner = Owner;
+	Prop->ContrabandOwner = CargoOwner;
 	Prop->Color = bPackage ? FLinearColor(0.55f, 0.4f, 0.2f) : FLinearColor(0.6f, 0.48f, 0.3f);
 	Prop->MassKg = bPackage ? 12.f : 25.f;
 	Prop->FinishSpawning(T);
