@@ -7786,14 +7786,17 @@ void ABRCharacter::Wound(float Amount, APVVCharacter* By, const FVector& At, con
 	}
 	Health = FMath::Max(0.f, Health - Amount);
 	LastWoundTime = GetWorld()->GetTimeSeconds();
-	// Blood: a spurt where it went in, and a splash on the ground under them.
-	ABRGameState::FX(this, EBRFX::Blood, At);
-	FHitResult Floor;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRBloodFloor), false, this);
-	if (GetWorld()->LineTraceSingleByChannel(Floor, GetActorLocation(), GetActorLocation() - FVector(0.f, 0.f, 400.f), ECC_Visibility, Params))
+	// Blood: spurts where it went in (and out the back for a gunshot)...
+	ABRGameState::FXScaled(this, EBRFX::Blood, At, 1.5f);
+	ABRGameState::FXScaled(this, EBRFX::Blood, At + Dir.GetSafeNormal() * 25.f, 1.2f);
+	if (bGun)
 	{
-		ABRGameState::FX(this, EBRFX::BloodPool, Floor.ImpactPoint + Dir.GetSafeNormal2D() * 40.f);
+		ABRGameState::FXScaled(this, EBRFX::Blood, At + Dir.GetSafeNormal() * 60.f, 1.f);
 	}
+	// ...and a pool under wherever the body ends up (after it's been knocked about).
+	const float PoolSize = 0.8f + Amount / 50.f;
+	FTimerHandle PoolTimer;
+	GetWorldTimerManager().SetTimer(PoolTimer, FTimerDelegate::CreateWeakLambda(this, [this, PoolSize]() { SpillBlood(PoolSize); }), 0.9f, false);
 	Multicast_BodyHit(bGun ? FName(TEXT("spine_03")) : FName(TEXT("spine_02")), Dir.GetSafeNormal() * HitReaction * (bGun ? 1.4f : 0.8f));
 	ForceNetUpdate();
 	if (Health <= 0.f)
@@ -7835,7 +7838,15 @@ void ABRCharacter::Die(APVVCharacter* By, bool bGun)
 		ApplyKnockdown(By, Push);
 	}
 	SetKnockdownTimeLeft(100000.f);
-	ABRGameState::FX(this, EBRFX::BloodPool, GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 5.f));
+	// Bleeding out: the pool spreads under the body once it's landed, and keeps growing for a bit.
+	const float Sizes[] = { 1.6f, 2.2f, 2.8f, 3.3f };
+	const float Delays[] = { 1.2f, 2.8f, 5.f, 8.f };
+	for (int32 i = 0; i < 4; ++i)
+	{
+		FTimerHandle PoolTimer;
+		const float PoolSize = Sizes[i];
+		GetWorldTimerManager().SetTimer(PoolTimer, FTimerDelegate::CreateWeakLambda(this, [this, PoolSize]() { if (bDead) { SpillBlood(PoolSize, 1); } }), Delays[i], false);
+	}
 	ForceNetUpdate();
 	ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>();
 	if (GM)
@@ -7870,6 +7881,28 @@ void ABRCharacter::Revive()
 	ForceNetUpdate();
 }
 
+void ABRCharacter::SpillBlood(float Scale, int32 Spurts)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// Where the body is NOW (the ragdoll's hips if they're down), straight down to the floor.
+	const FVector Body = GetBodyLocation();
+	FHitResult Floor;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRBloodPool), false, this);
+	if (!GetWorld()->LineTraceSingleByChannel(Floor, Body + FVector(0.f, 0.f, 30.f), Body - FVector(0.f, 0.f, 400.f), ECC_Visibility, Params))
+	{
+		return;
+	}
+	const FVector Spot = Floor.ImpactPoint + FVector(FMath::FRandRange(-15.f, 15.f), FMath::FRandRange(-15.f, 15.f), 0.f);
+	ABRGameState::FXScaled(this, EBRFX::BloodPool, Spot, Scale);
+	for (int32 i = 0; i < Spurts; ++i)
+	{
+		ABRGameState::FXScaled(this, EBRFX::Blood, Body + FVector(FMath::FRandRange(-20.f, 20.f), FMath::FRandRange(-20.f, 20.f), 10.f), 1.2f);
+	}
+}
+
 void ABRCharacter::TickWounds(float DeltaSeconds)
 {
 	if (bDead || Health >= 100.f)
@@ -7884,9 +7917,11 @@ void ABRCharacter::TickWounds(float DeltaSeconds)
 		NextBleedTime = Now + FMath::FRandRange(1.2f, 2.2f);
 		FHitResult Floor;
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRBleed), false, this);
-		if (GetWorld()->LineTraceSingleByChannel(Floor, GetActorLocation(), GetActorLocation() - FVector(0.f, 0.f, 400.f), ECC_Visibility, Params))
+		const FVector Body = GetBodyLocation();
+		if (GetWorld()->LineTraceSingleByChannel(Floor, Body, Body - FVector(0.f, 0.f, 400.f), ECC_Visibility, Params))
 		{
 			ABRGameState::FX(this, EBRFX::Blood, Floor.ImpactPoint + FVector(0.f, 0.f, 10.f)); // drip, drip
+			ABRGameState::FXScaled(this, EBRFX::BloodPool, Floor.ImpactPoint, FMath::FRandRange(0.25f, 0.45f)); // a trail of drops
 		}
 	}
 	// Stopped bleeding: heal slowly.

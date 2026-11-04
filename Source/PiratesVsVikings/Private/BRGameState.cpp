@@ -138,6 +138,25 @@ void ABRGameState::Multicast_Highlight_Implementation(ABRCharacter* Star, float 
 	}
 }
 
+void ABRGameState::FXScaled(const UObject* Context, EBRFX Kind, const FVector& Location, float Scale)
+{
+	UWorld* World = Context ? Context->GetWorld() : nullptr;
+	ABRGameState* GS = World ? World->GetGameState<ABRGameState>() : nullptr;
+	if (GS && GS->HasAuthority())
+	{
+		GS->Multicast_FXScaled(Kind, Location, Scale);
+	}
+}
+
+void ABRGameState::Multicast_FXScaled_Implementation(EBRFX Kind, FVector_NetQuantize Location, float Scale)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	SpawnLocalFX(this, Kind, Location, FString(), Scale);
+}
+
 void ABRGameState::Multicast_FX_Implementation(EBRFX Kind, FVector_NetQuantize Location, const FString& Text)
 {
 	if (GetNetMode() == NM_DedicatedServer)

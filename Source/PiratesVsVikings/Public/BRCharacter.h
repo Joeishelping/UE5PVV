@@ -74,6 +74,8 @@ public:
 	/** Server: stab / bullet wound at this spot. Bleeds, and kills at 0. */
 	void Wound(float Amount, APVVCharacter* By, const FVector& At, const FVector& Dir, bool bGun);
 	void Die(APVVCharacter* By, bool bGun);
+	/** Server: a pool of blood under wherever the BODY is now (ragdolls fly - the pool follows the body, not the hit). */
+	void SpillBlood(float Scale, int32 Spurts = 2);
 	/** Server: back to full health and alive (respawning). */
 	void Revive();
 	virtual bool IsDead() const override { return bDead; }
