@@ -592,6 +592,15 @@ void ABRHUD::DrawHUD()
 		Bar(SX * 0.5f - 140.f, SY - 46.f, 280.f, 9.f, Me->SprintStamina, StamColor);
 	}
 
+	// --- Shovel wear (breaks after a few digs - buy a new one)
+	if (const ABRPlayerState* ShovelPS = Me->GetBRPlayerState(); ShovelPS && ShovelPS->HasItem(EBRItem::Shovel))
+	{
+		const float Left = FMath::Clamp(1.f - ShovelPS->ShovelWear, 0.f, 1.f);
+		const int32 DigsLeft = FMath::Max(1, FMath::RoundToInt(Left * ABRPlayerState::ShovelDigs));
+		Centered(FString::Printf(TEXT("SHOVEL  (%d dig%s left)"), DigsLeft, DigsLeft == 1 ? TEXT("") : TEXT("s")), SY - 88.f, Left < 0.34f ? Red : Yellow, Small, 1.f);
+		Bar(SX * 0.5f - 90.f, SY - 66.f, 180.f, 8.f, Left, Left < 0.34f ? FLinearColor(1.f, 0.35f, 0.2f) : FLinearColor(0.75f, 0.55f, 0.3f));
+	}
+
 	// --- Cantina: drinking contest + tipsy
 	if (Me->bChugging)
 	{

@@ -36,6 +36,13 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 WireCutterCharges = 0;
 
+	/** How worn out your shovel is (0 = new, 1 = broken). Each dig wears it; it breaks after ShovelDigs digs. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	float ShovelWear = 0.f;
+	static constexpr int32 ShovelDigs = 6;
+	/** Server: one dig's worth of wear. Returns true if the shovel just broke (it's removed from your inventory). */
+	bool WearShovel();
+
 	/** Seconds left in the holding pen (0 = free). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 SentenceSeconds = 0;

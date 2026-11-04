@@ -11,6 +11,7 @@ void ABRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPlayerState, bIsAggressor);
 	DOREPLIFETIME(ABRPlayerState, bReachedSafety);
 	DOREPLIFETIME(ABRPlayerState, WireCutterCharges);
+	DOREPLIFETIME(ABRPlayerState, ShovelWear);
 	DOREPLIFETIME(ABRPlayerState, SentenceSeconds);
 	DOREPLIFETIME(ABRPlayerState, AssignedJob);
 	DOREPLIFETIME(ABRPlayerState, JobReadyAt);
@@ -72,6 +73,10 @@ bool ABRPlayerState::RemoveItemAt(int32 Index, EBRItem& OutItem)
 	{
 		WireCutterCharges = 0;
 	}
+	if (OutItem == EBRItem::Shovel && !HasItem(EBRItem::Shovel))
+	{
+		ShovelWear = 0.f;
+	}
 	return true;
 }
 
@@ -81,4 +86,22 @@ void ABRPlayerState::RemoveIllegalItems()
 	{
 		Inventory.RemoveAll([](EBRItem Item) { return BR::IsIllegal(Item); });
 	}
+}
+
+bool ABRPlayerState::WearShovel()
+{
+	if (!HasAuthority() || !HasItem(EBRItem::Shovel))
+	{
+		return false;
+	}
+	ShovelWear += 1.f / ShovelDigs;
+	if (ShovelWear < 0.999f)
+	{
+		ForceNetUpdate();
+		return false;
+	}
+	ShovelWear = 0.f;
+	RemoveItem(EBRItem::Shovel);
+	ForceNetUpdate();
+	return true;
 }

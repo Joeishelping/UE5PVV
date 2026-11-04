@@ -1081,7 +1081,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	}
 	// Spike fences along both sides of the road from the border fence to the checkpoint: stay on the road
 	// (the legal way, through the checkpoint) or cut through with wire cutters to get at the river / Wall.
-	for (float X = FenceX + 450.f; X <= WallX - 700.f; X += 400.f)
+	for (float X = FenceX + 220.f; X <= WallX - 700.f; X += 400.f) // first panel butts up against the border fence (no gap)
 	{
 		for (const float Side : { -1.f, 1.f })
 		{

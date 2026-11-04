@@ -883,7 +883,7 @@ The **Skin slider** in the Customize menu now covers *only* that range: all the 
 - Like a boat but cheaper, 2 seats, orange.
 - A bullet or anti-air round **pops it** and everyone ends up in the river.
 
-**Anti-air guns (two, by the watchtowers):** Border Patrol **hold E** to fire at the nearest flying balloon or raft. 70% hit chance, 8 s reload.
+**Anti-air guns (two, by the watchtowers):** Border Patrol **hold E** to fire at the nearest flying balloon or raft within 90 m. 70% hit chance, 8 s reload. If nothing is in range it tells you so.
 
 **Wheelbarrows (two, by the town shops):**
 1. **E** to grab the handles.
@@ -893,33 +893,31 @@ The **Skin slider** in the Customize menu now covers *only* that range: all the 
 
 ## Part 15w: Dig tunnels (walk under the border)
 
-Tunnels are **real**: there's no teleporting. You walk down into a pit, along an underground corridor, and up a ramp on the other side. Everything is built by code; you don't need to place anything.
+Tunnels are **real**: there's no teleporting. You walk down into a pit, along an underground corridor, and up a ramp on the other side. The corridor is made of 5 m sections, 16 in all. Everything is built by code; you don't need to place anything.
 
-There are two tunnel spots on the Mexican side, a little past the line, each with a wooden **TUNNEL** sign and a pile of dirt.
+There are two tunnel spots on the Mexican side, a little past the line, each with a wooden **TUNNEL** sign.
 
 **Runners: digging**
-1. Buy a **Shovel** ($80 at the town shop).
+1. Buy a **Shovel** ($80 at the town shop). **Shovels wear out:** a **SHOVEL** bar at the bottom of the screen shows how many digs are left. After 6 digs it breaks and you buy another one.
 2. Stand by the TUNNEL sign and **hold E (4 s)** to break ground. A pit opens with a dirt ramp going down.
-3. **Walk down the ramp.** At the bottom there's a short lit corridor ending in a wall of dirt.
-4. Stand at the dirt and **hold E (3 s)** to dig. The corridor really gets 5 m longer, with a new lamp. Keep walking forward and digging.
-5. After breaking ground it takes **15 more digs** to get past the Wall. The last one breaks through into a ramp going up, and a hole opens in the ground on the USA side.
-6. **Walk up the ramp** and you're out.
-- Teammates (and anyone else) can walk through a dug tunnel without a shovel. Only digging needs one.
-- While you're down in it, Border Patrol can't spot you.
+3. **Walk down the ramp.** At the end of the corridor there's a wall of dirt. **Hold E (3 s)** to dig the next section. Keep walking forward and digging.
+4. If you dig all the way, the last dig breaks into a ramp on the USA side past the Wall. Walk up and out.
+- Teammates can walk through without a shovel.
+- While you're down there, Border Patrol can't spot you.
+- If Border Patrol fill a section with dirt, you can **dig it back out** (face the dirt, hold E). That uses up shovel too.
 
-**Border Patrol: finding it**
-- When the digging passes under the river, the seismic sensors go off: a **border alarm** plus a ping on the map where the digging is.
-- A pile of **fresh dirt** shows on the surface above the end of the tunnel, so you can follow it.
-- When it breaks through, you get another alarm and a ping at the exit hole.
+**Border Patrol: digging to meet them**
+1. When the Runners' digging passes under the river, the seismic sensors go off: an **alarm**, a **map ping**, and a pile of **fresh dirt** above the end of their tunnel.
+2. An orange **SEISMIC ALERT** sign appears at their tunnel's exit spot on the USA side, past the Wall. **Hold E there** to break ground (no shovel needed).
+3. Walk down and **hold E at the dirt** to dig towards Mexico, section by section, to meet them.
+4. When the two diggings meet (or the Runners dig all the way through), the tunnel is **complete**. Everyone gets an alarm, and you'll probably have a fight underground.
 
-**Border Patrol: filling it in** (the opposite of digging)
-- You can only fill in a **finished** tunnel, and only from **inside** it.
-1. Walk down the exit ramp on the USA side and all the way through the corridor to the Mexican end.
-2. At the bottom of the Mexican ramp, **hold E (2.5 s)** to fill in the entrance pit behind you. The hole in Mexico closes, so nobody new can get in.
-3. Step forward a few metres and **hold E** again to fill in the section behind you. Keep backing out towards the USA side, one section at a time.
-4. The last fill, from the exit ramp or the edge of the hole, **seals the exit**. The tunnel is gone and you get the seizure points.
-- Anyone standing in a section that gets filled is shoved out of the dirt and knocked down. Runners still inside can try to fight you off, or run out the USA end before you seal it.
-- After a tunnel is filled in, Runners can start digging that spot again from scratch.
+**Border Patrol: filling it in** (only a complete tunnel, only from inside it)
+- Stand inside the tunnel, face the next section, and **hold E: "FILL WITH DIRT"** (2 s). That section fills up with dirt.
+- You can fill **in either direction** from wherever you are: from the middle out to the USA end, and back the other way to the Mexican entrance.
+- Filling the end section on either side **seals that pit**, so nobody gets in or out that way.
+- Anyone standing in a section you fill gets shoved out of it and knocked down.
+- When **every** section is filled, the tunnel is gone and you get the seizure points. That spot can then be dug again from scratch.
 
 ---
 

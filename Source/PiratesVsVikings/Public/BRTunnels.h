@@ -4,18 +4,23 @@
 #include "BRWorldActors.h"
 #include "BRTunnels.generated.h"
 
+class UPointLightComponent;
+
 /**
- * A REAL tunnel. Nothing teleports: you walk down a dug ramp, along an underground corridor, and up a ramp on the far side.
+ * A REAL tunnel. Nothing teleports: you walk down a ramp, along an underground corridor, and up a ramp on the far side.
+ * The corridor is split into sections (5 m each) between the two pits.
  *
- * Runners: hold E at the TUNNEL spot with a shovel to break ground. A pit with a ramp opens; walk down it. At the dirt face
- * at the end of the corridor, hold E to dig the next section. The corridor really grows section by section, each one lit.
- * When it reaches past the Wall, the last dig breaks through into an exit ramp on the USA side, and you walk out.
+ * Runners (need a Shovel - it wears out): break ground at the TUNNEL sign (Mexican side), walk down, dig section after
+ * section towards the USA side. If they get all the way, the last dig breaks into the exit pit.
  *
- * Border Patrol do the opposite: only once a tunnel is COMPLETE, they go down into it and fill it back in with dirt, one
- * section at a time, starting at the Mexican end and backing out towards the USA exit. The last fill seals the exit.
- * Anyone in a section that gets filled is shoved out of the dirt and knocked down.
+ * Border Patrol: the seismic sensors tell them it's coming. They break ground at the exit pit (USA side) and dig their own
+ * section after section towards the Mexicans - to meet them in the middle. Once the two meet (or the Runners get all the way
+ * through) the tunnel is COMPLETE, and only then can Border Patrol fill it: standing inside, facing the next open section,
+ * hold E ("FILL WITH DIRT"). They can fill in either direction from anywhere - from the middle out to the USA end and back
+ * to the Mexican entrance. Filling an end section seals that pit. When every section is filled, the tunnel is gone.
+ * Runners with a shovel can dig a filled section back out.
  *
- * The arena cuts the holes for the two ramps into its sand floor (see GetHoleRects); lids cover them while they're closed.
+ * The arena cuts the holes for the two pits in its sand floor (see GetHoleRects); lids cover them while they're closed.
  */
 UCLASS(meta = (DisplayName = "BR Dig Tunnel"))
 class PIRATESVSVIKINGS_API ABRDigTunnel : public ABRGreyboxActor, public IPVVInteractable
@@ -38,54 +43,69 @@ public:
 	static constexpr float RampRun = 920.f;
 	/** Half width of the hole the ramp needs in the ground (shaft walls included). */
 	static constexpr float HoleHalfWidth = 210.f;
-	/** Length of one dug section (cm). */
+	/** Length of one section (cm). */
 	static constexpr float SectionLength = 500.f;
+	/** Most sections a tunnel can have. */
+	static constexpr int32 MaxSections = 30;
 
-	/** How far the corridor runs (cm, along the actor's forward) before the exit ramp. Snapped to whole sections. */
+	/** How far the corridor runs (cm, along the actor's forward) before the exit pit. Snapped to whole sections. */
 	UPROPERTY(EditAnywhere, Replicated, Category = "BR|Tunnel") float ExitDistance = 8000.f;
-	/** Seconds of holding E to dig one section, and to break ground at the start. */
+	/** Seconds of holding E to dig one section, and to break ground. */
 	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float DigSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float BreakGroundSeconds = 4.f;
-	/** Seconds of holding E for Border Patrol to fill one section back in. */
-	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float FillSeconds = 2.5f;
-	/** Once the corridor is this long, seismic sensors hear the digging (the river is in the way). */
+	/** Seconds of holding E for Border Patrol to fill one section with dirt. */
+	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float FillSeconds = 2.f;
+	/** Once the Runners' corridor is this long, seismic sensors hear the digging (the river is in the way). */
 	UPROPERTY(EditAnywhere, Category = "BR|Tunnel") float DetectAfter = 2200.f;
 
 	/** Snap a corridor length to whole sections (what the arena and the tunnel both use). */
-	static float SnapLength(float Raw) { return FMath::Max(1, FMath::CeilToInt(Raw / SectionLength - 0.01f)) * SectionLength; }
-	/** The two holes (start pit, exit pit) in the tunnel's local space: min/max X and Y. The arena leaves these out of its floor. */
+	static float SnapLength(float Raw) { return FMath::Clamp(FMath::CeilToInt(Raw / SectionLength - 0.01f), 1, MaxSections) * SectionLength; }
+	/** The two holes (start pit, exit pit) in the tunnel's local space. The arena leaves these out of its floor. */
 	static void GetHoleRects(float InExitDistance, FBox2D& OutStart, FBox2D& OutExit);
 
 	/** Is this spot down inside any tunnel? (hidden from Border Patrol, cameras, drones) */
 	static bool IsUnderground(const UWorld* World, const FVector& Location);
 
 protected:
-	/** Sections dug (0 = not started). */
-	UPROPERTY(ReplicatedUsing = OnRep_Sections) int32 Sections = 0;
-	/** Border Patrol backfill, counted from the Mexican end: 0 = none, 1 = start pit filled, 2 = +first section, ...
-	 *  Sections + 1 = everything but the exit pit. Filling the exit pit resets the tunnel. */
-	UPROPERTY(ReplicatedUsing = OnRep_Sections) int32 Filled = 0;
-	UPROPERTY(ReplicatedUsing = OnRep_Sections) bool bDetected = false;
+	/** Sections dug by the Runners (from the Mexican end) and by Border Patrol (from the USA end). */
+	UPROPERTY(ReplicatedUsing = OnRep_Tunnel) int32 MexDug = 0;
+	UPROPERTY(ReplicatedUsing = OnRep_Tunnel) int32 BPDug = 0;
+	/** Bit i = section i is filled with dirt. */
+	UPROPERTY(ReplicatedUsing = OnRep_Tunnel) int32 FilledMask = 0;
+	UPROPERTY(ReplicatedUsing = OnRep_Tunnel) bool bDetected = false;
 
-	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Built;
+	/** Per section: floor, ceiling, wall, wall, dirt fill (5 each). Null until dug. */
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> SectionMeshes;
+	UPROPERTY() TArray<TObjectPtr<UPointLightComponent>> SectionLamps;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> ExitPieces;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> StartLid;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> ExitLid;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> ExitPile;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> DirtMarker;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> Face;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> Backfill;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> MexFace;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> BPFace;
+	UPROPERTY() TObjectPtr<UTextRenderComponent> ExitSign;
 
-	UFUNCTION() void OnRep_Sections();
-	float Length() const { return Sections * SectionLength; }
-	bool IsComplete() const { return Sections > 0 && Length() >= ExitDistance - 1.f; }
-	/** Far (USA-side) end X of backfill unit U: 0 = start pit, 1..Sections = corridor sections, Sections+1 = exit pit. */
-	float UnitEndX(int32 U) const;
-	float UnitStartX(int32 U) const;
+	UFUNCTION() void OnRep_Tunnel();
 
-	enum class EJob : uint8 { None, BreakGround, Dig, Fill };
-	EJob JobFor(const APVVCharacter* C) const;
-	void FillNext(APVVCharacter* By);
-	void ShoveOutOf(int32 Unit, APVVCharacter* Except);
+	int32 NumSections() const { return FMath::Clamp(FMath::RoundToInt(ExitDistance / SectionLength), 1, MaxSections); }
+	bool IsStarted() const { return MexDug > 0 || BPDug > 0; }
+	/** The two ends have met (or one side dug all the way): it's a complete tunnel. */
+	bool IsConnected() const { return MexDug + BPDug >= NumSections(); }
+	bool IsDug(int32 i) const { return i >= 0 && i < NumSections() && (i < MexDug || i >= NumSections() - BPDug); }
+	bool IsFilled(int32 i) const { return i >= 0 && i < 32 && (FilledMask & (1 << i)) != 0; }
+	bool IsOpen(int32 i) const { return IsDug(i) && !IsFilled(i); }
+	bool AllFilled() const;
+
+	enum class EJob : uint8 { None, BreakGround, Dig, DigOut, BPBreakGround, BPDig, Fill };
+	/** What this person can do here, and (for Fill / DigOut) which section. */
+	EJob JobFor(const APVVCharacter* C, int32* OutSection = nullptr) const;
+	/** Which section a local X is in: -1 = start pit, NumSections() = exit pit. */
+	int32 SectionAt(float LocalX) const;
+	bool IsInside(const FVector& Local) const;
+	void FillSection(int32 Section, int32 FromSide, APVVCharacter* By);
+	void ShoveOutOf(int32 Section, int32 Dir, APVVCharacter* Except);
+	void ResetTunnel();
 	void SetPiece(UStaticMeshComponent* M, bool bOn);
+	void OnRunnerDug(APVVCharacter* Digger);
 };

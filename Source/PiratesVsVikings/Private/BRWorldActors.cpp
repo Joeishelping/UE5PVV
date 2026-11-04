@@ -422,7 +422,7 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		}
 		else if (Item == EBRItem::Shovel)
 		{
-			Tell(Interactor, LOCTEXT("BoughtShovel", "Bought: Shovel. Find soft dirt and dig a tunnel under the border (hold E)."));
+			Tell(Interactor, LOCTEXT("BoughtShovel", "Bought: Shovel. Go to a TUNNEL sign near the line and dig under the border (hold E). It breaks after 6 digs."));
 		}
 		else if (Item == EBRItem::CannonSuit)
 		{

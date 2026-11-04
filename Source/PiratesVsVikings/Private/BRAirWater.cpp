@@ -375,20 +375,34 @@ AActor* ABRAntiAir::FindTarget() const
 
 bool ABRAntiAir::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
-	return Interactor && Interactor->GetFaction() == BR::Wardens && Interactor->GetCondition() == EPVVCondition::Normal && FindTarget() != nullptr;
+	// Always usable by Border Patrol (it just tells you when there's nothing in range).
+	return Interactor && Interactor->GetFaction() == BR::Wardens && Interactor->GetCondition() == EPVVCondition::Normal;
 }
 
 FText ABRAntiAir::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
 {
-	return GetWorld()->GetTimeSeconds() < NextShot ? LOCTEXT("AAReload", "Anti-air reloading...") : LOCTEXT("AAFire", "FIRE the anti-air gun at the balloon / raft");
+	if (GetWorld()->GetTimeSeconds() < NextShot)
+	{
+		return LOCTEXT("AAReload", "Anti-air reloading...");
+	}
+	return FindTarget() ? LOCTEXT("AAFire", "FIRE the anti-air gun at the balloon / raft")
+		: FText::Format(LOCTEXT("AANone", "Anti-air gun: nothing in range (balloons and rafts within {0} m)"), FMath::RoundToInt(Range / 100.f));
 }
 
 void ABRAntiAir::OnInteract_Implementation(APVVCharacter* Interactor)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
 	AActor* Target = FindTarget();
-	if (!HasAuthority() || !Target || Now < NextShot)
+	if (!HasAuthority() || Now < NextShot)
 	{
+		return;
+	}
+	if (!Target)
+	{
+		if (ABRCharacter* Gunner = Cast<ABRCharacter>(Interactor))
+		{
+			Gunner->Notify(LOCTEXT("AANoTarget", "Nothing to shoot at - no balloon in the sky or raft on the river in range."));
+		}
 		return;
 	}
 	NextShot = Now + Cooldown;

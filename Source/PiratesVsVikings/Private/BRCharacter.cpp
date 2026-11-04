@@ -1581,7 +1581,7 @@ void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
 	case EBRItem::Ladder: Notify(LOCTEXT("UseLadder", "Walk up to the Wall and press E to lean your ladder on it.")); break;
 	case EBRItem::WireCutters: Notify(LOCTEXT("UseCutters", "Walk up to the razor wire and hold E to cut it.")); break;
 	case EBRItem::GasCan: Notify(LOCTEXT("UseGas", "Walk up to the truck and press E to fill it up.")); break;
-	case EBRItem::Shovel: Notify(LOCTEXT("UseShovel", "Find a soft dirt mound and hold E to dig a tunnel.")); break;
+	case EBRItem::Shovel: Notify(LOCTEXT("UseShovel", "Go to a TUNNEL sign near the line and hold E to break ground, then dig at the end of the tunnel. Shovels wear out!")); break;
 	case EBRItem::CannonSuit: Notify(LOCTEXT("UseSuit", "Climb into the Human Cannon (E) once the Line is open.")); break;
 	case EBRItem::Drugs:
 	case EBRItem::IllegalGun: Notify(LOCTEXT("UseContraband", "Contraband! Get it to the Safe Zone for $500. Don't get caught with it.")); break;
