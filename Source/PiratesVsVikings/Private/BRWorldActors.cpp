@@ -4,6 +4,7 @@
 #include "Components/CapsuleComponent.h"
 #include "BRSettings.h"
 #include "BRCharacter.h"
+#include "BRPatrolDuty.h"
 #include "BRDog.h"
 #include "BRGameMode.h"
 #include "BRGameState.h"
@@ -214,6 +215,10 @@ void ABRStation::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifeti
 	DOREPLIFETIME(ABRStation, Pit);
 	DOREPLIFETIME(ABRStation, Ring);
 	DOREPLIFETIME(ABRStation, NextUseServerTime);
+	DOREPLIFETIME(ABRStation, bWardenJob);
+	DOREPLIFETIME(ABRStation, GymStat);
+	DOREPLIFETIME(ABRStation, ApprovalGain);
+	DOREPLIFETIME(ABRStation, bGymMembership);
 }
 
 void ABRStation::BeginPlay()
@@ -293,7 +298,7 @@ bool ABRStation::IsOpen() const
 
 bool ABRStation::CanInteract_Implementation(APVVCharacter* Interactor) const
 {
-	if (Kind == EBRStationKind::WardenSupply)
+	if (Kind == EBRStationKind::WardenSupply || (Kind == EBRStationKind::Job && bWardenJob))
 	{
 		return IsFreeWarden(Interactor) && IsOpen() && FVector::Dist(Interactor->GetActorLocation(), GetActorLocation()) <= 400.f;
 	}
@@ -332,6 +337,18 @@ namespace
 		{
 			return FText::GetEmpty();
 		}
+		if (Station->GymStat > 0)
+		{
+			if (Interactor->GetFaction() == BR::Runners && !PS->bGymMember)
+			{
+				return LOCTEXT("GymMembersOnly", "MEMBERS ONLY. Buy a gym membership at the front desk.");
+			}
+			const int32 Level = Station->GymStat == 1 ? PS->GymStrength : PS->GymSpeed;
+			if (Level >= ABRPlayerState::MaxGymLevel)
+			{
+				return LOCTEXT("GymMaxed", "You're maxed out on this one. Try the other machine.");
+			}
+		}
 		if (Station->IsAssignableJob())
 		{
 			if (PS->AssignedJob == TEXT("-"))
@@ -367,7 +384,13 @@ FText ABRStation::GetInteractPrompt_Implementation(APVVCharacter* Interactor) co
 	const FText SideText = BetSide == 0 ? LOCTEXT("Red", "RED") : LOCTEXT("Blue", "BLUE");
 	switch (Kind)
 	{
-	case EBRStationKind::BuyItem: return FText::Format(LOCTEXT("Buy", "Buy {0} (${1})"), ItemText, Price);
+	case EBRStationKind::BuyItem:
+		if (bGymMembership)
+		{
+			const ABRPlayerState* GymPS = BRState(Interactor);
+			return (GymPS && GymPS->bGymMember) ? LOCTEXT("GymMember", "You're a gym member") : FText::Format(LOCTEXT("GymBuy", "Buy a gym membership (${0}) - weights + treadmill"), Price);
+		}
+		return FText::Format(LOCTEXT("Buy", "Buy {0} (${1})"), ItemText, Price);
 	case EBRStationKind::SellItem: return FText::Format(LOCTEXT("Sell", "Sell {0} (+${1})"), ItemText, Price);
 	case EBRStationKind::BuyBoat: return FText::Format(LOCTEXT("BuyBoat", "Buy a boat (${0}) - delivered to the river"), Price);
 	case EBRStationKind::Bet:
@@ -389,6 +412,23 @@ FText ABRStation::GetInteractPrompt_Implementation(APVVCharacter* Interactor) co
 		{
 			return Refusal;
 		}
+		if (GymStat > 0)
+		{
+			const ABRPlayerState* GymPS = BRState(Interactor);
+			const int32 Level = GymPS ? (GymStat == 1 ? GymPS->GymStrength : GymPS->GymSpeed) : 0;
+			return FText::Format(GymStat == 1 ? LOCTEXT("GymLift", "{0} (hold) - STRENGTH {1}/{2}: hit harder, take hits better")
+				: LOCTEXT("GymRun", "{0} (hold) - SPEED {1}/{2}: run faster"), FText::FromString(SignText), Level, ABRPlayerState::MaxGymLevel);
+		}
+		if (bWardenJob)
+		{
+			const ABRGameState* JobGS = BRGame(this);
+			const int32 Pay = (JobGS && JobGS->Phase == EBRPhase::Prep) ? Price : Price / 2;
+			if (ApprovalGain > 0.f)
+			{
+				return FText::Format(LOCTEXT("WardenPR", "{0} (hold) +{1} approval"), FText::FromString(SignText), FMath::RoundToInt(ApprovalGain));
+			}
+			return FText::Format(LOCTEXT("WardenJob", "{0} (hold) +${1} budget"), FText::FromString(SignText), Pay);
+		}
 		return FText::Format(LOCTEXT("Job", "{0} (hold) +${1}"), FText::FromString(SignText), Price);
 	}
 	}
@@ -406,6 +446,16 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 	switch (Kind)
 	{
 	case EBRStationKind::BuyItem:
+		if (bGymMembership)
+		{
+			if (PS->bGymMember) { Tell(Interactor, LOCTEXT("GymAlready", "You're already a member. Go lift!")); return; }
+			if (PS->Money < Price) { Tell(Interactor, LOCTEXT("GymBroke", "Membership's not cheap, amigo. Come back with more money.")); return; }
+			PS->AddMoney(-Price);
+			PS->bGymMember = true;
+			ABRGameState::Sfx(this, EBRSfx::Buy, GetActorLocation());
+			Tell(Interactor, LOCTEXT("GymJoined", "Welcome to the gym! Weights = STRENGTH, treadmill = SPEED (hold E on them)."));
+			break;
+		}
 		if (PS->Money < Price) { Tell(Interactor, LOCTEXT("Broke", "Not enough money. Go work a job!")); return; }
 		if (!PS->HasFreeSlot()) { Tell(Interactor, LOCTEXT("Full", "Your pockets are full (6 slots).")); return; }
 		PS->AddMoney(-Price);
@@ -479,6 +529,43 @@ void ABRStation::OnInteract_Implementation(APVVCharacter* Interactor)
 		{
 			Tell(Interactor, Refusal);
 			return;
+		}
+		if (GymStat > 0)
+		{
+			int32& Level = GymStat == 1 ? PS->GymStrength : PS->GymSpeed;
+			Level = FMath::Min(Level + 1, ABRPlayerState::MaxGymLevel);
+			ABRGameState::FX(this, EBRFX::PointsText, Interactor->GetActorLocation() + FVector(0.f, 0.f, 90.f),
+				FString::Printf(TEXT("%s %d/%d"), GymStat == 1 ? TEXT("STRENGTH") : TEXT("SPEED"), Level, ABRPlayerState::MaxGymLevel));
+			Tell(Interactor, GymStat == 1 ? LOCTEXT("GymLiftDone", "Feel the burn! Your punches hit harder and you can take more.")
+				: LOCTEXT("GymRunDone", "Cardio done! You run a bit faster now."));
+			PS->ForceNetUpdate();
+			PS->JobReadyAt = GS->GetServerWorldTimeSeconds() + FMath::Max(CooldownSeconds, 12.f);
+			break;
+		}
+		if (bWardenJob)
+		{
+			// Border Patrol duty: pays the team's budget (full in prep, half once the Line is open).
+			const int32 Pay = GS->Phase == EBRPhase::Prep ? Price : Price / 2;
+			if (ABRGameMode* JobGM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+			{
+				if (Pay > 0)
+				{
+					JobGM->AddBudget(Pay);
+				}
+				if (ApprovalGain > 0.f)
+				{
+					JobGM->ChangeApproval(ApprovalGain);
+					ABRGameState::FX(this, EBRFX::PointsText, Interactor->GetActorLocation() + FVector(0.f, 0.f, 110.f), FString::Printf(TEXT("+%d APPROVAL"), FMath::RoundToInt(ApprovalGain)));
+				}
+			}
+			ABRGameState::Sfx(this, EBRSfx::Requisition, GetActorLocation());
+			if (Pay > 0)
+			{
+				ABRGameState::FX(this, EBRFX::MoneyText, Interactor->GetActorLocation() + FVector(0.f, 0.f, 60.f), FString::Printf(TEXT("+$%d BUDGET"), Pay));
+			}
+			PS->JobReadyAt = GS->GetServerWorldTimeSeconds() + FMath::Max(CooldownSeconds, 15.f);
+			NextUseServerTime = GS->GetServerWorldTimeSeconds() + CooldownSeconds;
+			break;
 		}
 		PS->AddMoney(Price);
 		if (Price > 0)
@@ -1286,7 +1373,21 @@ void ABRCheckpointGate::Tick(float DeltaSeconds)
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (HasAuthority() && bOpen && Now > CloseAt)
 	{
-		bOpen = false;
+		// Don't drop the arm on a truck that's still rolling through.
+		bool bSomeoneUnder = false;
+		for (TActorIterator<APVVBoat> It(GetWorld()); It; ++It)
+		{
+			const FVector Local = GetActorTransform().InverseTransformPosition(It->GetActorLocation());
+			bSomeoneUnder |= FMath::Abs(Local.X) < 650.f && FMath::Abs(Local.Y) < ABRWall::GateHalfWidth + 150.f;
+		}
+		if (bSomeoneUnder)
+		{
+			CloseAt = Now + 1.f;
+		}
+		else
+		{
+			bOpen = false;
+		}
 	}
 	if (HasAuthority() && bSmashed && Now > RepairAt)
 	{
@@ -1298,6 +1399,11 @@ void ABRCheckpointGate::Tick(float DeltaSeconds)
 	{
 		for (TActorIterator<APVVBoat> It(GetWorld()); It; ++It)
 		{
+			// NPC drivers in the line respect the barrier: only one that's deliberately running it (or a player) smashes it.
+			if (const ABRTruck* NPCTruck = Cast<ABRTruck>(*It); NPCTruck && NPCTruck->IsNPCTruck() && !NPCTruck->IsRunningGate())
+			{
+				continue;
+			}
 			const FVector Local = GetActorTransform().InverseTransformPosition(It->GetActorLocation());
 			const float Speed = It->GetVelocity().Size2D();
 			const float Toward = FVector::DotProduct(It->GetVelocity().GetSafeNormal2D(), -Local.GetSafeNormal2D());

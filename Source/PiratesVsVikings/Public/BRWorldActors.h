@@ -101,9 +101,17 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Station") TSubclassOf<class APVVBoat> BoatClass;
 	/** Jobs: anyone can work here (e.g. digging through trash). Off = only Runners assigned to this job. Jobs that pay $0 are always open. */
 	UPROPERTY(EditAnywhere, Category = "BR|Station") bool bAnyoneCanWork = false;
+	/** Jobs: a Border Patrol duty (paperwork, washing trucks...). Only Border Patrol can work it, and it pays the government budget. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") bool bWardenJob = false;
+	/** Jobs: gym equipment. 1 = weights (STRENGTH), 2 = treadmill (SPEED). Runners need a membership; Border Patrol train free (tick Border Patrol Job). */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") uint8 GymStat = 0;
+	/** Border Patrol jobs: approval this earns (e.g. a press conference) on top of any budget. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") float ApprovalGain = 0.f;
+	/** Buy stations: sells a gym membership (Price) instead of an item. */
+	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Station") bool bGymMembership = false;
 	/** The sign text (worked out at BeginPlay). Job assignments use it as the job's name. */
 	FString SignText;
-	bool IsAssignableJob() const { return Kind == EBRStationKind::Job && Price > 0 && !bAnyoneCanWork; }
+	bool IsAssignableJob() const { return Kind == EBRStationKind::Job && Price > 0 && !bAnyoneCanWork && !bWardenJob && GymStat == 0; }
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Counter;

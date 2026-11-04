@@ -1,4 +1,5 @@
 #include "BRCharacter.h"
+#include "BRPatrolDuty.h"
 #include "BRAudio.h"
 #include "BRGadgets.h"
 #include "BRAirWater.h"
@@ -1167,6 +1168,40 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 		AngryAt = nullptr;
 		FleeUntil = Now + 20.f; // done fighting: leg it
 	}
+	// No papers / carrying contraband and already over the Wall: they KNOW where to go - make a run for the Safe Zone.
+	if ((bIllegal || bCarriesContraband) && !bScoredCrossing && !Leader.IsValid() && !bSparring)
+	{
+		bool bPastWall = false;
+		for (TActorIterator<ABRWall> WallIt(GetWorld()); WallIt; ++WallIt)
+		{
+			bPastWall = WallIt->GetActorTransform().InverseTransformPositionNoScale(GetActorLocation()).X > 150.f;
+			break;
+		}
+		if (bPastWall && !BRMap::IsInSafeZone(GetWorld(), GetActorLocation()))
+		{
+			FVector Goal = (BRMap::GetSafeZoneGoal(GetWorld(), GetActorLocation()) - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+			// Steer around any Border Patrol agent in the way.
+			float Closest = 2500.f;
+			FVector Dodge = FVector::ZeroVector;
+			for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+			{
+				const FVector From = (GetActorLocation() - It->GetActorLocation()) * FVector(1.f, 1.f, 0.f);
+				if (It->IsWarden() && From.Size() < Closest)
+				{
+					Closest = From.Size();
+					Dodge = From.GetSafeNormal() * FMath::GetMappedRangeValueClamped(FVector2D(300.f, 2500.f), FVector2D(1.4f, 0.2f), Closest);
+				}
+			}
+			const FVector Run = (Goal.GetSafeNormal() + Dodge).GetSafeNormal();
+			GetCharacterMovement()->MaxWalkSpeed = Closest < 2500.f ? FleeSpeed : FleeSpeed * 0.8f;
+			if (Closest < 260.f && FMath::FRand() < 0.04f)
+			{
+				Server_Dive_Implementation(); // dive away from the grab
+			}
+			AddMovementInput(Run.IsNearlyZero() ? Goal.GetSafeNormal() : Run, 1.f);
+			return;
+		}
+	}
 	if (Now < FleeUntil)
 	{
 		// Running from Border Patrol: away from the nearest agent, zig-zagging a little.
@@ -1202,7 +1237,7 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 				}
 				else if (WallLocal.X >= 0.f && WallLocal.X < 1500.f)
 				{
-					WanderHome = GetActorLocation(); // made it over: hang around this side now
+					WanderHome = GetActorLocation(); // made it over (illegals now run for the Safe Zone - see above)
 				}
 				break;
 			}
@@ -1438,6 +1473,10 @@ void ABRCharacter::UpdateMovementSpeed()
 	{
 		Multiplier *= 1.12f; // Cowboy Hat: rodeo legs
 	}
+	if (const ABRPlayerState* GymPS = GetBRPlayerState())
+	{
+		Multiplier *= 1.f + 0.04f * GymPS->GymSpeed; // treadmill legs (up to +20%)
+	}
 	if (bBlocking)
 	{
 		Multiplier *= 0.45f; // shuffle with your guard up
@@ -1487,6 +1526,7 @@ void ABRCharacter::EnsureDefaultInput()
 	ScanAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrapAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrapCycleAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
+	CameraViewAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	TrumpetAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	NextItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
 	PrevItemAction = PVVInput::MakeAction(this, EInputActionValueType::Boolean);
@@ -1516,6 +1556,7 @@ void ABRCharacter::EnsureDefaultInput()
 	PVVInput::Map(IMC, ScanAction, EKeys::Gamepad_DPad_Left);
 	PVVInput::Map(IMC, TrapAction, EKeys::B);
 	PVVInput::Map(IMC, TrapCycleAction, EKeys::N);
+	PVVInput::Map(IMC, CameraViewAction, EKeys::L);
 	PVVInput::Map(IMC, TrapAction, EKeys::Gamepad_LeftShoulder);
 	PVVInput::Map(IMC, NextItemAction, EKeys::MouseScrollDown);
 	PVVInput::Map(IMC, NextItemAction, EKeys::Gamepad_RightShoulder);
@@ -1574,6 +1615,7 @@ void ABRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (ScanAction) Input->BindAction(ScanAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Scan);
 	if (TrapAction) Input->BindAction(TrapAction, ETriggerEvent::Started, this, &ABRCharacter::Input_Trap);
 	if (TrapCycleAction) Input->BindAction(TrapCycleAction, ETriggerEvent::Started, this, &ABRCharacter::Input_TrapCycle);
+	if (CameraViewAction) Input->BindAction(CameraViewAction, ETriggerEvent::Started, this, &ABRCharacter::Input_CameraView);
 	if (EmoteAction)
 	{
 		Input->BindAction(EmoteAction, ETriggerEvent::Started, this, &ABRCharacter::Input_EmoteStart);
@@ -2196,6 +2238,13 @@ void ABRCharacter::Server_Fire_Implementation(FVector_NetQuantize Start, FVector
 	if (bHit && (bLethal || bRunnerGun) && !Victim)
 	{
 		BRAir::TryPop(Hit.GetActor(), this); // shot a balloon or a raft: POP
+	}
+	if (bHit && !Victim)
+	{
+		if (ABRRangeTarget* RangeTarget = Cast<ABRRangeTarget>(Hit.GetActor()))
+		{
+			RangeTarget->OnShot(this, Hit.ImpactPoint); // shooting range (taser darts count too)
+		}
 	}
 
 	const FVector Muzzle = GetMuzzleLocation();
@@ -2943,7 +2992,7 @@ void ABRCharacter::OnHitReceivedNative(APVVCharacter* Attacker)
 			{
 				StartBrawling(BRAttacker, 25.f, FMath::FRandRange(0.55f, 0.9f));
 			}
-			if (!BRAttacker->IsNPC() && LastHitBy.Get() != Attacker)
+			if (!BRAttacker->IsNPC() && LastHitBy.Get() != Attacker && !bSparring)
 			{
 				LastHitBy = Attacker;
 				if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
@@ -3093,6 +3142,10 @@ void ABRCharacter::Drown()
 void ABRCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (IsLocallyControlled())
+	{
+		TickCameraView();
+	}
 
 	ABRGameState* GS = GetBRGameState();
 	const FVector Location = GetActorLocation();
@@ -3113,6 +3166,11 @@ void ABRCharacter::Tick(float DeltaSeconds)
 	if (bSlowedNow != bSlowApplied)
 	{
 		bSlowApplied = bSlowedNow;
+		UpdateMovementSpeed();
+	}
+	if (const ABRPlayerState* GymPS = GetBRPlayerState(); GymPS && GymPS->GymSpeed != AppliedGymSpeed)
+	{
+		AppliedGymSpeed = GymPS->GymSpeed; // treadmill paid off (runs on every machine so movement stays in sync)
 		UpdateMovementSpeed();
 	}
 
@@ -7925,7 +7983,7 @@ void ABRCharacter::ChargeForLostContraband(int32 Count)
 void ABRCharacter::ReactToGunPoint(ABRCharacter* Gunman)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (!HasAuthority() || !bIsNPC || !Gunman || bOfficer || bDead || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat()
+	if (!HasAuthority() || !bIsNPC || !Gunman || bOfficer || bSparring || bDead || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat()
 		|| Now < NextGunReactTime)
 	{
 		return;

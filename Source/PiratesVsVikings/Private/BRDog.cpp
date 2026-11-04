@@ -5,6 +5,7 @@
 #include "BRDesertArena.h"
 #include "BRMapKit.h"
 #include "BRGameState.h"
+#include "BRPlayerState.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -97,32 +98,78 @@ void ABRDog::Think()
 {
 	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
 	const bool bHunting = GS && GS->Phase == EBRPhase::Invasion;
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float ServerNow = GS ? GS->GetServerWorldTimeSeconds() : Now;
 
+	// Who's worth chasing? Lower score = more urgent.
 	ABRCharacter* Best = nullptr;
-	float BestDist = MAX_flt;
-	if (bHunting)
+	float BestScore = MAX_flt;
+	bool bBestResisting = false;
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 	{
-		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		ABRCharacter* C = *It;
+		if (C->IsWarden() || C->bSparring || C->GetCondition() != EPVVCondition::Normal || C->GetCurrentBoat() || C->GetCarrier() || C->IsHidingInSpot() || C->IsDead())
 		{
-			ABRCharacter* C = *It;
-			if (!C->IsRunner() || C->IsNPC() || C->GetCondition() != EPVVCondition::Normal || C->GetCurrentBoat() || C->GetCarrier() || C->IsHidingInSpot())
+			continue;
+		}
+		if (BRMap::IsInRiver(GetWorld(), C->GetActorLocation()))
+		{
+			continue; // water hides your scent
+		}
+		const float Dist = FVector::Dist(C->GetActorLocation(), GetActorLocation());
+		float Score = MAX_flt;
+		bool bResisting = false;
+
+		// 1) Somebody is beating up Border Patrol: GET THEM (any phase).
+		const ABRCharacter* Victim = C->LastMeleeVictim.Get();
+		const ABRCharacter* BrawlTarget = C->IsNPC() && C->IsBrawling() ? C->GetBrawlTarget() : nullptr;
+		const ABRCharacter* Attacked = (Victim && Victim->IsWarden() && Now - C->LastMeleeTime < 8.f) ? Victim
+			: ((BrawlTarget && BrawlTarget->IsWarden()) ? BrawlTarget : nullptr);
+		if (Attacked && Dist < DefendRange)
+		{
+			Score = Dist * 0.3f;
+			bResisting = true;
+			if (Attacked == Handler.Get())
 			{
-				continue;
+				Score *= 0.5f; // nobody touches MY human
 			}
-			if (BRMap::IsInRiver(GetWorld(), C->GetActorLocation()))
+		}
+		else if (bHunting)
+		{
+			const bool bScannedBad = C->IsSuspect() && C->LastScannedTime > -999.f && ServerNow - C->LastScannedTime < ScanMemorySeconds;
+			const bool bRunning = C->IsNPC() ? C->IsFleeing() : C->IsSprinting();
+			// 2) Scanned as illegal / contraband and now running or fighting: chase them down.
+			if (bScannedBad && (bRunning || C->IsBrawling()) && Dist < SmellRange * 2.f)
 			{
-				continue; // water hides your scent
+				Score = Dist * 0.6f;
+				bResisting = true;
 			}
-			const float Range = SmellRange * (C->bIsCrouched ? 0.6f : 1.f) * (C->IsSprinting() ? 1.3f : 1.f);
-			const float Dist = FVector::Dist(C->GetActorLocation(), GetActorLocation());
-			if (Dist < Range && Dist < BestDist)
+			// 3) Scanned dirty and standing there: go stand guard on them (barks so Border Patrol can find them).
+			else if (bScannedBad && Dist < SmellRange * 1.5f)
 			{
-				BestDist = Dist;
-				Best = C;
+				Score = Dist * 1.2f;
 			}
+			// 4) A Runner player who crossed the Line, sniffed out the usual way.
+			else if (!C->IsNPC() && C->IsRunner())
+			{
+				const ABRPlayerState* PS = C->GetBRPlayerState();
+				const float Range = SmellRange * (C->bIsCrouched ? 0.6f : 1.f) * (C->IsSprinting() ? 1.3f : 1.f);
+				if (PS && PS->bHasCrossedLine && Dist < Range)
+				{
+					Score = Dist;
+					bResisting = C->IsSprinting();
+				}
+			}
+		}
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = C;
+			bBestResisting = bResisting;
 		}
 	}
 	Target = Best;
+	bTargetResisting = bBestResisting;
 	GetCharacterMovement()->MaxWalkSpeed = Best ? ChaseSpeed : PatrolSpeed;
 	if (!Best && FVector::Dist2D(GetActorLocation(), PatrolTarget) < 150.f)
 	{
@@ -187,12 +234,30 @@ void ABRDog::Tick(float DeltaSeconds)
 				GS->Multicast_NoisePing(GetActorLocation());
 			}
 		}
-		if (ToGoal.Size() < 140.f && Now >= NextBite)
+		// Guarding someone who's just standing there busted: circle them, don't bite.
+		if (!bTargetResisting && Prey->IsNPC() && ToGoal.Size() < 220.f)
 		{
-			NextBite = Now + 7.f;
-			Prey->ApplySlow(3.5f, 0.3f);
-			Prey->Spot(5.f);
-			Prey->Notify(LOCTEXT("Bit", "A DOG GOT YOUR LEG! Shake it off!"));
+			ConsumeMovementInputVector();
+			AddMovementInput(FVector::CrossProduct(ToGoal.GetSafeNormal(), FVector::UpVector), 0.4f);
+		}
+		else if (ToGoal.Size() < 150.f && Now >= NextBite)
+		{
+			NextBite = Now + (bTargetResisting ? 5.f : 7.f);
+			Prey->Spot(6.f);
+			ABRGameState::FX(this, EBRFX::PunchHit, Prey->GetActorLocation());
+			if (bTargetResisting)
+			{
+				// Latches on and drags them down: Border Patrol has a few seconds to zip-tie them.
+				const FVector Pull = (GetActorLocation() - Prey->GetActorLocation()).GetSafeNormal2D() * 250.f + FVector(0.f, 0.f, 120.f);
+				Prey->ApplyKnockdown(this, Pull);
+				Prey->SetKnockdownTimeLeft(Prey->IsNPC() ? 4.f : 2.5f);
+				Prey->Notify(LOCTEXT("BitDown", "A DOG TOOK YOU DOWN! Get up and shake it off!"));
+			}
+			else
+			{
+				Prey->ApplySlow(3.5f, 0.3f);
+				Prey->Notify(LOCTEXT("Bit", "A DOG GOT YOUR LEG! Shake it off!"));
+			}
 		}
 	}
 }

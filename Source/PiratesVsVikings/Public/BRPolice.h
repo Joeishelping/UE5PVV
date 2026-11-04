@@ -27,6 +27,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "BR|Camera") float Range = 3200.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Camera") float HalfAngle = 38.f;
 
+	/** Border Patrol press L to look through this camera (live view). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BR|Camera") TObjectPtr<class UCameraComponent> ViewCamera;
+
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Head;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Lamp;

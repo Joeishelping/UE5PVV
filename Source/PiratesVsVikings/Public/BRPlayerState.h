@@ -32,6 +32,16 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	bool bReachedSafety = false;
 
+	/** Gym training this match (0-5 each): STRENGTH = harder hits + tougher chin, SPEED = faster legs. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 GymStrength = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	int32 GymSpeed = 0;
+	/** Runners: paid for a membership at the Mexico gym. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
+	bool bGymMember = false;
+	static constexpr int32 MaxGymLevel = 5;
+
 	/** Cuts left before the wire cutters snap (each pair = 2 cuts). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "BR")
 	int32 WireCutterCharges = 0;

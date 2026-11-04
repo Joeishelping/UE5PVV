@@ -1,4 +1,5 @@
 #include "BRDesertArena.h"
+#include "BRPatrolDuty.h"
 #include "BRTunnels.h"
 #include "BRDoors.h"
 #include "BRAirWater.h"
@@ -187,6 +188,15 @@ ABRDesertArena::ABRDesertArena()
 	AddHut(TEXT("House1"), FVector(-8500.f, 4000.f, Ground), FVector(900.f, 900.f, 350.f), ArenaAdobe);
 	AddHut(TEXT("House2"), FVector(-13500.f, 3000.f, Ground), FVector(800.f, 1000.f, 350.f), ArenaAdobe);
 	AddSign(TEXT("Sign_Town"), TEXT("WELCOME TO DUSTY GULCH"), FVector(-15000.f, 0.f, Ground + 450.f), 0.f, 150.f, FColor(255, 230, 180));
+	// Makeshift gym in town (membership at the front desk; equipment spawns in SpawnGameplayActors).
+	AddBlock(TEXT("Gym_Floor"), FVector(-15800.f, 3400.f, Ground + 3.f), FVector(1300.f, 1100.f, 6.f), FLinearColor(0.25f, 0.25f, 0.27f));
+	AddBlock(TEXT("Gym_Roof"), FVector(-15800.f, 3400.f, Ground + 360.f), FVector(1400.f, 1200.f, 20.f), FLinearColor(0.5f, 0.5f, 0.45f), FRotator::ZeroRotator, false);
+	AddBlock(TEXT("Gym_Post1"), FVector(-16450.f, 2850.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddBlock(TEXT("Gym_Post2"), FVector(-16450.f, 3950.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddBlock(TEXT("Gym_Post3"), FVector(-15150.f, 2850.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddBlock(TEXT("Gym_Post4"), FVector(-15150.f, 3950.f, Ground + 180.f), FVector(25.f, 25.f, 360.f), FLinearColor(0.4f, 0.3f, 0.2f));
+	AddSign(TEXT("Sign_Gym"), TEXT("GIMNASIO EL TORO - MEMBERS ONLY"), FVector(-15130.f, 3400.f, Ground + 420.f), 0.f, 70.f, FColor(255, 120, 60));
+	AddRoomLight(TEXT("Gym_Light"), FVector(-15800.f, 3400.f, Ground + 320.f), 60.f, 1100.f);
 
 	// Warden side.
 	AddBlock(TEXT("Cell_Front"), FVector(6400.f, 4000.f, Ground + 150.f), FVector(40.f, 640.f, 300.f), ArenaConcrete);
@@ -197,6 +207,10 @@ ABRDesertArena::ABRDesertArena()
 	AddBlock(TEXT("Tower"), FVector(4400.f, -2400.f, Ground + 600.f), FVector(300.f, 300.f, 1200.f), ArenaConcrete);
 	AddHut(TEXT("WardenHQ"), FVector(8500.f, 4000.f, Ground), FVector(1200.f, 1400.f, 400.f), FLinearColor(0.3f, 0.35f, 0.3f));
 	AddSign(TEXT("Sign_HQ"), TEXT("WARDEN HQ"), FVector(7880.f, 4000.f, Ground + 480.f), 180.f, 100.f, FColor(255, 140, 40));
+	// Border Patrol shooting range (targets spawn in SpawnGameplayActors).
+	AddBlock(TEXT("Range_FiringLine"), FVector(8550.f, 1500.f, Ground + 2.f), FVector(30.f, 1900.f, 4.f), FLinearColor(1.f, 0.9f, 0.1f), FRotator::ZeroRotator, false);
+	AddSign(TEXT("Sign_Range"), TEXT("SHOOTING RANGE - shoot the targets: +$ budget"), FVector(8450.f, 1500.f, Ground + 330.f), 180.f, 50.f, FColor(120, 190, 255));
+	AddBlock(TEXT("Range_Berm"), FVector(10250.f, 1500.f, Ground + 200.f), FVector(120.f, 2200.f, 400.f), FLinearColor(0.55f, 0.45f, 0.3f));
 
 	// Safe zone.
 	AddBlock(TEXT("Safe_Stripe"), FVector(SafeX + (EastX - SafeX) * 0.5f, 0.f, Ground + 2.f), FVector(EastX - SafeX, HalfY * 2.f, 4.f), FLinearColor(0.1f, 0.8f, 0.2f), FRotator::ZeroRotator, false);
@@ -968,7 +982,7 @@ void ABRDesertArena::GetNPCRoute(TArray<FVector>& OutRoute, int32& OutCheckpoint
 	OutRoute = {
 		O + FVector(TownEdgeX + 1500.f, RoadY, Z),
 		O + FVector(0.f, RoadY, Z),
-		O + FVector(WallX - 700.f, RoadY, Z),	// wait here for the checkpoint
+		O + FVector(WallX - 1000.f, RoadY, Z),	// wait here (well back from the barrier) for the checkpoint
 		O + FVector(WallX + 900.f, RoadY, Z),
 		O + FVector(11000.f, RoadY, Z),
 		O + FVector(17000.f, RoadY, Z),
@@ -1241,6 +1255,69 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Supply(7400.f, -150.f, EBRWardenGear::ElectricFences, EBRItem::None, 800, 90.f);
 	Supply(7400.f, 250.f, EBRWardenGear::None, EBRItem::WallReinforcement, 500, 0.f);
 	Supply(7800.f, 2500.f, EBRWardenGear::Reinforcements, EBRItem::None, 1200, 60.f);
+
+	// --- Border Patrol training yard: earn budget while you wait (full pay in prep, half once the Line opens)
+	// Shooting range: stand behind the line and shoot the pop-up targets (east).
+	{
+		const float TargetX[] = { 9500.f, 9850.f, 9650.f, 9950.f, 9550.f };
+		const float TargetY[] = { 700.f, 1100.f, 1500.f, 1900.f, 2300.f };
+		for (int32 i = 0; i < 5; ++i)
+		{
+			World->SpawnActor<ABRRangeTarget>(ABRRangeTarget::StaticClass(), At(TargetX[i], TargetY[i], Ground, 180.f), Params);
+		}
+	}
+	// Sparring mat: hold E to fight a recruit (Gang Beasts fist fight). KO = budget.
+	World->SpawnActor<ABRSparringMat>(ABRSparringMat::StaticClass(), At(9000.f, 150.f, Ground), Params);
+	// Duty desks: hold E to work (paperwork, washing the trucks).
+	auto Duty = [&](float X, float Y, const TCHAR* Name, int32 Pay, float Seconds)
+	{
+		const FTransform T = At(X, Y, Ground, 180.f);
+		if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			S->Kind = EBRStationKind::Job; S->bWardenJob = true; S->Price = Pay; S->WorkSeconds = Seconds;
+			S->Title = Name; S->Color = FLinearColor(0.15f, 0.25f, 0.55f);
+			S->FinishSpawning(T);
+		}
+	};
+	Duty(7850.f, 3150.f, TEXT("FILE REPORTS"), 50, 5.f);
+	Duty(9300.f, 3000.f, TEXT("WASH PATROL TRUCKS"), 80, 8.f);
+	Duty(7400.f, 650.f, TEXT("RADIO DISPATCH"), 60, 6.f);
+	// Press podium: talk to the cameras and win the public back (approval, not budget). Everyone shares a 40 s cooldown.
+	{
+		const FTransform T = At(7600.f, 3550.f, Ground, 180.f);
+		if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			S->Kind = EBRStationKind::Job; S->bWardenJob = true; S->Price = 0; S->WorkSeconds = 8.f; S->CooldownSeconds = 40.f; S->ApprovalGain = 6.f;
+			S->Title = TEXT("PRESS CONFERENCE"); S->Color = FLinearColor(0.8f, 0.8f, 0.85f);
+			S->FinishSpawning(T);
+		}
+	}
+	// --- Gyms: weights = STRENGTH (hit harder, take hits better), treadmill = SPEED. 5 levels each per match.
+	auto Gym = [&](float X, float Y, uint8 Stat, bool bWarden, const TCHAR* Name, const FLinearColor& Col)
+	{
+		const FTransform T = At(X, Y, Ground, bWarden ? 180.f : 0.f);
+		if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			S->Kind = EBRStationKind::Job; S->GymStat = Stat; S->bWardenJob = bWarden; S->Price = 0; S->WorkSeconds = Stat == 1 ? 7.f : 9.f;
+			S->Title = Name; S->Color = Col;
+			S->FinishSpawning(T);
+		}
+	};
+	// Border Patrol base gym (free - the taxpayers cover it).
+	Gym(9550.f, 3500.f, 1, true, TEXT("WEIGHT BENCH"), FLinearColor(0.2f, 0.2f, 0.22f));
+	Gym(9550.f, 4100.f, 2, true, TEXT("TREADMILL"), FLinearColor(0.2f, 0.2f, 0.22f));
+	// Mexico gym: pay the (expensive) membership first.
+	{
+		const FTransform T = At(-15300.f, 3400.f, Ground, 0.f);
+		if (ABRStation* S = World->SpawnActorDeferred<ABRStation>(ABRStation::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			S->Kind = EBRStationKind::BuyItem; S->bGymMembership = true; S->Price = 600;
+			S->Title = TEXT("GYM MEMBERSHIP $600"); S->Color = FLinearColor(0.7f, 0.3f, 0.1f);
+			S->FinishSpawning(T);
+		}
+	}
+	Gym(-16000.f, 3050.f, 1, false, TEXT("PESAS (WEIGHTS)"), FLinearColor(0.35f, 0.3f, 0.25f));
+	Gym(-16000.f, 3750.f, 2, false, TEXT("CAMINADORA (TREADMILL)"), FLinearColor(0.35f, 0.3f, 0.25f));
 
 	// --- Hiding spots (dumpsters, porta-potties, hay bales) on both sides
 	auto Hide = [&](float X, float Y, float Yaw, EBRHideStyle HideStyle)

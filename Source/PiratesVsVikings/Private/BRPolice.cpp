@@ -8,6 +8,8 @@
 #include "BRGameMode.h"
 #include "BRGameState.h"
 #include "BRPlayerState.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -38,6 +40,10 @@ ABRSurveillanceCamera::ABRSurveillanceCamera()
 	Lamp->SetAttenuationRadius(120.f);
 	Lamp->SetLightColor(FLinearColor(1.f, 0.1f, 0.05f));
 	Lamp->SetCastShadows(false);
+	ViewCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ViewCamera"));
+	ViewCamera->SetupAttachment(Head);
+	ViewCamera->SetRelativeLocation(FVector(60.f, 0.f, -4.f));
+	ViewCamera->SetFieldOfView(95.f);
 	AddPickupZone(160.f);
 }
 
@@ -118,6 +124,69 @@ void ABRSurveillanceCamera::OnInteract_Implementation(APVVCharacter* Interactor)
 
 // ===========================================================================================
 // Character side: frisking, camera placement, officers
+
+void ABRCharacter::Input_CameraView()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !IsLocallyControlled())
+	{
+		return;
+	}
+	if (!IsWarden())
+	{
+		return;
+	}
+	TArray<ABRSurveillanceCamera*> Cams;
+	for (TActorIterator<ABRSurveillanceCamera> It(GetWorld()); It; ++It)
+	{
+		Cams.Add(*It);
+	}
+	Cams.Sort([](const ABRSurveillanceCamera& A, const ABRSurveillanceCamera& B) { return A.GetName() < B.GetName(); });
+	if (Cams.Num() == 0)
+	{
+		StopCameraView();
+		Notify(LOCTEXT("NoCams", "No security cameras yet. Buy one at the Border Patrol supply counters, scroll to it and press F to place it. Then L looks through it."));
+		return;
+	}
+	++CameraViewIndex;
+	if (CameraViewIndex >= Cams.Num())
+	{
+		StopCameraView();
+		return;
+	}
+	ViewingCamera = Cams[CameraViewIndex];
+	CameraViewCount = Cams.Num();
+	CameraViewFrom = GetActorLocation();
+	PC->SetViewTargetWithBlend(Cams[CameraViewIndex], 0.15f);
+}
+
+void ABRCharacter::StopCameraView()
+{
+	if (CameraViewIndex < 0 && !ViewingCamera.IsValid())
+	{
+		return;
+	}
+	CameraViewIndex = -1;
+	ViewingCamera = nullptr;
+	if (APlayerController* PC = Cast<APlayerController>(GetController()); PC && PC->IsLocalController())
+	{
+		PC->SetViewTargetWithBlend(this, 0.15f);
+	}
+}
+
+void ABRCharacter::TickCameraView()
+{
+	if (CameraViewIndex < 0)
+	{
+		return;
+	}
+	// Walk away, get hit, lose the camera or swap teams: back to your own eyes.
+	if (!ViewingCamera.IsValid() || !IsWarden() || GetCondition() != EPVVCondition::Normal || GetCurrentBoat()
+		|| FVector::Dist2D(GetActorLocation(), CameraViewFrom) > 150.f)
+	{
+		StopCameraView();
+	}
+}
 
 void ABRCharacter::CameraSpot(float Seconds)
 {

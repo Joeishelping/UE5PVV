@@ -195,6 +195,10 @@ public:
 	UPROPERTY(Replicated) bool bPeaceful = false;
 	/** Scripted fighters (ring luchador): don't start brawls of their own when hit. */
 	bool bNoFightBack = false;
+	/** A Border Patrol sparring recruit (no trouble for hitting him, dogs leave him alone). */
+	bool bSparring = false;
+	/** Server (NPC): become a sparring recruit and square up to Opponent. Level = wins in a row (tougher each time). */
+	void MakeSparringPartner(ABRCharacter* Opponent, int32 Level);
 	/** Belongs to the cantina (patron / bouncer): town events leave them alone. */
 	bool bCantinaRegular = false;
 	/** 1 in 20 NPCs secretly carries a fat wad of cash - knock them out to find out. */
@@ -212,6 +216,8 @@ public:
 	/** NPC is busy in a brawl right now. */
 	bool IsBrawling() const { return AngryAt.IsValid() && GetWorld() && GetWorld()->GetTimeSeconds() < AngryUntil; }
 	ABRCharacter* GetBrawlTarget() const { return AngryAt.Get(); }
+	/** NPC is running away (busted, done fighting...). */
+	bool IsFleeing() const { return GetWorld() && GetWorld()->GetTimeSeconds() < FleeUntil; }
 	/** Server (NPC): stop fighting / running and just hang around again. */
 	void CalmDown() { AngryAt = nullptr; AngryUntil = -1.f; FleeUntil = -1.f; MugTarget = nullptr; }
 	void SetKnockdownSeconds(float Seconds) { KnockdownDuration = Seconds; }
@@ -353,6 +359,13 @@ public:
 	void MarkFallFrom(float Z) { FallFromZ = FMath::Max(FallFromZ, Z); }
 	void SlowFor(float Seconds, float SpeedFactor) { ApplySlow(Seconds, SpeedFactor); }
 	void Input_TrapCycle();
+	/** Border Patrol: L = look through your security cameras one by one (L again past the last one, or walk, to stop). */
+	void Input_CameraView();
+	void StopCameraView();
+	/** -1 = not watching a camera; otherwise which one (0-based) of GetCameraViewCount(). */
+	int32 GetCameraViewIndex() const { return CameraViewIndex; }
+	int32 GetCameraViewCount() const { return CameraViewCount; }
+	uint8 GetSelectedTrap() const { return SelectedTrap; }
 	UFUNCTION(Server, Reliable) void Server_CycleTrap();
 	UPROPERTY(Replicated) uint8 SelectedTrap = 0;
 	void PlantTNT();
@@ -646,6 +659,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrapAction;
 	/** Border Patrol: pick which trap B places (N cycles bear / glue / alarm / spike strip). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrapCycleAction;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> CameraViewAction;
 	/** (Unused - the trumpet is played with F when selected.) */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Input") TObjectPtr<UInputAction> TrumpetAction;
 	/** Mouse wheel: pick an inventory slot. G: drop it. F: use it. */
@@ -1024,6 +1038,12 @@ private:
 	float DefaultFOV = 90.f;
 	FVector DefaultSocketOffset = FVector::ZeroVector;
 	int32 NextTrapType = 0;
+	int32 CameraViewIndex = -1;
+	int32 AppliedGymSpeed = 0;
+	int32 CameraViewCount = 0;
+	TWeakObjectPtr<AActor> ViewingCamera;
+	FVector CameraViewFrom = FVector::ZeroVector;
+	void TickCameraView();
 	bool bInDrone = false;
 	bool bStealthHidden = false;
 	bool bInDeepWater = false;

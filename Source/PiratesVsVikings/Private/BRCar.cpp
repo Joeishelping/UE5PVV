@@ -1182,7 +1182,8 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 
 	if (RouteIndex == CheckpointIndex && Distance < 450.f)
 	{
-		ThrottleInput = 0.f;
+		// Pull up and STOP - stand on the brakes, don't coast into the barrier.
+		ThrottleInput = GetVelocity().Size2D() > 40.f ? -0.7f : 0.f;
 		SteerInput = 0.f;
 		if (CheckpointArrivalTime < 0.f)
 		{
@@ -1283,6 +1284,20 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 	const bool bNearCheckpoint = RouteIndex == CheckpointIndex && Distance < 2000.f;
 	const float Cruise = 0.75f * DriverSpeedTaste * (1.f + 0.12f * FMath::Sin(Now * 0.23f + DriverPhase)); // eases on and off the gas
 	ThrottleInput = FMath::Clamp(Cruise * (1.f - FMath::Abs(Delta) / 120.f), 0.25f, bNearCheckpoint ? 0.35f : FMath::Min(1.f, Cruise));
+	// Rolling up to the checkpoint: ease off and brake so we arrive at walking pace (respect the barrier).
+	if (RouteIndex == CheckpointIndex && Distance < 2500.f)
+	{
+		const float Speed = GetVelocity().Size2D();
+		const float WantSpeed = FMath::Clamp((Distance - 300.f) * 0.45f, 120.f, 900.f);
+		if (Speed > WantSpeed * 1.15f)
+		{
+			ThrottleInput = -FMath::Clamp((Speed - WantSpeed) / 400.f, 0.2f, 0.8f);
+		}
+		else if (Speed > WantSpeed)
+		{
+			ThrottleInput = 0.f;
+		}
+	}
 
 	// Somebody walking in the road ahead? Slow down, stop and lean on the horn - don't plough through them
 	// (only a gate runner or a Runner at the wheel runs people over).

@@ -139,6 +139,12 @@ void ABRGameMode::TickBR()
 		return;
 	}
 
+	// Keep it clean for a bit and the public forgives you (TickBR runs once a second).
+	if (GS->Approval < 100.f && GetWorld()->GetTimeSeconds() - LastApprovalDrop > ApprovalCalmSeconds)
+	{
+		ChangeApproval(ApprovalRegenPerMinute / 60.f);
+	}
+
 	GS->TimeOfDay = FMath::Fmod(GS->TimeOfDay + 24.f / (DayLengthMinutes * 60.f) * (GS->IsNight() ? NightSpeedUp : 1.f), 24.f);
 
 	NextWeatherChange -= 1.f;
@@ -705,9 +711,15 @@ void ABRGameMode::SpawnNPCTruck()
 		RouteGate = Arena->GetGate();
 	}
 	int32 Alive = 0;
+	int32 InLine = 0;
 	for (TActorIterator<ABRTruck> It(GetWorld()); It; ++It)
 	{
 		Alive += It->IsNPCTruck() ? 1 : 0;
+		InLine += It->IsInBorderLine() ? 1 : 0;
+	}
+	if (InLine >= MaxTrucksInLine)
+	{
+		return; // the line's long enough: let Border Patrol catch up
 	}
 	if (Alive >= MaxNPCTrucks)
 	{
@@ -1651,6 +1663,21 @@ void ABRGameMode::ChangeApproval(float Delta)
 		return;
 	}
 	GS->Approval = FMath::Clamp(GS->Approval + Delta, 0.f, 100.f);
+	if (Delta < 0.f)
+	{
+		LastApprovalDrop = GetWorld()->GetTimeSeconds();
+	}
+	// Earned it back: the toys come back.
+	if (GS->DronesAllowed() && bAnnouncedDroneLoss)
+	{
+		bAnnouncedDroneLoss = false;
+		Announce(LOCTEXT("Refund", "Approval is back up: the Warden drone program is FUNDED again!"));
+	}
+	if (GS->LethalAllowed() && bAnnouncedGunLoss)
+	{
+		bAnnouncedGunLoss = false;
+		Announce(LOCTEXT("GunsBack", "Approval is back up: Wardens get their guns back."));
+	}
 	if (!GS->DronesAllowed() && !bAnnouncedDroneLoss)
 	{
 		bAnnouncedDroneLoss = true;

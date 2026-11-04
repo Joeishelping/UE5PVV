@@ -24,6 +24,10 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	UPROPERTY(EditAnywhere, Category = "BR|Dog") float SmellRange = 2200.f;
+	/** Dogs run to help any Border Patrol agent being attacked this close (cm). */
+	UPROPERTY(EditAnywhere, Category = "BR|Dog") float DefendRange = 3500.f;
+	/** Anyone scanned as illegal / carrying contraband in the last this-many seconds is fair game. */
+	UPROPERTY(EditAnywhere, Category = "BR|Dog") float ScanMemorySeconds = 120.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Dog") float PatrolRadius = 2500.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Dog") float ChaseSpeed = 680.f;
 	UPROPERTY(EditAnywhere, Category = "BR|Dog") float PatrolSpeed = 260.f;
@@ -45,6 +49,8 @@ private:
 	FVector Home = FVector::ZeroVector;
 	FVector PatrolTarget = FVector::ZeroVector;
 	TWeakObjectPtr<ABRCharacter> Target;
+	/** The target is running or fighting (bite = take them down) vs. just standing there busted (bark and guard them). */
+	bool bTargetResisting = false;
 	TWeakObjectPtr<ABRCharacter> Handler;
 	float NextThink = 0.f;
 	float NextBark = 0.f;

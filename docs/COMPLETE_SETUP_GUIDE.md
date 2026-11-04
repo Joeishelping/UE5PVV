@@ -1055,6 +1055,80 @@ Punches, kicks and throws **never kill**: they knock you down and out. **Knives 
 
 ---
 
+## Part 15ab: Controls cheat sheet, Border Patrol training yard, gyms
+
+Nothing to plug in. Everything here is built from code and appears in the test map.
+
+### Controls (also shown at the bottom of the screen in game)
+
+| Key | Everyone |
+|---|---|
+| Left / right click | That hand: **tap** = punch, **hold** = reach out and stick to whatever it touches |
+| Z | Grab / throw |
+| Left Alt | Block |
+| Left Ctrl | Dive |
+| Middle mouse | Headbutt |
+| Space | Jump / climb |
+| Mouse wheel | Switch item (the yellow line under your items says what **F** does with it) |
+| F | Use the selected item (eat a taco, throw a **smoke bomb**, place a **security camera**...) |
+| G | Drop the selected item |
+| E | Interact (hold it for jobs, digging, cutting wire, the gym) |
+| T (hold) | Emote wheel |
+| M | Menu |
+
+| Key | Border Patrol only |
+|---|---|
+| V | Scan someone (papers and contraband) |
+| B | Place a trap. **N** changes which trap (Bear Trap, Glue, Alarm Wire, Spike Strip). The bottom line shows the one picked. |
+| L | **Look through your security cameras.** Press L again for the next one. Press L past the last one, or walk, to go back to yourself. |
+| Q | Drone |
+| X | Fists / taser / gun |
+| O | Order everyone out of a truck |
+
+Runners: **Q** whistles for your smuggling clients.
+
+**Hard hat:** you take 40% less damage from hits. You unlock it by knocking out 25 people, or Border Patrol can requisition one at the supply counter.
+
+### Border Patrol training yard (at the base, east of the supply counters)
+
+Everything pays the **government budget**. Full pay during prep, half once the Line opens.
+
+- **Shooting range:** stand behind the yellow line and shoot the pop-up targets. Taser mode counts too. A hit pays +$20 and a bullseye pays +$45.
+- **Sparring mat:** hold E to call out a recruit for a fist fight. Knock him out for +$150. Every win in a row makes the next recruit tougher and pays $50 more, up to $400. If you lose, walk away, or run out the 90 seconds, the streak resets.
+- **Duty desks** (hold E):
+  - File Reports: +$50
+  - Wash Patrol Trucks: +$80
+  - Radio Dispatch: +$60
+- **Press Conference** (west of HQ): hold E to win **+6 approval**. It has a 40-second cooldown.
+
+### Approval comes back now
+
+- If nobody on Border Patrol causes a scandal for 30 seconds, approval climbs about 6 points a minute.
+- Good catches now give +5, up from +3.
+- When approval climbs back over 60, the drone comes back. Over 30, you get your guns back. The announcer tells everyone.
+
+### Gyms (stronger and faster, up to 5 levels each per match)
+
+- **Weight bench = STRENGTH:** +10% knockout power per level, and you take knockout hits about 6% better per level.
+- **Treadmill = SPEED:** +4% run speed per level, so +20% at level 5.
+- **Border Patrol gym:** free, next to HQ.
+- **Mexico gym** ("Gimnasio El Toro", west side of town): you need a **$600 membership** from the front desk first.
+
+### Smarter NPCs, dogs and traffic
+
+- Illegals and smugglers who make it over the Wall now **run for the Safe Zone**, dodging Border Patrol, instead of hanging around.
+- **Dogs:**
+  - They run to help any Border Patrol agent who's being attacked.
+  - They chase anyone scanned as illegal or carrying contraband who runs or fights, and drag them down so you can zip-tie them.
+  - They stand guard and bark at busted people who are just standing there.
+  - They still sniff out Runner players who crossed the Line.
+- **Border line:**
+  - A new truck shows up every 28 to 50 seconds, and never while 3 are already waiting in line.
+  - NPC drivers brake well back from the barrier and only smash it when they're deliberately running the gate.
+  - The barrier stays up until the truck has rolled through.
+
+If your **BP_BRGameMode** has its own values for *NPC Truck Every Seconds* or *Max NPC Trucks*, those win. Reset them with the yellow arrow to get the new defaults.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

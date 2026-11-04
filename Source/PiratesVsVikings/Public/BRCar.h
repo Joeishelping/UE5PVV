@@ -159,6 +159,10 @@ public:
 	bool AddNPC(APVVCharacter* NPC);
 
 	bool IsNPCTruck() const { return bNPCDriven; }
+	/** NPC truck that hasn't been through the checkpoint yet (it's in the line). */
+	bool IsInBorderLine() const { return bNPCDriven && !bCheckpointDone && !bRunningGate; }
+	/** NPC truck deliberately flooring it through the checkpoint. */
+	bool IsRunningGate() const { return bRunningGate; }
 	/** Server: the driver floors it - smashes the checkpoint barrier and races off. */
 	void FloorIt();
 	/** Server: Border Patrol just scanned someone aboard as illegal / carrying contraband: they react in a moment. */

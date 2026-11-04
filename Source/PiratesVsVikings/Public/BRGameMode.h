@@ -157,13 +157,18 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float ScandalPenalty = 35.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float WrongfulArrestPenalty = 10.f;
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float GoodCatchBonus = 3.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float GoodCatchBonus = 5.f;
+	/** Approval slowly comes back on its own while Border Patrol keep their noses clean (per minute, after ApprovalCalmSeconds with no scandal). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float ApprovalRegenPerMinute = 6.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float ApprovalCalmSeconds = 30.f;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float HarassmentPenalty = 5.f;
 
 	/** NPC traffic through the checkpoint during the Invasion. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FVector2D NPCTruckEverySeconds = FVector2D(12.f, 25.f);
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FVector2D NPCTruckEverySeconds = FVector2D(28.f, 50.f);
 	/** Most NPC trucks on the road at once. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxNPCTrucks = 8;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxNPCTrucks = 6;
+	/** No new truck spawns while this many are already waiting in the line for the checkpoint. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") int32 MaxTrucksInLine = 3;
 	/** NPCs per truck (driver included). Up to 4 seats - empty seats are where Runners hide. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FIntPoint NPCsPerTruck = FIntPoint(1, 3);
 	/**
@@ -225,6 +230,7 @@ private:
 	bool bCarKeyGiven = false;
 	bool bAnnouncedDroneLoss = false;
 	bool bAnnouncedGunLoss = false;
+	float LastApprovalDrop = -1000.f;
 
 	ABRGameState* GetBRGameState() const;
 	void TickBR();

@@ -13,6 +13,7 @@
 #include "BRWorldActors.h"
 #include "PVVDetentionZone.h"
 #include "BRMapKit.h"
+#include "BRPolice.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -21,6 +22,36 @@
 
 namespace
 {
+	/** What F does with the selected item (shown under the inventory so nobody has to guess). */
+	FString ItemUseHint(EBRItem Item)
+	{
+		switch (Item)
+		{
+		case EBRItem::Taco: return TEXT("F: eat (fills FOOD)");
+		case EBRItem::TacoPlatter: return TEXT("F: put the taco platter down (NPCs stop to eat)");
+		case EBRItem::Trumpet: return TEXT("F: play the trumpet (tips / serenade)");
+		case EBRItem::SmokeBomb: return TEXT("F: throw SMOKE BOMB (blocks sight: cameras, spotlights, agents)");
+		case EBRItem::SecurityCamera: return TEXT("F: place SECURITY CAMERA here (spots trespassers). L: look through your cameras");
+		case EBRItem::TNT: return TEXT("F: plant TNT (blows a hole in the Wall)");
+		case EBRItem::FuseKit: return TEXT("F: use fuse kit (near electric fence box)");
+		case EBRItem::WallReinforcement: return TEXT("Walk to the Wall and hold E to reinforce it");
+		case EBRItem::GrappleHook: return TEXT("F: fire grappling hook where you look");
+		case EBRItem::FakeUniform: return TEXT("F: put on / take off the fake Border Patrol uniform");
+		case EBRItem::CardboardBox: return TEXT("F: hide in the cardboard box");
+		case EBRItem::Lasso: return TEXT("F: throw lasso at who you're looking at");
+		case EBRItem::Ladder: return TEXT("E at the Wall: lean the ladder on it");
+		case EBRItem::WireCutters: return TEXT("Hold E at the razor wire: cut it");
+		case EBRItem::GasCan: return TEXT("E at a truck: fill it up");
+		case EBRItem::Shovel: return TEXT("Hold E at a TUNNEL sign / tunnel end: dig");
+		case EBRItem::CannonSuit: return TEXT("E at the Human Cannon: climb in");
+		case EBRItem::Lockpick: return TEXT("Hold E on a locked door / holding pen");
+		case EBRItem::FakePassport: return TEXT("Passive: scans say you're legal (unless carrying contraband)");
+		case EBRItem::Knife: return TEXT("Left click: stab");
+		case EBRItem::Drugs: case EBRItem::IllegalGun: case EBRItem::Package: return TEXT("Contraband: get it to the SAFE ZONE");
+		default: return FString();
+		}
+	}
+
 	FString Clock(int32 Seconds) { return FString::Printf(TEXT("%d:%02d"), Seconds / 60, Seconds % 60); }
 	FString TimeOfDayText(float Hours)
 	{
@@ -408,22 +439,6 @@ void ABRHUD::DrawHUD()
 		DrawText(TEXT("SEEN"), White, 370.f, SY - 112.f, Small);
 		Bar(420.f, SY - 114.f, 120.f, 14.f, Me->GetVisibility() / 1.5f, Me->GetVisibility() < 0.4f ? Green : (Me->GetVisibility() < 0.9f ? Yellow : Red));
 
-		// Inventory slots
-		for (int32 i = 0; i < ABRPlayerState::MaxSlots; ++i)
-		{
-			const float X = 20.f + i * 130.f;
-			const bool bSelected = i == Me->GetSelectedSlot() && PS->Inventory.IsValidIndex(i);
-			if (bSelected)
-			{
-				DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.9f), X - 3.f, SY - 95.f, 130.f, 32.f);
-			}
-			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X, SY - 92.f, 124.f, 26.f);
-			if (PS->Inventory.IsValidIndex(i))
-			{
-				const EBRItem Item = PS->Inventory[i];
-				DrawText(BR::ItemName(Item), BR::IsIllegal(Item) ? Red : White, X + 6.f, SY - 88.f, Small, 1.1f);
-			}
-		}
 		if (PS->SentenceSeconds > 0)
 		{
 			Centered(FString::Printf(TEXT("HOLDING PEN - catapult in %s (or wait for a jailbreak)"), *Clock(PS->SentenceSeconds)), SY * 0.4f, Red, Big, 1.5f);
@@ -432,6 +447,40 @@ void ABRHUD::DrawHUD()
 		{
 			DrawText(TEXT("CROSSED"), Red, 560.f, SY - 116.f, Small, 1.2f);
 		}
+	}
+	// Inventory slots (both teams) + what the selected item does.
+	for (int32 i = 0; i < ABRPlayerState::MaxSlots; ++i)
+	{
+		const float X = 20.f + i * 130.f;
+		const bool bSelected = i == Me->GetSelectedSlot() && PS->Inventory.IsValidIndex(i);
+		if (bSelected)
+		{
+			DrawRect(FLinearColor(1.f, 0.85f, 0.3f, 0.9f), X - 3.f, SY - 95.f, 130.f, 32.f);
+		}
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X, SY - 92.f, 124.f, 26.f);
+		if (PS->Inventory.IsValidIndex(i))
+		{
+			const EBRItem Item = PS->Inventory[i];
+			DrawText(BR::ItemName(Item), BR::IsIllegal(Item) ? Red : White, X + 6.f, SY - 88.f, Small, 1.1f);
+		}
+	}
+	{
+		FString Hint;
+		if (PS->Inventory.IsValidIndex(Me->GetSelectedSlot()))
+		{
+			Hint = ItemUseHint(PS->Inventory[Me->GetSelectedSlot()]);
+		}
+		if (PS->Inventory.Num() > 1)
+		{
+			Hint += Hint.IsEmpty() ? TEXT("Mouse wheel: switch item") : TEXT("   |   Wheel: switch item   G: drop");
+		}
+		DrawText(Hint, Yellow, 20.f, SY - 60.f, Small, 1.1f);
+	}
+	if (Me->GetCameraViewIndex() >= 0)
+	{
+		const float Blink = FMath::Fmod(Now, 1.f) < 0.5f ? 1.f : 0.3f;
+		DrawText(TEXT("[REC]"), FLinearColor(1.f, 0.1f, 0.1f, Blink), 40.f, 40.f, Big, 1.5f);
+		Centered(FString::Printf(TEXT("SECURITY CAMERA %d / %d     L: next camera     move: exit"), Me->GetCameraViewIndex() + 1, Me->GetCameraViewCount()), 70.f, White, Big, 1.3f);
 	}
 	if (Me->HasWeapon())
 	{
@@ -470,11 +519,24 @@ void ABRHUD::DrawHUD()
 		Centered(TEXT("STUCK!"), SY * 0.36f + 30.f, Red, Big, 1.4f);
 	}
 
-	DrawText(bWarden
-		? TEXT("WASD move | Shift sprint | C crouch | Left/Right click = left/right hand (tap punch, hold grab) | X fists/taser/gun | V scan | B trap | Q drone | E interact")
-		: TEXT("WASD move | Shift sprint | C crouch | Left/Right click = left/right hand (tap punch, hold grab) | Mouse wheel item | F use | G drop | E interact"),
-		FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 40.f, Small, 1.1f);
-	DrawText(TEXT("Z grab/throw | Left Alt dive | hold T emotes | H drop $ | K mute mic | M menu"), FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 22.f, Small, 1.1f);
+	if (bWarden)
+	{
+		static const TCHAR* TrapNames[] = { TEXT("Bear Trap"), TEXT("Glue"), TEXT("Alarm Wire"), TEXT("Spike Strip") };
+		int32 CamCount = 0;
+		for (TActorIterator<ABRSurveillanceCamera> It(GetWorld()); It; ++It)
+		{
+			++CamCount;
+		}
+		DrawText(FString::Printf(TEXT("B: place trap [%s]   N: change trap   V: scan   X: fists/taser/gun   Q: drone   L: view cameras (%d)   O: order out   E: interact / search"),
+			TrapNames[Me->GetSelectedTrap() % 4], CamCount), FLinearColor(0.6f, 0.8f, 1.f), 20.f, SY - 40.f, Small, 1.1f);
+	}
+	else
+	{
+		DrawText(TEXT("F: use item   Wheel: switch item   G: drop   E: interact (hold for jobs, digging, cutting)   H: drop $   Q: whistle for your clients"),
+			FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 40.f, Small, 1.1f);
+	}
+	DrawText(TEXT("Click = punch (tap) / grab + stick (hold) with that hand | Z grab/throw | Left Alt block | Left Ctrl dive | Middle mouse headbutt | Space jump/climb | T emotes | M menu"),
+		FLinearColor(0.8f, 0.8f, 0.8f), 20.f, SY - 22.f, Small, 1.1f);
 
 	// --- Emote wheel (hold T, move the mouse toward one, let go)
 	if (Me->IsEmoteWheelOpen())

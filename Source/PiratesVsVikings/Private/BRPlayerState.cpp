@@ -11,6 +11,9 @@ void ABRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ABRPlayerState, bIsAggressor);
 	DOREPLIFETIME(ABRPlayerState, bReachedSafety);
 	DOREPLIFETIME(ABRPlayerState, WireCutterCharges);
+	DOREPLIFETIME(ABRPlayerState, GymStrength);
+	DOREPLIFETIME(ABRPlayerState, GymSpeed);
+	DOREPLIFETIME(ABRPlayerState, bGymMember);
 	DOREPLIFETIME(ABRPlayerState, ShovelWear);
 	DOREPLIFETIME(ABRPlayerState, SentenceSeconds);
 	DOREPLIFETIME(ABRPlayerState, AssignedJob);

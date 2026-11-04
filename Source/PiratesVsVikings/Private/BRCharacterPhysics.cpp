@@ -10,6 +10,7 @@
 //     constraint, so arms stretch, bodies tug and swing.
 
 #include "BRCharacter.h"
+#include "BRPlayerState.h"
 #include "BRGameState.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -434,7 +435,17 @@ void ABRCharacter::AddKO(float Amount, ABRCharacter* By)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
-	KOMeter = FMath::Clamp(KOMeter + Amount * VsComputerScale(By) / FMath::Max(0.25f, FightToughness / 1.9f), 0.f, 1.f);
+	// Gym: a strong puncher hits harder (+10% per level), a strong body takes it better (-6% per level).
+	float GymScale = 1.f;
+	if (const ABRPlayerState* ByPS = By ? By->GetBRPlayerState() : nullptr)
+	{
+		GymScale *= 1.f + 0.1f * ByPS->GymStrength;
+	}
+	if (const ABRPlayerState* MyPS = GetBRPlayerState())
+	{
+		GymScale /= 1.f + 0.06f * MyPS->GymStrength;
+	}
+	KOMeter = FMath::Clamp(KOMeter + Amount * GymScale * VsComputerScale(By) / FMath::Max(0.25f, FightToughness / 1.9f), 0.f, 1.f);
 	LastKOHitTime = Now;
 	if (KOMeter >= 1.f)
 	{
