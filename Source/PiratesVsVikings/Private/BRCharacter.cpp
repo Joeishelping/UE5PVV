@@ -3559,6 +3559,10 @@ void ABRCharacter::SetHeldProp(ABRPhysicsProp* Prop)
 
 void ABRCharacter::Server_Grab_Implementation()
 {
+	if (ABRWheelbarrow::ReleaseFor(this))
+	{
+		return; // Z while pushing / riding a wheelbarrow: let go / hop out
+	}
 	if (bClimbing)
 	{
 		Server_ClimbLetGo_Implementation(); // Z on a wall: let go

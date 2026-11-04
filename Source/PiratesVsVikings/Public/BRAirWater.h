@@ -99,10 +99,16 @@ public:
 	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
 	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
 
+	/** Server: let go of the handles (the rider hops out). Also Z while pushing. */
+	void LetGo();
+	/** Server: drop whatever wheelbarrow this person is pushing / riding (returns true if there was one). */
+	static bool ReleaseFor(ABRCharacter* Who);
+
 protected:
 	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> Pusher;
 	UPROPERTY(Replicated) TObjectPtr<ABRCharacter> Rider;
-	void LetGo();
+	/** The tray bumps into things only while nobody's pushing (the E zone always stays findable). */
+	void SetSolid(bool bSolid);
 };
 
 namespace BRAir

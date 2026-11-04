@@ -466,8 +466,47 @@ void ABRWheelbarrow::LetGo()
 	}
 	Rider = nullptr;
 	Pusher = nullptr;
-	SetActorEnableCollision(true);
+	SetSolid(true);
 	ForceNetUpdate();
+}
+
+void ABRWheelbarrow::SetSolid(bool bSolid)
+{
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	for (UStaticMeshComponent* M : Meshes)
+	{
+		if (M->GetName() == TEXT("Tray"))
+		{
+			M->SetCollisionEnabled(bSolid ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::QueryOnly);
+			M->SetCollisionResponseToChannel(ECC_Pawn, bSolid ? ECR_Block : ECR_Overlap);
+		}
+	}
+}
+
+bool ABRWheelbarrow::ReleaseFor(ABRCharacter* Who)
+{
+	if (!Who)
+	{
+		return false;
+	}
+	for (TActorIterator<ABRWheelbarrow> It(Who->GetWorld()); It; ++It)
+	{
+		if (It->Pusher == Who)
+		{
+			It->LetGo();
+			return true;
+		}
+		if (It->Rider == Who)
+		{
+			It->Rider->SetOnRide(false);
+			It->Rider->TeleportTo(It->GetActorLocation() + It->GetActorRightVector() * 120.f + FVector(0.f, 0.f, 60.f), It->Rider->GetActorRotation(), false, true);
+			It->Rider = nullptr;
+			It->ForceNetUpdate();
+			return true;
+		}
+	}
+	return false;
 }
 
 void ABRWheelbarrow::Tick(float DeltaSeconds)
@@ -546,7 +585,8 @@ void ABRWheelbarrow::OnInteract_Implementation(APVVCharacter* Interactor)
 	if (!Pusher)
 	{
 		Pusher = C;
-		SetActorEnableCollision(false);
+		SetSolid(false);
+		C->Notify(LOCTEXT("BarrowHow", "Pushing the wheelbarrow. E or Z to let go. A teammate can press E to hop in."));
 	}
 	else if (C == Pusher)
 	{
@@ -555,8 +595,8 @@ void ABRWheelbarrow::OnInteract_Implementation(APVVCharacter* Interactor)
 	}
 	else if (C == Rider)
 	{
-		Rider->SetOnRide(false);
-		Rider = nullptr;
+		ReleaseFor(C); // hop out beside it
+		return;
 	}
 	else
 	{
