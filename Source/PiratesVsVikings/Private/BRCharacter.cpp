@@ -1185,14 +1185,14 @@ FVector ABRCharacter::NPCSteer(const FVector& Desired, bool bWallOK)
 	{
 		Params.AddIgnoredActor(GetCurrentBoat());
 	}
-	const float Look = 230.f;
+	const float LookAhead = 230.f;
 	auto Blocked = [&](const FVector& D) -> bool
 	{
 		for (const float Z : { -40.f, 40.f })
 		{
 			FHitResult Hit;
 			const FVector From = GetActorLocation() + FVector(0.f, 0.f, Z);
-			if (GetWorld()->SweepSingleByChannel(Hit, From, From + D * Look, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(22.f), Params))
+			if (GetWorld()->SweepSingleByChannel(Hit, From, From + D * LookAhead, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(22.f), Params))
 			{
 				AActor* A = Hit.GetActor();
 				const bool bPerson = Cast<APawn>(A) != nullptr && !Cast<APVVBoat>(A);
