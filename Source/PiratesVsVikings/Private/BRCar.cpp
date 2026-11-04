@@ -339,7 +339,9 @@ bool ABRCar::WantsSearch(const APVVCharacter* Interactor) const
 bool ABRCar::WantsDrive(const APVVCharacter* Interactor) const
 {
 	return Interactor && !bForSale && !Interactor->GetCarriedCharacter() && !Interactor->GetCurrentBoat()
-		&& Interactor->GetCondition() == EPVVCondition::Normal && Occupants.Num() > 0 && !Occupants[0] && CanDrive(Interactor);
+		&& Interactor->GetCondition() == EPVVCondition::Normal && Occupants.Num() > 0 && !Occupants[0] && CanDrive(Interactor)
+		// Border Patrol at a suspect vehicle: SEARCH it first (E), drive it after.
+		&& !WantsSearch(Interactor) && !WantsCargoSearch(Interactor);
 }
 
 bool ABRCar::WantsCargoSearch(const APVVCharacter* Interactor) const
