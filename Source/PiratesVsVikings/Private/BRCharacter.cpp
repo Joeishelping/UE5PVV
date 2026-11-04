@@ -2596,9 +2596,9 @@ void ABRCharacter::EnableWobble()
 	{
 		return;
 	}
-	if (GetCurrentBoat() || GetCarrier() || bInCannon || bOnShoulders)
+	if (GetCurrentBoat() || GetCarrier() || bInCannon || bOnShoulders || bOnRide)
 	{
-		return; // switched on again when you get out
+		return; // switched on again when you get out (balloon / wheelbarrow rides switch collision off, so the body has no physics then)
 	}
 	// The bones must have been posed at least once, or the physics reads bones that don't exist yet (crash).
 	if (MeshComp->GetComponentSpaceTransforms().Num() < MeshComp->GetNumBones() || !MeshComp->IsRegistered())

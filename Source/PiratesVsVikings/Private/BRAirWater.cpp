@@ -47,15 +47,17 @@ void ABRCharacter::SetOnRide(bool bOn)
 
 void ABRCharacter::OnRep_OnRide()
 {
-	SetActorEnableCollision(!bOnRide);
 	if (bOnRide)
 	{
+		// Wobble off FIRST, while the body still has its physics; then collision off.
 		DisableWobble();
+		SetActorEnableCollision(false);
 		GetCharacterMovement()->StopMovementImmediately();
 		GetCharacterMovement()->DisableMovement();
 	}
 	else
 	{
+		SetActorEnableCollision(true);
 		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 		EnableWobble();
 	}
