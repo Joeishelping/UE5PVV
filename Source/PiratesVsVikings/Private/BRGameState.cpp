@@ -178,6 +178,15 @@ void ABRGameState::SpawnLocalFX(UObject* Context, EBRFX Kind, const FVector& Loc
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, FRotator::ZeroRotator, FVector(Scale));
 		return;
 	}
+	// No cigarette effect of its own: use your Smoke Effect, shrunk way down (a cigarette puff, not a cannon blast).
+	if (Kind == EBRFX::CigaretteSmoke)
+	{
+		if (UNiagaraSystem* Smoke = GetDefault<UBRSettings>()->GetEffect(EBRFX::Smoke))
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Smoke, Location, FRotator::ZeroRotator, FVector(Scale * 0.15f));
+			return;
+		}
+	}
 	// Built-in look: punch hits = quick white flash, sparks = little orange sparks, cigarette = tiny smoke puff.
 	const EBRFX Shown = Kind == EBRFX::CigaretteSmoke ? EBRFX::Smoke : Kind;
 	const float Size = Kind == EBRFX::CigaretteSmoke ? 0.2f : 1.f;
