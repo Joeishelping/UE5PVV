@@ -1322,7 +1322,7 @@ This only exists on the built-in test map.
 
   - Crimes against Border Patrol, and the Border Patrol wanted level, are a different system. **The Policia ignore them.**
   - Fist fights don't count. Neither does defending yourself, or a local jumping a Border Patrol agent.
-- **Someone has to SEE it:** a Policia officer within 35 m with line of sight, or a townsperson within 15 m who goes and tells them. If nobody saw it, nothing happens.
+- **A cop has to SEE it:** a Policia officer within 35 m with a clear line of sight. That goes for every crime, murder included. If no cop saw it, nothing happens.
 - **Stars:** 40 heat = 1 star, 100 = 2 stars, 160 = 3 stars. The top of your screen shows them.
 - **Losing the heat:** lay low for 30 seconds and it starts dropping, faster if you leave town.
 - **Arrest:**
@@ -1333,6 +1333,24 @@ This only exists on the built-in test map.
 - **Troublemakers:** about 15% of the locals pick fights and mug people. If the Policia see it, they arrest **them** too. People defending themselves are never arrested.
 - **Respawns:** dead townspeople are replaced about **3 minutes** later, and dead Policia about **2 minutes** later.
 - **Tuning:** **BP_BRGameMode → BR | Town** has *Policia Count*, *Villager Respawn Seconds*, *Policia Respawn Seconds* and *Troublemaker Chance*.
+
+## Part 15am: Uniforms (Policia, mariachi) and house burglary
+
+**New clothes (import them like the other outfits):**
+- **Files:** in `Art/Characters/Outfits/`, import **SK_Uniform_PoliciaShirt**, **SK_Uniform_PoliciaPants**, **SK_Uniform_MariachiJacket** and **SK_Uniform_MariachiPants** into the same folder as your other clothes, with the same skeleton.
+- **They fill in automatically by name** (Class Defaults → BR | Look → *Policia Shirt Mesh* and the others).
+- **Who wears them:**
+  - The **Policia** wear the navy POLICIA uniform: badge, "POLICIA" on the back, duty belt.
+  - The **mariachi band**, and **anyone holding a trumpet** (players included), wear the black charro suit: silver buttons and studs, a red bow tie and a white shirt. Put the trumpet away and your own clothes come back.
+- **They aren't in the clothing menu.** Nobody else can pick them.
+- **If you haven't imported them yet:** those characters' normal clothes are just tinted in the uniform colours.
+
+**Burglary:**
+- **Where:** every village house has a brass lock on its front door. With a **Lockpick**, hold E for 4 seconds to break in and rob the place.
+- **What you find:** cash (up to $260), or a random item. Now and then you find a revolver.
+- **Your lockpick:** it snaps 30% of the time.
+- **Restocking:** each house takes 4 minutes before there's something to steal again.
+- **It's a crime against Mexico,** but only if a Policia officer sees you do it (+45 heat).
 
 ## Part 16: Checklist: everything you can plug in
 

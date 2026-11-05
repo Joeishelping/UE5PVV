@@ -5,6 +5,7 @@
 #include "BRGameState.h"
 #include "BRPlayerState.h"
 #include "PVVBoat.h"
+#include "Net/UnrealNetwork.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -102,17 +103,17 @@ bool ABRCharacter::IsMexicanCivilianVictim() const
 
 bool ABRCharacter::IsCrimeWitnessed() const
 {
-	// Somebody has to SEE it: a Policía officer in sight, or a townsperson nearby who'll go and tell them.
+	// A Policía officer has to SEE it (in range, nothing in the way) - otherwise nobody ever knows.
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(BRWitness), false, this);
 	const FVector Me = GetActorLocation() + FVector(0.f, 0.f, 50.f);
 	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 	{
 		const ABRCharacter* W = *It;
-		if (W == this || !W->IsNPC() || W->GetCondition() != EPVVCondition::Normal || (!W->bPolicia && !W->bVillager))
+		if (W == this || !W->IsNPC() || W->GetCondition() != EPVVCondition::Normal || !W->bPolicia)
 		{
 			continue;
 		}
-		const float Range = W->bPolicia ? 3500.f : 1500.f;
+		const float Range = 3500.f;
 		const FVector Eye = W->GetActorLocation() + FVector(0.f, 0.f, 60.f);
 		if (FVector::DistSquared(Eye, Me) > Range * Range)
 		{
@@ -148,13 +149,18 @@ void ABRCharacter::ReportCrimeAgainst(ABRCharacter* Victim, float Heat)
 	{
 		return;
 	}
-	if (!IsCrimeWitnessed())
-	{
-		return; // nobody saw a thing...
-	}
 	if (Victim->bPolicia)
 	{
 		Heat *= 1.6f; // hitting a cop: big trouble
+	}
+	CommitCrimeInTown(Heat);
+}
+
+void ABRCharacter::CommitCrimeInTown(float Heat)
+{
+	if (!HasAuthority() || bPolicia || !IsCrimeWitnessed())
+	{
+		return; // no cop saw a thing...
 	}
 	const bool bWasWanted = PoliciaHeat >= PoliciaWantedHeat;
 	PoliciaHeat = FMath::Min(200.f, PoliciaHeat + Heat);
@@ -163,7 +169,7 @@ void ABRCharacter::ReportCrimeAgainst(ABRCharacter* Victim, float Heat)
 	PoliciaStarsRep = static_cast<uint8>(PoliciaStars());
 	if (bWantedByPolicia && !bWasWanted)
 	{
-		Notify(LOCTEXT("PoliciaWanted", "POLICIA! You hurt someone in town - the Mexican police are coming for you. Get out of town, or hide, until they forget."));
+		Notify(LOCTEXT("PoliciaWanted", "POLICIA! A cop saw what you did - the Mexican police are coming for you. Get out of town, or hide, until they forget."));
 		if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 		{
 			GM->Feed(FString::Printf(TEXT("The Policia want %s for crimes in town"), *GetPlayerDisplayName()));
@@ -378,13 +384,116 @@ void ABRCharacter::MakePolicia()
 	FightToughness *= 1.7f;
 	SetNPCPoncho(false);
 	SetHat(EBRHat::PatrolCap);
-	FBRLook Uniform = Look;
-	Uniform.ShirtStyle = 0;
-	Uniform.PantsStyle = 0;
-	Uniform.ShirtColor = 0.58f; // police blue
-	Uniform.PantsColor = 0.05f; // black
-	Uniform.Glasses = 1;
-	SetLook(Uniform);
+	UniformOverride = 1; // the Policia uniform (only they wear it)
+	FBRLook Copy = Look;
+	Copy.Glasses = 1;
+	SetLook(Copy); // (re-applies the look with the uniform)
+}
+
+// ===========================================================================================
+// House burglary
+
+ABRHouseStash::ABRHouseStash()
+{
+	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
+	// A little brass lock plate on the door (the door itself belongs to the house).
+	AddMesh(TEXT("Lock"), CubeMesh, FVector(0.f, 0.f, 110.f), FVector(6.f, 14.f, 20.f), FLinearColor(0.8f, 0.65f, 0.25f), FRotator::ZeroRotator, false);
+	AddPickupZone(130.f);
+}
+
+void ABRHouseStash::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRHouseStash, RestockAt);
+}
+
+bool ABRHouseStash::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRCharacter* C = Cast<ABRCharacter>(Interactor);
+	return C && !C->IsNPC() && C->GetCondition() == EPVVCondition::Normal && !C->GetCurrentBoat() && !C->GetCarriedCharacter();
+}
+
+bool ABRHouseStash::HasLockpick(const APVVCharacter* Who)
+{
+	const ABRCharacter* C = Cast<ABRCharacter>(Who);
+	const ABRPlayerState* PS = C ? C->GetBRPlayerState() : nullptr;
+	return PS && PS->HasItem(EBRItem::Lockpick);
+}
+
+float ABRHouseStash::GetInteractDuration_Implementation(APVVCharacter* Interactor) const
+{
+	return HasLockpick(Interactor) && IsStocked() ? PickSeconds : 0.3f;
+}
+
+bool ABRHouseStash::IsStocked() const
+{
+	const ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
+	return !GS || GS->GetServerWorldTimeSeconds() >= RestockAt;
+}
+
+FText ABRHouseStash::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	if (!IsStocked())
+	{
+		return LOCTEXT("Robbed", "Already cleaned out (come back later)");
+	}
+	if (!HasLockpick(Interactor))
+	{
+		return LOCTEXT("Locked", "Locked. You need a LOCKPICK to get in.");
+	}
+	return LOCTEXT("PickLock", "PICK THE LOCK and rob the house (hold) - don't let the Policia see you");
+}
+
+void ABRHouseStash::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRCharacter* C = Cast<ABRCharacter>(Interactor);
+	ABRPlayerState* PS = C ? C->GetBRPlayerState() : nullptr;
+	ABRGameState* GS = GetWorld()->GetGameState<ABRGameState>();
+	if (!HasAuthority() || !PS || !GS || !IsStocked())
+	{
+		return;
+	}
+	if (!PS->HasItem(EBRItem::Lockpick))
+	{
+		C->Notify(LOCTEXT("NeedPick", "It's locked. Buy a Lockpick (Black market / gun shop)."));
+		return;
+	}
+	RestockAt = GS->GetServerWorldTimeSeconds() + RestockSeconds;
+	ForceNetUpdate();
+	// Burglary is a crime against Mexico - if a cop sees it.
+	C->CommitCrimeInTown(45.f);
+	// What's inside?
+	FString Got;
+	const float Roll = FMath::FRand();
+	const EBRItem Items[] = { EBRItem::Taco, EBRItem::Knife, EBRItem::FakePassport, EBRItem::Poncho, EBRItem::Scrap, EBRItem::Trumpet, EBRItem::GasCan };
+	if (Roll < 0.08f && PS->HasFreeSlot())
+	{
+		PS->AddItem(EBRItem::IllegalGun);
+		Got = TEXT("a REVOLVER under the bed");
+	}
+	else if (Roll < 0.45f && PS->HasFreeSlot())
+	{
+		const EBRItem Item = Items[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Items)) - 1)];
+		PS->AddItem(Item);
+		Got = BR::ItemName(Item);
+	}
+	else
+	{
+		const int32 Cash = FMath::RandRange(8, 26) * 10;
+		PS->AddMoney(Cash);
+		Got = FString::Printf(TEXT("$%d stashed in a jar"), Cash);
+		ABRGameState::FX(this, EBRFX::MoneyText, GetActorLocation() + FVector(0.f, 0.f, 150.f), FString::Printf(TEXT("+$%d"), Cash));
+	}
+	// Lockpicks don't last forever.
+	const bool bSnapped = FMath::FRand() < 0.3f;
+	if (bSnapped)
+	{
+		PS->RemoveItem(EBRItem::Lockpick);
+	}
+	C->Notify(FText::Format(LOCTEXT("Burgled", "You slipped in and found {0}.{1}"), FText::FromString(Got),
+		bSnapped ? LOCTEXT("PickSnapped", " (your lockpick snapped)") : FText::GetEmpty()));
+	ABRGameState::Sfx(this, EBRSfx::CashPickup, GetActorLocation());
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -1382,6 +1382,17 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 
 	// --- Policia station / carcel: open ground at the north-west corner of town (clear of the houses, gym and duel post).
 	World->SpawnActor<ABRMexJail>(ABRMexJail::StaticClass(), At(-15000.f, 6200.f, Ground, 0.f), Params);
+	// Lockable front doors on the village houses (pick the lock to rob the place).
+	{
+		struct FHouseDoor { float X, Y, D; };
+		const FHouseDoor Houses[] = { { -7600.f, -3300.f, 600.f }, { -8600.f, -4600.f, 700.f }, { -7400.f, 1600.f, 600.f }, { -12900.f, 5200.f, 700.f },
+			{ -11200.f, 5600.f, 700.f }, { -15200.f, 3400.f, 800.f }, { -13200.f, -4800.f, 600.f }, { -9800.f, 4300.f, 700.f }, { -6800.f, -2000.f, 600.f } };
+		for (const FHouseDoor& H : Houses)
+		{
+			const float Face = H.Y > -1200.f ? -1.f : 1.f; // doors face the road
+			World->SpawnActor<ABRHouseStash>(ABRHouseStash::StaticClass(), At(H.X, H.Y + Face * (H.D * 0.5f + 10.f), Ground, Face > 0.f ? 90.f : -90.f), Params);
+		}
+	}
 	// --- High-noon duel post (west end of town, past the welcome sign): the two marks are 15 m apart.
 	World->SpawnActor<ABRDuelSpot>(ABRDuelSpot::StaticClass(), At(-16750.f, 1000.f, Ground, 0.f), Params);
 	// --- Smuggling truck job board (south edge of town): box truck parks just east of it.

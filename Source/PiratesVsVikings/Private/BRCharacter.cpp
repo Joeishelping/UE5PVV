@@ -199,6 +199,7 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bOnRide);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SelectedTrap, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, bDuelGun);
+	DOREPLIFETIME(ABRCharacter, UniformOverride);
 	DOREPLIFETIME_CONDITION(ABRCharacter, bWantedByPolicia, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, PoliciaStarsRep, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, MexJailEnd, COND_OwnerOnly);
@@ -416,6 +417,10 @@ void ABRCharacter::AutoFillSlots()
 	FillList(ShirtStyles, { TEXT("SK_Shirt_") }, { TEXT("SK_Outfit_WorkShirt") });
 	FillList(PantsStyles, { TEXT("SK_Pants_") }, { TEXT("SK_Outfit_Jeans") });
 	FillList(GlassesStyles, { TEXT("SK_Glasses_") }, { TEXT("SK_Outfit_Sunglasses") });
+	if (!PoliciaShirtMesh) { PoliciaShirtMesh = FindMesh(TEXT("SK_Uniform_PoliciaShirt")); }
+	if (!PoliciaPantsMesh) { PoliciaPantsMesh = FindMesh(TEXT("SK_Uniform_PoliciaPants")); }
+	if (!MariachiShirtMesh) { MariachiShirtMesh = FindMesh(TEXT("SK_Uniform_MariachiJacket")); }
+	if (!MariachiPantsMesh) { MariachiPantsMesh = FindMesh(TEXT("SK_Uniform_MariachiPants")); }
 	if (!PonchoMesh)
 	{
 		PonchoMesh = FindMesh(TEXT("SK_Outfit_Poncho"));
@@ -781,16 +786,46 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 			Part->SetLeaderPoseComponent(GetMesh(), true);
 		}
 	};
+	// Special uniforms: the Policia always; the mariachi suit whenever you're holding a trumpet.
+	const uint8 Uniform = UniformOverride == 1 ? 1 : (HeldItem == EBRItem::Trumpet ? 2 : 0);
+	USkeletalMesh* UniTop = Uniform == 1 ? PoliciaShirtMesh.Get() : (Uniform == 2 ? MariachiShirtMesh.Get() : nullptr);
+	USkeletalMesh* UniBottom = Uniform == 1 ? PoliciaPantsMesh.Get() : (Uniform == 2 ? MariachiPantsMesh.Get() : nullptr);
+	auto Wear = [this](USkeletalMeshComponent* Part, USkeletalMesh* Mesh)
+	{
+		if (Part && Mesh && Part->GetSkeletalMeshAsset() != Mesh)
+		{
+			BRMakeFollowerSafe(Part);
+			Part->SetSkeletalMeshAsset(Mesh);
+			Part->SetLeaderPoseComponent(GetMesh(), true);
+		}
+	};
 	// Border Patrol always wear their uniform (no custom shirts/pants).
-	PickOrDefault(OutfitTop, ShirtStyles, IsWarden() ? 0 : L.ShirtStyle, DefaultTopMesh.Get());
-	PickOrDefault(OutfitBottom, PantsStyles, IsWarden() ? 0 : L.PantsStyle, DefaultBottomMesh.Get());
+	if (UniTop) { Wear(OutfitTop, UniTop); } else { PickOrDefault(OutfitTop, ShirtStyles, IsWarden() ? 0 : L.ShirtStyle, DefaultTopMesh.Get()); }
+	if (UniBottom) { Wear(OutfitBottom, UniBottom); } else { PickOrDefault(OutfitBottom, PantsStyles, IsWarden() ? 0 : L.PantsStyle, DefaultBottomMesh.Get()); }
 	PickOrDefault(OutfitFace, GlassesStyles, L.Glasses, nullptr);
 	PickStyle(FacialHair, FacialHairStyles, L.FacialHair);
 	// Players: the slider only covers their team's allowed skin range (Project Settings -> Border Run -> Skin Range).
 	// NPCs already rolled a tone inside the village range.
 	ApplySkin(BR::SkinColor(bIsNPC ? L.SkinTone : UBRSettings::SkinToneFor(GetFaction(), L.SkinTone)));
-	TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor) || IsWarden(), BR::ClothColor(L.ShirtColor), ClothMaterialSlot);
-	TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor) || IsWarden(), BR::ClothColor(L.PantsColor), ClothMaterialSlot);
+	// (uniform models keep their own colours; no model imported yet = tint whatever they wear in the uniform colours)
+	const FLinearColor UniTopTint = Uniform == 1 ? FLinearColor(0.07f, 0.11f, 0.3f) : FLinearColor(0.03f, 0.03f, 0.035f);
+	const FLinearColor UniBottomTint = Uniform == 1 ? FLinearColor(0.07f, 0.11f, 0.3f) : FLinearColor(0.03f, 0.03f, 0.035f);
+	if (Uniform != 0 && !UniTop)
+	{
+		TintOutfit(OutfitTop, ShirtColorParameters, false, UniTopTint, ClothMaterialSlot);
+	}
+	else
+	{
+		TintOutfit(OutfitTop, ShirtColorParameters, BR::IsOriginalCloth(L.ShirtColor) || IsWarden() || UniTop != nullptr, BR::ClothColor(L.ShirtColor), ClothMaterialSlot);
+	}
+	if (Uniform != 0 && !UniBottom)
+	{
+		TintOutfit(OutfitBottom, PantsColorParameters, false, UniBottomTint, ClothMaterialSlot);
+	}
+	else
+	{
+		TintOutfit(OutfitBottom, PantsColorParameters, BR::IsOriginalCloth(L.PantsColor) || IsWarden() || UniBottom != nullptr, BR::ClothColor(L.PantsColor), ClothMaterialSlot);
+	}
 	TintOutfit(Hair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	TintOutfit(FacialHair, HairColorParameters, BR::IsOriginalCloth(L.HairColor), BR::HairColor(L.HairColor));
 	// Eyebrows (the "M_Brow" slot on the body) match the hair colour.
@@ -7629,8 +7664,22 @@ void ABRCharacter::TickOutfitState()
 	}
 }
 
+void ABRCharacter::OnRep_Uniform()
+{
+	ApplyLook(Look);
+}
+
 void ABRCharacter::OnRep_HeldItem()
 {
+	// Trumpet in hand = mariachi suit on (and off again when you put it away).
+	{
+		const bool bWantsSuit = HeldItem == EBRItem::Trumpet;
+		if (bWantsSuit != bWearingMariachi)
+		{
+			bWearingMariachi = bWantsSuit;
+			ApplyLook(Look);
+		}
+	}
 	if (!HeldItemMesh)
 	{
 		return;

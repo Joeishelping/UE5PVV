@@ -213,6 +213,10 @@ public:
 	bool bVillager = false;
 	/** A troublemaking local: picks fights and mugs people (and the Policía arrest them for it - if they see it). */
 	bool bTroublemaker = false;
+	/** 1 = wears the Policia uniform (replicated so everyone sees it). */
+	UPROPERTY(ReplicatedUsing = OnRep_Uniform) uint8 UniformOverride = 0;
+	UFUNCTION() void OnRep_Uniform();
+	bool bWearingMariachi = false;
 	bool IsCrimeWitnessed() const;
 	float PoliciaHeat = 0.f;
 	float LastCrimeTime = -100.f;
@@ -230,6 +234,8 @@ public:
 	bool IsMexicanCivilianVictim() const;
 	/** Server: you hurt someone - if they're a Mexican civilian in town, the Policía want you. */
 	void ReportCrimeAgainst(ABRCharacter* Victim, float Heat);
+	/** Server: a crime in town (burglary...) - only counts if a Policia officer sees you. */
+	void CommitCrimeInTown(float Heat);
 	void TickPoliciaHeat(float DeltaSeconds);
 	/** Policía NPC brain (true = it moved us this tick). */
 	bool TickPoliciaThink();
@@ -973,6 +979,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> HairStyles;
 	/** Shirts players can pick (SK_Shirt_...). Slot 0 in the menu = the Blueprint's own OutfitTop. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> ShirtStyles;
+	/** Special uniforms (fill themselves by name: SK_Uniform_PoliciaShirt / Pants, SK_Uniform_MariachiJacket / Pants).
+	 *  Only the Policia wear the police one; the mariachi suit goes on the band - and on anyone holding a trumpet. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> PoliciaShirtMesh;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> PoliciaPantsMesh;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> MariachiShirtMesh;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> MariachiPantsMesh;
 	/** Pants players can pick (SK_Pants_..., SK_Outfit_Jeans). Slot 0 = the Blueprint's own OutfitBottom. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> PantsStyles;
 	/** Glasses / sunglasses (SK_Glasses_..., SK_Outfit_Sunglasses), worn on the OutfitFace slot. */
