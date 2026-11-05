@@ -1354,6 +1354,17 @@ This only exists on the built-in test map.
 - **Restocking:** each house takes 4 minutes before there's something to steal again.
 - **It's a crime against Mexico,** but only if a Policia officer sees you do it (+45 heat).
 
+## Part 15an: Self-defence and the evidence table
+
+- **Not a crime:**
+  - Beating up the mugger who robbed you to get your stuff back.
+  - Fighting someone who's mugging you.
+  - Roughing up someone the Policia already want.
+- **Evidence table:** when the Policia arrest someone (player or NPC), everything in their pockets goes onto the **EVIDENCE** table at the station, beside the cell. That includes anything they'd stolen.
+  - The sign shows how many things are on it.
+  - Hold E at the table to **steal it all back** (as much as your pockets hold).
+  - That's a crime (+35) if a cop sees you.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

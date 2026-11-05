@@ -40,6 +40,89 @@ ABRMexJail::ABRMexJail()
 	UTextRenderComponent* Sign = AddLabel(TEXT("Sign"), FVector(X + 20.f, 0.f, H + 60.f), 90.f, FColor(255, 230, 120));
 	Sign->SetText(FText::FromString(TEXT("CARCEL - POLICIA")));
 	Tags.Add(TEXT("NoGrab")); // no climbing out over the roof
+	// The station's evidence table, outside the cell (everything taken off arrested people ends up here).
+	const FVector Table(X + 260.f, -Y - 60.f, 0.f);
+	AddMesh(TEXT("EvTable"), CubeMesh, Table + FVector(0.f, 0.f, 45.f), FVector(160.f, 90.f, 10.f), FLinearColor(0.4f, 0.27f, 0.14f));
+	for (int32 i = 0; i < 4; ++i)
+	{
+		AddMesh(*FString::Printf(TEXT("EvLeg%d"), i), CubeMesh, Table + FVector((i % 2 ? 70.f : -70.f), (i / 2 ? 38.f : -38.f), 22.f), FVector(8.f, 8.f, 44.f), FLinearColor(0.3f, 0.2f, 0.1f), FRotator::ZeroRotator, false);
+	}
+	EvidenceLabel = AddLabel(TEXT("EvSign"), Table + FVector(0.f, 0.f, 120.f), 34.f, FColor(255, 255, 255));
+	EvidenceLabel->SetRelativeRotation(FRotator(0.f, 0.f, 0.f));
+	TablePos = Table;
+	bReplicates = true;
+	AddPickupZone(CellHalfX + 400.f);
+}
+
+void ABRMexJail::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ABRMexJail, Evidence);
+}
+
+void ABRMexJail::BeginPlay()
+{
+	Super::BeginPlay();
+	OnRep_Evidence();
+}
+
+void ABRMexJail::OnRep_Evidence()
+{
+	if (EvidenceLabel)
+	{
+		EvidenceLabel->SetText(FText::FromString(FString::Printf(TEXT("EVIDENCE (%d)"), Evidence.Num())));
+	}
+}
+
+void ABRMexJail::AddEvidence(EBRItem Item)
+{
+	if (HasAuthority() && Item != EBRItem::None)
+	{
+		Evidence.Add(Item);
+		if (Evidence.Num() > 24)
+		{
+			Evidence.RemoveAt(0); // (old stuff gets thrown out)
+		}
+		OnRep_Evidence();
+		ForceNetUpdate();
+	}
+}
+
+bool ABRMexJail::NearTable(const APVVCharacter* Who) const
+{
+	return Who && FVector::Dist2D(Who->GetActorLocation(), GetActorTransform().TransformPosition(TablePos)) < 230.f;
+}
+
+bool ABRMexJail::CanInteract_Implementation(APVVCharacter* Interactor) const
+{
+	const ABRCharacter* C = Cast<ABRCharacter>(Interactor);
+	return C && !C->IsNPC() && C->GetCondition() == EPVVCondition::Normal && C->MexJailEnd < 0.f && NearTable(C) && Evidence.Num() > 0;
+}
+
+FText ABRMexJail::GetInteractPrompt_Implementation(APVVCharacter* Interactor) const
+{
+	return FText::Format(LOCTEXT("StealEvidence", "STEAL from the evidence table ({0} things) - a crime if a cop sees you"), Evidence.Num());
+}
+
+void ABRMexJail::OnInteract_Implementation(APVVCharacter* Interactor)
+{
+	ABRCharacter* C = Cast<ABRCharacter>(Interactor);
+	ABRPlayerState* PS = C ? C->GetBRPlayerState() : nullptr;
+	if (!HasAuthority() || !PS || Evidence.Num() == 0)
+	{
+		return;
+	}
+	C->CommitCrimeInTown(35.f); // stealing from the Policía, right under their noses
+	int32 Took = 0;
+	while (Evidence.Num() > 0 && PS->HasFreeSlot())
+	{
+		PS->AddItem(Evidence.Pop());
+		++Took;
+	}
+	OnRep_Evidence();
+	ForceNetUpdate();
+	C->Notify(Took > 0 ? FText::Format(LOCTEXT("TookEvidence", "You grabbed {0} thing(s) off the evidence table."), Took)
+		: LOCTEXT("PocketsFull", "Your pockets are full."));
 }
 
 FVector ABRMexJail::GetCellSpot() const
@@ -141,6 +224,11 @@ void ABRCharacter::ReportCrimeAgainst(ABRCharacter* Victim, float Heat)
 	const ABRDesertArena* Arena = TownArena(GetWorld());
 	const bool bPlayerVictim = bIsNPC && !Victim->IsNPC() && !Victim->IsWarden() && Arena && Arena->IsInTown(Victim->GetActorLocation());
 	if (!Victim->IsMexicanCivilianVictim() && !bPlayerVictim)
+	{
+		return;
+	}
+	// Getting your stuff back off the mugger who robbed you (or sorting out someone the Policía already want) isn't a crime.
+	if ((Victim->StolenItem != EBRItem::None && Victim->StolenFrom.Get() == GetPlayerState()) || Victim->MugTarget.Get() == this || Victim->bWantedByPolicia)
 	{
 		return;
 	}
@@ -354,11 +442,40 @@ void ABRCharacter::SendToMexJail(ABRCharacter* Cop)
 		CalmDown();
 		MugTarget = nullptr;
 	}
+	// Everything in your pockets goes on the evidence table at the station.
+	int32 Seized = 0;
+	if (ABRPlayerState* PS = GetBRPlayerState())
+	{
+		for (const EBRItem Item : PS->Inventory)
+		{
+			if (Item != EBRItem::None)
+			{
+				Jail->AddEvidence(Item);
+				++Seized;
+			}
+		}
+		PS->Inventory.Reset();
+		PS->ForceNetUpdate();
+	}
+	if (StolenItem != EBRItem::None)
+	{
+		Jail->AddEvidence(StolenItem);
+		StolenItem = EBRItem::None;
+		++Seized;
+	}
+	if (bIsNPC && HeldItem != EBRItem::None)
+	{
+		SetNPCHeldItem(EBRItem::None);
+	}
 	int32 Fine = 0;
 	if (ABRPlayerState* PS = GetBRPlayerState())
 	{
 		Fine = FMath::Min(PS->Money, 300);
 		PS->AddMoney(-Fine);
+	}
+	if (Seized > 0)
+	{
+		Notify(FText::Format(LOCTEXT("EvidenceTaken", "The Policia took {0} thing(s) off you - they're on the evidence table at the station."), Seized));
 	}
 	Notify(FText::Format(LOCTEXT("Jailed", "ARRESTED by the Policia: {0} s in the carcel and a ${1} fine."), FMath::RoundToInt(Seconds), Fine));
 	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())

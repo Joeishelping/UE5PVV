@@ -11,12 +11,20 @@
 #include "BRPolicia.generated.h"
 
 UCLASS(meta = (DisplayName = "BR Mexican Jail"))
-class PIRATESVSVIKINGS_API ABRMexJail : public ABRGreyboxActor
+class PIRATESVSVIKINGS_API ABRMexJail : public ABRGreyboxActor, public IPVVInteractable
 {
 	GENERATED_BODY()
 
 public:
 	ABRMexJail();
+	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual bool CanInteract_Implementation(APVVCharacter* Interactor) const override;
+	virtual float GetInteractDuration_Implementation(APVVCharacter* Interactor) const override { return 2.5f; }
+	virtual FText GetInteractPrompt_Implementation(APVVCharacter* Interactor) const override;
+	virtual void OnInteract_Implementation(APVVCharacter* Interactor) override;
+	/** Server: something taken off an arrested person goes on the evidence table. */
+	void AddEvidence(EBRItem Item);
 	/** Inside the cell / just outside the door. */
 	FVector GetCellSpot() const;
 	FVector GetReleaseSpot() const;
@@ -26,6 +34,13 @@ public:
 	static constexpr float CellHalfX = 300.f;
 	static constexpr float CellHalfY = 250.f;
 	static constexpr float CellHeight = 340.f;
+
+private:
+	UPROPERTY(ReplicatedUsing = OnRep_Evidence) TArray<EBRItem> Evidence;
+	UFUNCTION() void OnRep_Evidence();
+	UPROPERTY() TObjectPtr<UTextRenderComponent> EvidenceLabel;
+	FVector TablePos = FVector::ZeroVector;
+	bool NearTable(const APVVCharacter* Who) const;
 };
 
 /** A house's front door lock: pick it (Lockpick, hold E) to rob the place. A crime against Mexico - if a cop sees it. */
