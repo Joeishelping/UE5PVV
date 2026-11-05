@@ -1715,15 +1715,10 @@ ABRTruck::ECheckpointAction ABRTruck::WantsCheckpointAction(const APVVCharacter*
 	{
 		return ECheckpointAction::None; // (they get out by themselves once everyone's scanned)
 	}
-	const float SearchFrom = CheckpointArrivalTime;
+	// (search people one at a time - hold E on each - whenever you like; the truck itself only offers deny / wave through)
 	for (const TWeakObjectPtr<APVVCharacter>& W : WaitingOutside)
 	{
-		const ABRCharacter* C = Cast<ABRCharacter>(W.Get());
-		if (C && C->GetCondition() == EPVVCondition::Normal && !C->WasFriskedSince(SearchFrom))
-		{
-			return ECheckpointAction::PatDown;
-		}
-		bNoPapers |= HasNoPapers(C);
+		bNoPapers |= HasNoPapers(Cast<ABRCharacter>(W.Get()));
 	}
 	return bNoPapers ? ECheckpointAction::Deny : ECheckpointAction::Wave;
 }

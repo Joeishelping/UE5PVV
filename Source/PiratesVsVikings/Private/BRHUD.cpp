@@ -264,7 +264,7 @@ void ABRHUD::DrawHUD()
 	// --- Solo session: how to play with friends
 	if (GetNetMode() == NM_Standalone)
 	{
-		DrawText(TEXT("SOLO - press M for the menu (host / join / pick your side)"), Yellow, 20.f, SY - 210.f, Small, 1.2f);
+		DrawText(TEXT("SOLO - press M for the menu (pick your side, customize)"), Yellow, 20.f, SY - 210.f, Small, 1.2f);
 	}
 	if (const UBRGameInstance* GI = GetGameInstance<UBRGameInstance>())
 	{

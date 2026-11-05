@@ -122,40 +122,7 @@ void UBRMenuWidget::BuildLayout()
 	AddRow(Box, Teams);
 	BuildCustomize(Box);
 
-	UButton* HostSteam = MakeButton(TEXT("HOST ONLINE GAME"), Go);
-	HostSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHostSteam);
-	AddRow(Box, HostSteam);
-
-	UButton* Browse = MakeButton(TEXT("FIND GAMES  (server list)"), Neutral);
-	Browse->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBrowseGames);
-	AddRow(Box, Browse);
-	ServerList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-	AddRow(Box, ServerList);
-
-	UButton* InviteSteam = MakeButton(TEXT("INVITE A FRIEND  (after hosting)"), Neutral);
-	InviteSteam->OnClicked.AddDynamic(this, &UBRMenuWidget::OnInviteSteam);
-	AddRow(Box, InviteSteam);
-
-	UButton* HostLan = MakeButton(TEXT("HOST GAME  (LAN / direct IP)"), Neutral);
-	HostLan->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHostLan);
-	AddRow(Box, HostLan);
-
-	UHorizontalBox* JoinRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-	AddressBox = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass());
-	AddressBox->SetHintText(FText::FromString(TEXT("Host's IP, e.g. 26.12.34.56")));
-	UButton* Join = MakeButton(TEXT("JOIN IP"), Neutral);
-	Join->OnClicked.AddDynamic(this, &UBRMenuWidget::OnJoinAddress);
-	if (UHorizontalBoxSlot* ChildSlot = JoinRow->AddChildToHorizontalBox(AddressBox))
-	{
-		ChildSlot->SetPadding(FMargin(4.f));
-		ChildSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-		ChildSlot->SetVerticalAlignment(VAlign_Center);
-	}
-	if (UHorizontalBoxSlot* ChildSlot = JoinRow->AddChildToHorizontalBox(Join))
-	{
-		ChildSlot->SetPadding(FMargin(4.f));
-	}
-	AddRow(Box, JoinRow);
+	// (Hosting / joining buttons removed: you're adding your own hosting flow. The handlers below are still here if you want them back.)
 
 	UHorizontalBox* Bottom = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	UButton* Play = MakeButton(TEXT("PLAY / RESUME"), Go);

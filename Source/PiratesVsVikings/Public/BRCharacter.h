@@ -90,6 +90,7 @@ public:
 	 *  a suspect (no papers / contraband) reacts after a few seconds instead (fight, run or hands up). */
 	void WaitForSearch(ABRTruck* Truck, int32 Seat, ABRCharacter* SuspectCop);
 	bool IsWaitingForSearch() const { return SearchWaitTruck.IsValid(); }
+	bool SearchWaitTruckIs(const AActor* Truck) const;
 	/** Server: not waiting by the van any more (denied, arrested...). */
 	void StopWaitingForSearch();
 	/** Was patted down since this time. */
@@ -105,6 +106,10 @@ public:
 	bool bAggressiveSuspect = false;
 	/** Part of a BORDER RUSH crowd: storms the Wall, climbs it, runs for the Safe Zone. */
 	bool bHordeRunner = false;
+	/** Rushers: chance each attempt actually gets them climbing the Wall (the rest slide off and try again). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|NPC") float HordeClimbChance = 0.25f;
+	float NextHordeClimbTry = 0.f;
+	float HordeRestUntil = 0.f;
 
 	// --- NPC secrets (server) -------------------------------------------------------------
 	/** No papers. Border Patrol score for catching them; Runners score for smuggling them through. */

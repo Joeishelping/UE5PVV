@@ -179,9 +179,9 @@ protected:
 	/** Chance an NPC truck is a box truck (cargo hold to search). */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") float BoxTruckChance = 0.25f;
 	/** BORDER RUSH: every so often a crowd comes out of the river and storms the Wall all at once (seconds between rushes). */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") FVector2D BorderRushEverySeconds = FVector2D(150.f, 260.f);
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") FVector2D BorderRushEverySeconds = FVector2D(220.f, 360.f);
 	/** How many in each rush (random between these). 0 = no rushes. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") FIntPoint BorderRushSize = FIntPoint(10, 14);
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") FIntPoint BorderRushSize = FIntPoint(5, 8);
 	/** Seconds of warning before they come out of the river. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") float BorderRushWarning = 10.f;
 	/** Mexican police patrolling town (built-in map), and how soon dead townspeople / police are replaced (seconds). */

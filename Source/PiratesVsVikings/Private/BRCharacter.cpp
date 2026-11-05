@@ -1369,9 +1369,38 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			for (TActorIterator<ABRWall> WallIt(GetWorld()); WallIt; ++WallIt)
 			{
 				const FVector ToWall = WallIt->GetActorForwardVector().GetSafeNormal2D();
-				if (NPCClimbBorderWall(ToWall))
+				// The Wall is HARD to get over: most attempts fail - they jump at it, slide off, catch their breath and try again.
+				const float NowRush = GetWorld()->GetTimeSeconds();
+				if (bClimbing)
 				{
 					return;
+				}
+				if (NowRush < HordeRestUntil)
+				{
+					return; // winded at the foot of the Wall (an easy grab for Border Patrol)
+				}
+				if (NowRush >= NextHordeClimbTry)
+				{
+					FHitResult WallTouch;
+					FCollisionQueryParams TouchParams(SCENE_QUERY_STAT(BRHordeWall), false, this);
+					const FVector From = GetActorLocation() + FVector(0.f, 0.f, 40.f);
+					if (GetWorld()->LineTraceSingleByChannel(WallTouch, From, From + ToWall * 120.f, ECC_Visibility, TouchParams))
+					{
+						NextHordeClimbTry = NowRush + FMath::FRandRange(3.f, 6.f);
+						if (FMath::FRand() < HordeClimbChance)
+						{
+							if (NPCClimbBorderWall(ToWall))
+							{
+								return;
+							}
+						}
+						else
+						{
+							Jump(); // jumps at it... and slides back down
+							HordeRestUntil = NowRush + FMath::FRandRange(1.5f, 3.f);
+							return;
+						}
+					}
 				}
 				FVector Dodge = FVector::ZeroVector;
 				for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
@@ -7027,7 +7056,7 @@ void ABRCharacter::TickClimb(float DeltaSeconds)
 			// Hold SPACE: climb hand over hand. Look down to climb down instead.
 			const float Pitch = FRotator::NormalizeAxis(GetBaseAimRotation().Pitch);
 			const float Dir = Pitch < -25.f ? -1.f : 1.f;
-			Vz = Dir * ClimbSpeed * (Grip == 2 ? 1.f : 0.45f) * FMath::Lerp(0.45f, 1.f, ClimbStamina);
+			Vz = Dir * ClimbSpeed * (Grip == 2 ? 1.f : 0.45f) * FMath::Lerp(0.45f, 1.f, ClimbStamina) * (bHordeRunner ? 0.45f : 1.f); // (a rushing crowd struggles up it)
 		}
 		else if (Grip == 1)
 		{

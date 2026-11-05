@@ -216,8 +216,21 @@ void ABRBoxTruck::SetDoorsOpen(bool bOpen, APVVCharacter* By)
 	ForceNetUpdate();
 	if (bOpen)
 	{
-		// Anyone hiding back there is found.
-		ReleaseStowed(Cast<ABRCharacter>(By));
+		// Border Patrol open the back and find people hiding in it: the whole truck is busted.
+		ABRCharacter* Opener = Cast<ABRCharacter>(By);
+		bool bHidden = false;
+		for (const TWeakObjectPtr<ABRCharacter>& W : Stowed)
+		{
+			bHidden |= W.IsValid();
+		}
+		if (Opener && Opener->IsWarden() && bHidden && IsNPCTruck())
+		{
+			OnContrabandFound(Opener);
+		}
+		else
+		{
+			ReleaseStowed(Opener);
+		}
 	}
 	else
 	{
@@ -605,7 +618,7 @@ void ABRBoxTruck::OnContrabandFound(ABRCharacter* Cop)
 		return;
 	}
 	bBusted = true;
-	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 330.f), TEXT("SMUGGLERS!"));
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 330.f), TEXT("SMUGGLERS! ENTRY DENIED"));
 	ABRGameState::Sfx(this, EBRSfx::ScanAlarm, GetActorLocation());
 	// Everyone aboard is in on it: out, and they're fair game to arrest (they'll fight, run or give up).
 	TArray<ABRCharacter*> Crew;
@@ -616,9 +629,21 @@ void ABRBoxTruck::OnContrabandFound(ABRCharacter* Cop)
 			Crew.Add(C);
 		}
 	}
+	// (and anyone from this truck already standing outside for the search)
+	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+	{
+		if (It->IsNPC() && It->SearchWaitTruckIs(this) && !Crew.Contains(*It))
+		{
+			It->StopWaitingForSearch();
+			Crew.Add(*It);
+		}
+	}
 	for (ABRCharacter* C : Crew)
 	{
-		Unseat(C);
+		if (C->GetCurrentBoat() == this)
+		{
+			Unseat(C);
+		}
 		C->bCarriesContraband = true; // (arresting them is a good catch, not harassment)
 		C->LaunchCharacter(FVector(FMath::FRandRange(-150.f, 150.f), FMath::FRandRange(-150.f, 150.f), 280.f), true, true);
 		C->ReactToBust(Cop, false);
@@ -633,7 +658,7 @@ void ABRBoxTruck::OnContrabandFound(ABRCharacter* Cop)
 	ReleaseStowed(Cop);
 	if (Cop)
 	{
-		Cop->Notify(LOCTEXT("TruckBusted", "Contraband in the back! Everyone in this truck is under arrest - tase them and zip-tie them."));
+		Cop->Notify(LOCTEXT("TruckBusted", "BUSTED! Everyone from this truck is denied entry and under arrest - tase them and zip-tie them."));
 	}
 	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
 	{

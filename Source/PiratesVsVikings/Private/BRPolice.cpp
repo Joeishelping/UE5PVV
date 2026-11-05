@@ -460,6 +460,11 @@ void ABRCharacter::WaitForSearch(ABRTruck* Truck, int32 Seat, ABRCharacter* Susp
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
 }
 
+bool ABRCharacter::SearchWaitTruckIs(const AActor* Truck) const
+{
+	return Truck && SearchWaitTruck.Get() == Truck;
+}
+
 void ABRCharacter::StopWaitingForSearch()
 {
 	SearchWaitTruck = nullptr;

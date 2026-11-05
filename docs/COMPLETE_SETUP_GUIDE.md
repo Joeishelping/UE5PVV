@@ -1370,6 +1370,27 @@ This only exists on the built-in test map.
 - **Fake BP Uniform:** wearing it puts you in the **real Border Patrol uniform**: the green shirt, the black vest with "BORDER PATROL" on the back, the green pants and the patrol cap. It fills itself in from SK_Outfit_PatrolUniform and SK_Outfit_PatrolPants. Take it off (or get caught) and your own clothes come back.
 - **Fake Passport:** now **$300** and **single-use**. It gets you through **one** papers scan, then it's gone. After that you count as having papers for about 5 minutes, so you won't be turned away at that checkpoint. It still doesn't hide contraband.
 
+## Part 15ap: Busted box trucks, simpler checkpoint, Border Rush and dog tuning, menu
+
+- **Box trucks:** if you open the back and find **people hiding** or **contraband**, the whole truck is **busted**.
+  - **Everyone** from it is denied entry and can be arrested: the driver, the passengers, people already standing outside for the search, and the stowaways.
+  - They fight, run or give up, and arresting them counts as a good catch.
+- **Checkpoint:** the "pat down everyone" option at the truck is gone.
+  - Search people one at a time by holding E on each.
+  - The truck itself only offers **Deny entry** (for the ones with no papers) and **Wave through**.
+- **Border Rush:** smaller crowds (5 to 8 people), less often (every 3½ to 6 minutes). The **Wall is hard for them**:
+  - Only about 1 in 4 attempts gets someone climbing.
+  - The rest jump at it, slide off and stand there catching their breath (easy to grab).
+  - The ones who do get on climb at about half speed.
+  - Tune *Horde Climb Chance* on the NPC (BR | NPC).
+- **Dogs:**
+  - A little slower.
+  - They steer around walls, trucks and crates.
+  - They **give up** after chasing someone for 15 seconds without catching them, and leave that person alone for a bit.
+  - Under half their bites knock you down, and you get back up faster.
+  - They ignore the Policia.
+- **Menu:** the hosting and joining buttons are removed (you're adding your own).
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

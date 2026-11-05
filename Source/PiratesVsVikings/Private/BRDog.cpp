@@ -108,7 +108,7 @@ void ABRDog::Think()
 	for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
 	{
 		ABRCharacter* C = *It;
-		if (C->IsWarden() || C->bSparring || C->GetCondition() != EPVVCondition::Normal || C->GetCurrentBoat() || C->GetCarrier() || C->IsHidingInSpot() || C->IsDead())
+		if ((IgnoreTarget.Get() == C && Now < IgnoreUntil) || C->IsWarden() || C->bSparring || C->bPolicia || C->GetCondition() != EPVVCondition::Normal || C->GetCurrentBoat() || C->GetCarrier() || C->IsHidingInSpot() || C->IsDead())
 		{
 			continue;
 		}
@@ -174,6 +174,20 @@ void ABRDog::Think()
 			bBestResisting = bResisting;
 		}
 	}
+	// Chased the same person for ages without catching them: give up and trot back (they're too quick / too far).
+	if (Best && Best == Target.Get())
+	{
+		if (Now - ChaseSince > GiveUpSeconds)
+		{
+			IgnoreTarget = Best;
+			IgnoreUntil = Now + 15.f;
+			Best = nullptr;
+		}
+	}
+	else
+	{
+		ChaseSince = Now;
+	}
 	Target = Best;
 	bTargetResisting = bBestResisting;
 	GetCharacterMovement()->MaxWalkSpeed = Best ? ChaseSpeed : PatrolSpeed;
@@ -226,7 +240,39 @@ void ABRDog::Tick(float DeltaSeconds)
 	const FVector ToGoal = (Goal - GetActorLocation()) * FVector(1.f, 1.f, 0.f);
 	if (ToGoal.Size() > 60.f)
 	{
-		AddMovementInput(ToGoal.GetSafeNormal());
+		// Run AROUND things (walls, trucks, crates) instead of into them.
+		FVector Dir = ToGoal.GetSafeNormal();
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BRDogSteer), false, this);
+		auto Blocked = [&](const FVector& D)
+		{
+			FHitResult Hit;
+			const FVector From = GetActorLocation();
+			return GetWorld()->SweepSingleByChannel(Hit, From, From + D * 160.f, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(25.f), Params)
+				&& !Cast<APawn>(Hit.GetActor()) && Hit.ImpactNormal.Z < 0.7f;
+		};
+		if (Blocked(Dir))
+		{
+			const int32 First = SteerSide != 0 ? SteerSide : (FMath::RandBool() ? 1 : -1);
+			bool bFound = false;
+			for (const float Angle : { 40.f, 80.f, 120.f })
+			{
+				for (const int32 Sgn : { First, -First })
+				{
+					const FVector Try = Dir.RotateAngleAxis(Angle * Sgn, FVector::UpVector);
+					if (!bFound && !Blocked(Try))
+					{
+						Dir = Try;
+						SteerSide = Sgn;
+						bFound = true;
+					}
+				}
+			}
+		}
+		else
+		{
+			SteerSide = 0;
+		}
+		AddMovementInput(Dir);
 	}
 
 	if (Prey)
@@ -248,15 +294,16 @@ void ABRDog::Tick(float DeltaSeconds)
 		}
 		else if (ToGoal.Size() < 150.f && Now >= NextBite)
 		{
-			NextBite = Now + (bTargetResisting ? 5.f : 7.f);
+			NextBite = Now + 7.f;
+			ChaseSince = Now; // got a mouthful: keep at it
 			Prey->Spot(6.f);
 			ABRGameState::FX(this, EBRFX::PunchHit, Prey->GetActorLocation());
-			if (bTargetResisting)
+			if (bTargetResisting && FMath::FRand() < 0.45f)
 			{
 				// Latches on and drags them down: Border Patrol has a few seconds to zip-tie them.
 				const FVector Pull = (GetActorLocation() - Prey->GetActorLocation()).GetSafeNormal2D() * 250.f + FVector(0.f, 0.f, 120.f);
 				Prey->ApplyKnockdown(this, Pull);
-				Prey->SetKnockdownTimeLeft(Prey->IsNPC() ? 4.f : 2.5f);
+				Prey->SetKnockdownTimeLeft(Prey->IsNPC() ? 3.f : 1.8f);
 				Prey->Notify(LOCTEXT("BitDown", "A DOG TOOK YOU DOWN! Get up and shake it off!"));
 			}
 			else
