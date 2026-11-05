@@ -1092,7 +1092,7 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 		const FLinearColor Armas(0.25f, 0.25f, 0.28f), Gadget(0.3f, 0.35f, 0.3f);
 		Station(-16650.f, -3750.f, EBRStationKind::BuyItem, EBRItem::Knife, 600, TEXT("KNIFE $600"), Armas);
 		Station(-16650.f, -2650.f, EBRStationKind::BuyItem, EBRItem::IllegalGun, 1800, TEXT("PISTOL $1800\n(contraband!)"), Armas);
-		Station(-17150.f, -3750.f, EBRStationKind::BuyItem, EBRItem::FakePassport, 1000, TEXT("PAPELES CHUCHO\nFAKE PASSPORT $1000"), FLinearColor(0.35f, 0.2f, 0.45f));
+		Station(-17150.f, -3750.f, EBRStationKind::BuyItem, EBRItem::FakePassport, 300, TEXT("PAPELES CHUCHO\nFAKE PASSPORT $300 (one use)"), FLinearColor(0.35f, 0.2f, 0.45f));
 		Station(-17150.f, -3200.f, EBRStationKind::BuyItem, EBRItem::FakeUniform, 1500, TEXT("FAKE BORDER PATROL UNIFORM $1500"), FLinearColor(0.15f, 0.25f, 0.55f));
 		Station(-17150.f, -2650.f, EBRStationKind::BuyItem, EBRItem::TNT, 900, TEXT("TNT $900\n(blows a hole in the Wall)"), FLinearColor(0.75f, 0.12f, 0.1f));
 		Station(-17550.f, -3750.f, EBRStationKind::BuyItem, EBRItem::SmokeBomb, 150, TEXT("SMOKE BOMB $150"), Gadget);

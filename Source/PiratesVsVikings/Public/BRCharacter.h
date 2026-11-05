@@ -213,7 +213,9 @@ public:
 	bool bVillager = false;
 	/** A troublemaking local: picks fights and mugs people (and the Policía arrest them for it - if they see it). */
 	bool bTroublemaker = false;
-	/** 1 = wears the Policia uniform (replicated so everyone sees it). */
+	/** A fake passport got you through a scan: you count as having papers until then. */
+	float PapersClearedUntil = -1.f;
+	/** 1 = Policia uniform, 3 = Border Patrol uniform (fake uniform disguise). Replicated so everyone sees it. */
 	UPROPERTY(ReplicatedUsing = OnRep_Uniform) uint8 UniformOverride = 0;
 	UFUNCTION() void OnRep_Uniform();
 	bool bWearingMariachi = false;
@@ -985,6 +987,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> PoliciaPantsMesh;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> MariachiShirtMesh;
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> MariachiPantsMesh;
+	/** The real Border Patrol uniform (the Fake BP Uniform puts a Runner in this). Fills itself: SK_Outfit_PatrolUniform / PatrolPants. */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> BPUniformShirtMesh;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TObjectPtr<USkeletalMesh> BPUniformPantsMesh;
 	/** Pants players can pick (SK_Pants_..., SK_Outfit_Jeans). Slot 0 = the Blueprint's own OutfitBottom. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Look") TArray<TObjectPtr<USkeletalMesh>> PantsStyles;
 	/** Glasses / sunglasses (SK_Glasses_..., SK_Outfit_Sunglasses), worn on the OutfitFace slot. */

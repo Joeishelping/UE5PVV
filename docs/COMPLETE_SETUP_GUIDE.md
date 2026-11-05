@@ -1365,6 +1365,11 @@ This only exists on the built-in test map.
   - Hold E at the table to **steal it all back** (as much as your pockets hold).
   - That's a crime (+35) if a cop sees you.
 
+## Part 15ao: Disguises
+
+- **Fake BP Uniform:** wearing it puts you in the **real Border Patrol uniform**: the green shirt, the black vest with "BORDER PATROL" on the back, the green pants and the patrol cap. It fills itself in from SK_Outfit_PatrolUniform and SK_Outfit_PatrolPants. Take it off (or get caught) and your own clothes come back.
+- **Fake Passport:** now **$300** and **single-use**. It gets you through **one** papers scan, then it's gone. After that you count as having papers for about 5 minutes, so you won't be turned away at that checkpoint. It still doesn't hide contraband.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

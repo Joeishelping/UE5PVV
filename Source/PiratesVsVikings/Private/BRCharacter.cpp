@@ -421,6 +421,8 @@ void ABRCharacter::AutoFillSlots()
 	if (!PoliciaPantsMesh) { PoliciaPantsMesh = FindMesh(TEXT("SK_Uniform_PoliciaPants")); }
 	if (!MariachiShirtMesh) { MariachiShirtMesh = FindMesh(TEXT("SK_Uniform_MariachiJacket")); }
 	if (!MariachiPantsMesh) { MariachiPantsMesh = FindMesh(TEXT("SK_Uniform_MariachiPants")); }
+	if (!BPUniformShirtMesh) { BPUniformShirtMesh = FindMesh(TEXT("SK_Outfit_PatrolUniform")); }
+	if (!BPUniformPantsMesh) { BPUniformPantsMesh = FindMesh(TEXT("SK_Outfit_PatrolPants")); }
 	if (!PonchoMesh)
 	{
 		PonchoMesh = FindMesh(TEXT("SK_Outfit_Poncho"));
@@ -787,9 +789,9 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 		}
 	};
 	// Special uniforms: the Policia always; the mariachi suit whenever you're holding a trumpet.
-	const uint8 Uniform = UniformOverride == 1 ? 1 : (HeldItem == EBRItem::Trumpet ? 2 : 0);
-	USkeletalMesh* UniTop = Uniform == 1 ? PoliciaShirtMesh.Get() : (Uniform == 2 ? MariachiShirtMesh.Get() : nullptr);
-	USkeletalMesh* UniBottom = Uniform == 1 ? PoliciaPantsMesh.Get() : (Uniform == 2 ? MariachiPantsMesh.Get() : nullptr);
+	const uint8 Uniform = (UniformOverride == 1 || UniformOverride == 3) ? UniformOverride : (HeldItem == EBRItem::Trumpet ? 2 : 0);
+	USkeletalMesh* UniTop = Uniform == 1 ? PoliciaShirtMesh.Get() : (Uniform == 2 ? MariachiShirtMesh.Get() : (Uniform == 3 ? BPUniformShirtMesh.Get() : nullptr));
+	USkeletalMesh* UniBottom = Uniform == 1 ? PoliciaPantsMesh.Get() : (Uniform == 2 ? MariachiPantsMesh.Get() : (Uniform == 3 ? BPUniformPantsMesh.Get() : nullptr));
 	auto Wear = [this](USkeletalMeshComponent* Part, USkeletalMesh* Mesh)
 	{
 		if (Part && Mesh && Part->GetSkeletalMeshAsset() != Mesh)
@@ -808,8 +810,8 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	// NPCs already rolled a tone inside the village range.
 	ApplySkin(BR::SkinColor(bIsNPC ? L.SkinTone : UBRSettings::SkinToneFor(GetFaction(), L.SkinTone)));
 	// (uniform models keep their own colours; no model imported yet = tint whatever they wear in the uniform colours)
-	const FLinearColor UniTopTint = Uniform == 1 ? FLinearColor(0.07f, 0.11f, 0.3f) : FLinearColor(0.03f, 0.03f, 0.035f);
-	const FLinearColor UniBottomTint = Uniform == 1 ? FLinearColor(0.07f, 0.11f, 0.3f) : FLinearColor(0.03f, 0.03f, 0.035f);
+	const FLinearColor UniTopTint = Uniform == 1 ? FLinearColor(0.07f, 0.11f, 0.3f) : (Uniform == 3 ? FLinearColor(0.22f, 0.3f, 0.17f) : FLinearColor(0.03f, 0.03f, 0.035f));
+	const FLinearColor UniBottomTint = UniTopTint;
 	if (Uniform != 0 && !UniTop)
 	{
 		TintOutfit(OutfitTop, ShirtColorParameters, false, UniTopTint, ClothMaterialSlot);
@@ -1932,7 +1934,7 @@ void ABRCharacter::Server_UseItem_Implementation(int32 Slot)
 	case EBRItem::GrappleHook: UseGrapple(); break;
 	case EBRItem::FakeUniform: ToggleFakeUniform(); break;
 	case EBRItem::Lockpick: Notify(LOCTEXT("UseLockpick", "Lockpick: hold E on the Border Patrol door in the Wall, or on the holding pen door (much faster jailbreak).")); break;
-	case EBRItem::FakePassport: Notify(LOCTEXT("UsePassport", "Fake passport: the papers scan says you're legal - unless you're carrying contraband. A search finds it.")); break;
+	case EBRItem::FakePassport: Notify(LOCTEXT("UsePassport", "Fake passport: gets you through ONE papers scan, then it's used up. Doesn't hide contraband.")); break;
 	case EBRItem::Lasso: Notify(LOCTEXT("UseLasso", "Aim at someone with your view and press F to throw the lasso.")); break;
 	case EBRItem::Ladder: Notify(LOCTEXT("UseLadder", "Walk up to the Wall and press E to lean your ladder on it.")); break;
 	case EBRItem::WireCutters: Notify(LOCTEXT("UseCutters", "Walk up to the razor wire and hold E to cut it.")); break;
@@ -2971,6 +2973,13 @@ void ABRCharacter::Server_Scan_Implementation(FVector_NetQuantize Start, FVector
 	else
 	{
 		ABRGameState::Sfx(this, EBRSfx::ScanOK, Target->GetActorLocation());
+		// A fake passport gets you through ONE scan - then it's used up (and you count as cleared for a while).
+		if (ABRPlayerState* PassPS = Target->GetBRPlayerState(); PassPS && !Target->IsNPC() && Target->IsRunner() && PassPS->HasItem(EBRItem::FakePassport))
+		{
+			PassPS->RemoveItem(EBRItem::FakePassport);
+			Target->PapersClearedUntil = Now + 300.f;
+			Target->Notify(LOCTEXT("PassportUsed", "Your fake passport got you through that scan - it's used up now."));
+		}
 		const bool bNervous = Target->bCarriesContraband || (Target->GetBRPlayerState() && Target->GetBRPlayerState()->Inventory.ContainsByPredicate(
 			[](EBRItem I) { return BR::IsIllegal(I) || I == EBRItem::Knife; }));
 		Notify(bNervous ? LOCTEXT("ScanNervous", "SCAN: papers in order... but they look NERVOUS. Order them out and SEARCH them (hold E).")
@@ -6060,7 +6069,7 @@ bool ABRCharacter::FailsPapersScan() const
 	}
 	// A fake passport fools the scanner - unless you're carrying contraband (the scanner's sniffer catches it).
 	const ABRPlayerState* PS = GetBRPlayerState();
-	const bool bPassport = PS && PS->HasItem(EBRItem::FakePassport);
+	const bool bPassport = (PS && PS->HasItem(EBRItem::FakePassport)) || GetWorld()->GetTimeSeconds() < PapersClearedUntil;
 	const bool bDirty = PS && PS->Inventory.ContainsByPredicate([](EBRItem I) { return BR::IsIllegal(I); });
 	return !bPassport || bDirty;
 }

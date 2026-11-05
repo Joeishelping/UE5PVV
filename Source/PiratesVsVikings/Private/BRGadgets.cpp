@@ -162,12 +162,8 @@ void ABRCharacter::ToggleFakeUniform()
 	SavedLook = Look;
 	SavedHat = GetHat();
 	bFakeUniform = true;
-	FBRLook Uniform = Look;
-	Uniform.ShirtStyle = 0;
-	Uniform.PantsStyle = 0;
-	Uniform.ShirtColor = 0.36f;
-	Uniform.PantsColor = 0.62f;
-	SetLook(Uniform);
+	UniformOverride = 3; // the real Border Patrol uniform (vest, BORDER PATROL on the back)
+	ApplyLook(Look);
 	SetHat(EBRHat::PatrolCap);
 	ForceNetUpdate();
 	Notify(LOCTEXT("UniformOn", "You're in a Border Patrol uniform. Scans say 'fellow agent' and the BP door opens for you. Don't fight or sprint near them!"));
@@ -180,6 +176,7 @@ void ABRCharacter::TakeOffFakeUniform(bool bBlown)
 		return;
 	}
 	bFakeUniform = false;
+	UniformOverride = 0;
 	SetLook(SavedLook);
 	SetHat(SavedHat);
 	if (bBlown)

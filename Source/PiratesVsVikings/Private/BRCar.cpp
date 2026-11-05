@@ -1684,7 +1684,7 @@ bool ABRTruck::HasNoPapers(const APVVCharacter* Who)
 	{
 		return false;
 	}
-	return BRC->IsNPC() ? BRC->bIllegal : (BRC->IsRunner() && BRC->IsSuspect());
+	return BRC->IsNPC() ? BRC->bIllegal : (BRC->IsRunner() && BRC->IsSuspect() && BRC->GetWorld()->GetTimeSeconds() >= BRC->PapersClearedUntil);
 }
 
 ABRTruck::ECheckpointAction ABRTruck::WantsCheckpointAction(const APVVCharacter* Interactor) const

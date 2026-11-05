@@ -45,7 +45,7 @@ namespace
 		case EBRItem::Shovel: return TEXT("Hold E at a TUNNEL sign / tunnel end: dig");
 		case EBRItem::CannonSuit: return TEXT("E at the Human Cannon: climb in");
 		case EBRItem::Lockpick: return TEXT("Hold E on a locked door / holding pen");
-		case EBRItem::FakePassport: return TEXT("Passive: scans say you're legal (unless carrying contraband)");
+		case EBRItem::FakePassport: return TEXT("Passive: gets you through ONE papers scan (then it's used up) - not if you carry contraband");
 		case EBRItem::Knife: return TEXT("Left click: stab");
 		case EBRItem::Drugs: case EBRItem::IllegalGun: case EBRItem::Package: return TEXT("Contraband: get it to the SAFE ZONE");
 		default: return FString();
