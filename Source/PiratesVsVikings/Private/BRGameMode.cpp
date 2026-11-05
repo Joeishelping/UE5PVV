@@ -1036,6 +1036,10 @@ void ABRGameMode::NotifyKnockedDown(APVVCharacter* Victim, AActor* Cause)
 		if (BRBy && !BRBy->IsNPC() && !NPCVictim->bLootDropped && !NPCVictim->bNoFightBack && !NPCVictim->bPeaceful)
 		{
 			NPCVictim->bLootDropped = true;
+			if (ABRCharacter* Robber = Cast<ABRCharacter>(By); Robber && NPCVictim->GetBrawlTarget() != Robber)
+			{
+				Robber->ReportCrimeAgainst(NPCVictim, 15.f); // beat up a citizen and they drop their stuff: that's a robbery
+			}
 			if (NPCVictim->bLootWad)
 			{
 				DropCash(Floor, LootWadAmount);

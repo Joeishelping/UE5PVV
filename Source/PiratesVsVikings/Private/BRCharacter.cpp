@@ -7312,6 +7312,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 				{
 					ReportCrimeAgainst(KOVictim, 14.f); // a troublemaker throwing punches in town
 				}
+				else if (!bIsNPC && KOVictim->GetBrawlTarget() != this)
+				{
+					ReportCrimeAgainst(KOVictim, 10.f); // assaulting a citizen who wasn't fighting you (4 punches in front of a cop = 1 star)
+				}
 			}
 			// A clean hit knocks their own punch off course and they need a beat before they can throw again.
 			if (KOVictim)

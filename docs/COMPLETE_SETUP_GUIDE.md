@@ -1318,6 +1318,8 @@ This only exists on the built-in test map.
   | Shooting | +50 |
   | Killing | +70 |
   | Knocking out someone who wasn't fighting you | +20 |
+  | Each punch on a citizen who wasn't fighting you (assault) | +10 |
+  | Knocking a citizen down so they drop their stuff (robbery) | +15 |
   | Hitting a cop | 1.6 times as much |
 
   - Crimes against Border Patrol, and the Border Patrol wanted level, are a different system. **The Policia ignore them.**
