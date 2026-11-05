@@ -1299,18 +1299,27 @@ void ABRTruck::DriveNPC(float DeltaSeconds)
 			if (bDirtyAboard && FMath::FRand() < BribeChance)
 			{
 				BribeOffer = FMath::RandRange(4, 12) * 50;
+				BribeOfferedAt = Now;
 				ForceNetUpdate();
 				ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(150.f, 0.f, 260.f), FString::Printf(TEXT("psst... $%d?"), BribeOffer));
 			}
 		}
-		if (BribeOffer > 0 && (bSteppedOut || bReacted || bRunningGate))
+		if (BribeOffer > 0 && (bSteppedOut || bReacted || bRunningGate || Now - BribeOfferedAt > 12.f))
 		{
 			BribeOffer = 0; // too late for that now
 		}
 		// Everybody scanned: they ALL step out and wait by the van to be searched (hold E on each).
 		// Clean people get back in once searched; anyone with no papers reacts (fight, run or hands up).
-		// (No more "everybody out and search them": illegals get a passport stamp - DENIED - and contraband
-		//  is confiscated from the truck (hold E); see WantsCheckpointAction.)
+		// Everybody scanned: they all get out by themselves and wait by the van to be searched
+		// (then deny the ones with no papers and wave the rest through - see WantsCheckpointAction).
+		if (bAllScanned && !bSteppedOut && !bRunningGate && BribeOffer <= 0)
+		{
+			bSteppedOut = true;
+			bSearched = true;
+			bReacted = true;
+			StepOutForSearch(Inspector);
+			return;
+		}
 		if (WaitingOutside.Num() > 0 || HoldsAtCheckpoint())
 		{
 			FedUpFrom = Now; // nobody gets fed up while they're being searched (or the back is open)
@@ -1635,7 +1644,7 @@ void ABRTruck::StepOutForSearch(ABRCharacter* Inspector)
 	}
 	if (Out.Num() > 0 && Inspector)
 	{
-		Inspector->Notify(NSLOCTEXT("BRCar", "StepOut", "Everybody out! SEARCH each of them for weapons (hold E). They get back in once they're clean."));
+		Inspector->Notify(NSLOCTEXT("BRCar", "StepOut", "Everybody out for a search! Hold E on each person (or on the truck to pat everyone down). Then deny the ones with no papers and wave the rest through."));
 	}
 	ForceNetUpdate();
 }
@@ -1704,7 +1713,7 @@ ABRTruck::ECheckpointAction ABRTruck::WantsCheckpointAction(const APVVCharacter*
 	// 3) turn away anyone with no papers (only them), 4) wave the rest through.
 	if (!bSteppedOut)
 	{
-		return ECheckpointAction::Search;
+		return ECheckpointAction::None; // (they get out by themselves once everyone's scanned)
 	}
 	const float SearchFrom = CheckpointArrivalTime;
 	for (const TWeakObjectPtr<APVVCharacter>& W : WaitingOutside)

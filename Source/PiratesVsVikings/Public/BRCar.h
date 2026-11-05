@@ -250,6 +250,7 @@ private:
 	void StepOutForSearch(ABRCharacter* Inspector);
 	bool bRunningGate = false;
 	bool bBribeRolled = false;
+	float BribeOfferedAt = -100.f;
 
 	void DriveNPC(float DeltaSeconds);
 	/** Show/hide the body parts and set seats + handling for Model. */

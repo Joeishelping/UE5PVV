@@ -1291,6 +1291,9 @@ private:
 	/** Sticky hands: where each reaching hand is stuck to a surface (left, right). */
 	FVector HandAnchor[2];
 	bool bHandAnchored[2] = { false, false };
+	/** What each glued hand is stuck to (so it moves with trucks, doors, barrels), and where on it. */
+	TWeakObjectPtr<UPrimitiveComponent> AnchorComp[2];
+	FVector AnchorLocal[2];
 	/** Hanging off your stuck hands (no climb mode - your arms hold you like ropes). */
 	bool bHandHanging = false;
 	/** Someone who just wriggled out of your grip can't be re-grabbed for a moment. */

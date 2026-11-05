@@ -5523,34 +5523,97 @@ void ABRCharacter::TickReachVisuals()
 			const FName ShoulderBone = i == 0 ? FName(TEXT("upperarm_l")) : FName(TEXT("upperarm_r"));
 			const FVector Shoulder = Body->GetBoneIndex(ShoulderBone) != INDEX_NONE ? Body->GetBoneLocation(ShoulderBone)
 				: GetActorLocation() + GetActorRightVector() * Side * 20.f + FVector(0.f, 0.f, 50.f);
+			const FVector ReachPoint = Point; // where the arm wants to be (used to drag light things along)
+			const FVector HandNow = Body->GetBoneLocation(HandBones[i]);
 			if (!bHandAnchored[i] && GetWorld()->GetTimeSeconds() >= NoStickUntil[i])
 			{
-				FHitResult Touch;
+				// Gang Beasts glue: whatever the reaching hand TOUCHES - along the reach, or right where the hand is - it sticks to.
 				FCollisionQueryParams TouchParams(SCENE_QUERY_STAT(BRHandStick), false, this);
+				auto Grabbable = [](const FHitResult& H)
+				{
+					return H.GetActor() && !Cast<APawn>(H.GetActor()) && H.GetComponent()
+						&& !H.GetComponent()->GetName().StartsWith(TEXT("Edge")) // the map's outer walls are too smooth to grab
+						&& !H.GetActor()->ActorHasTag(TEXT("NoGrab"));
+				};
+				FHitResult Touch;
 				const FVector ReachDir = (Point - Shoulder).GetSafeNormal();
-				if (GetWorld()->LineTraceSingleByChannel(Touch, Shoulder, Point + ReachDir * 12.f, ECC_Visibility, TouchParams) && !Cast<APawn>(Touch.GetActor())
-					&& !(Touch.GetComponent() && Touch.GetComponent()->GetName().StartsWith(TEXT("Edge"))) // the map's outer walls are too smooth to grab
-					&& !(Touch.GetActor() && Touch.GetActor()->ActorHasTag(TEXT("NoGrab"))))
+				bool bGot = GetWorld()->SweepSingleByChannel(Touch, Shoulder, Point + ReachDir * 14.f, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(9.f), TouchParams)
+					&& Grabbable(Touch) && !Touch.bStartPenetrating;
+				if (!bGot)
+				{
+					// The hand itself brushing against something (a wall at your side, a crate you walked into...).
+					TArray<FHitResult> Near;
+					if (GetWorld()->SweepMultiByChannel(Near, HandNow, HandNow + FVector(0.f, 0.f, 0.1f), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(16.f), TouchParams))
+					{
+						for (const FHitResult& H : Near)
+						{
+							if (Grabbable(H))
+							{
+								FVector Closest;
+								if (H.GetComponent()->GetClosestPointOnCollision(HandNow, Closest) >= 0.f)
+								{
+									Touch = H;
+									Touch.ImpactPoint = Closest;
+									Touch.ImpactNormal = (HandNow - Closest).GetSafeNormal();
+									bGot = true;
+									break;
+								}
+							}
+						}
+					}
+				}
+				if (bGot)
 				{
 					bHandAnchored[i] = true;
-					HandAnchor[i] = Touch.ImpactPoint + Touch.ImpactNormal * 6.f;
+					HandAnchor[i] = Touch.ImpactPoint + Touch.ImpactNormal * 5.f;
+					// Glued to THAT thing: if it moves (a truck, a door, a barrel), your hand goes with it.
+					AnchorComp[i] = Touch.GetComponent();
+					AnchorLocal[i] = Touch.GetComponent()->GetComponentTransform().InverseTransformPosition(HandAnchor[i]);
 				}
 			}
 			if (bHandAnchored[i])
 			{
-				if (FVector::Dist(Shoulder, HandAnchor[i]) > 230.f)
+				UPrimitiveComponent* Stuck = AnchorComp[i].Get();
+				if (Stuck)
+				{
+					HandAnchor[i] = Stuck->GetComponentTransform().TransformPosition(AnchorLocal[i]);
+					// Something light and loose (a crate, a barrel, a sack): it comes with your hand. Heavy stuff: your hand stays put.
+					if (HasAuthority() && Stuck->IsSimulatingPhysics() && Stuck->GetMass() < 70.f && !Cast<APVVBoat>(Stuck->GetOwner()))
+					{
+						const FVector Pull = (ReachPoint - HandAnchor[i]) * 6.f + GetVelocity();
+						Stuck->SetPhysicsLinearVelocity(Pull.GetClampedToMaxSize(900.f));
+					}
+				}
+				else if (AnchorComp[i].IsStale())
+				{
+					bHandAnchored[i] = false; // it's gone (destroyed)
+				}
+				if (bHandAnchored[i] && FVector::Dist(Shoulder, HandAnchor[i]) > 300.f)
 				{
 					bHandAnchored[i] = false; // yanked way too far (thrown, knocked flying): it slips off
 				}
-				else
+				else if (bHandAnchored[i])
 				{
 					Point = HandAnchor[i];
 				}
 			}
 		}
 		const FVector Hand = Body->GetBoneLocation(HandBones[i]);
-		// Fast enough that a quick mouse swing whips the arms round (that's what hurts), heavy enough to lag a little.
-		Body->SetPhysicsLinearVelocity(((Point - Hand) * 10.f).GetClampedToMaxSize(ArmSwingMaxSpeed) + GetVelocity() * 0.5f, false, PhysBone(HandBones[i]));
+		if (bHandAnchored[i] && !Held && !HeldProp)
+		{
+			// GLUED: the hand is pinned to its hold - hard - and only the body swings around it.
+			FVector AnchorVel = FVector::ZeroVector;
+			if (const UPrimitiveComponent* Stuck = AnchorComp[i].Get())
+			{
+				AnchorVel = Stuck->GetComponentVelocity();
+			}
+			Body->SetPhysicsLinearVelocity(((Point - Hand) * 30.f).GetClampedToMaxSize(4000.f) + AnchorVel, false, PhysBone(HandBones[i]));
+		}
+		else
+		{
+			// Fast enough that a quick mouse swing whips the arms round (that's what hurts), heavy enough to lag a little.
+			Body->SetPhysicsLinearVelocity(((Point - Hand) * 10.f).GetClampedToMaxSize(ArmSwingMaxSpeed) + GetVelocity() * 0.5f, false, PhysBone(HandBones[i]));
+		}
 	}
 }
 

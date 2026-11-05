@@ -1209,7 +1209,7 @@ Nothing to plug in. This only happens on the built-in test map.
 Nothing drives through on its own. At the truck:
 
 1. **Scan everyone (V).**
-2. **Hold E: Everybody OUT.** Everyone gets out and waits beside the van.
+2. **They get out by themselves** as soon as everyone's been scanned, and wait beside the van. (If the driver offers a bribe, you have about 12 seconds to take it first.)
 3. **Search them.** Either hold **E** on each person, or hold **E** at the truck to **pat everyone down** at once.
    - **Contraband:** they hand it over (seized) or fight or run.
    - **Clean, with papers:** they get back in the van.
@@ -1296,6 +1296,14 @@ Nothing drives through on its own. At the truck:
   - Punches lock onto the **face**, and a fist near the face counts as a head hit more reliably.
   - Look **down** at someone's belly to go for the body instead.
   - Players can now punch straight into a raised guard if they want to.
+
+## Part 15ak: Sticky hands (glue)
+
+- **What sticks:** hold a click and that hand sticks to **anything** it touches: walls, fences, the truck, a door, a barrel, a crate. That includes things your hand just brushes against, not only what's straight ahead.
+- **Your hand stays put:** the hand is pinned hard to that spot and your body swings around it.
+- **Moving things:** glue onto a truck or a swinging door and your hand goes with it (yes, you can hang off a moving truck).
+- **Light things:** glue onto a crate, barrel or sack (under about 70 kg) and it comes with your hand as you move, so you can drag stuff around.
+- **Letting go:** release the button. The hand also slips off if you get yanked more than about 3 m away from your hold (thrown or knocked flying).
 
 ## Part 16: Checklist: everything you can plug in
 
