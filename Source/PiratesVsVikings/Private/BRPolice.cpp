@@ -452,11 +452,19 @@ void ABRCharacter::WaitForSearch(ABRTruck* Truck, int32 Seat, ABRCharacter* Susp
 	SearchWaitSince = Now;
 	BustCop = SuspectCop;
 	// No papers: they won't just stand there for long (fight, run or hands up). Everyone else waits to be searched.
-	BustReactAt = bIllegal ? Now + FMath::FRandRange(3.f, 6.f) : -1.f;
+	// They wait for Border Patrol's verdict (search, then deny or wave through). The odd one with no papers panics.
+	BustReactAt = (bIllegal && FMath::FRand() < 0.1f) ? Now + FMath::FRandRange(4.f, 8.f) : -1.f;
 	bWandering = false;
 	FleeUntil = 0.f;
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
+}
+
+void ABRCharacter::StopWaitingForSearch()
+{
+	SearchWaitTruck = nullptr;
+	SearchWaitSeat = INDEX_NONE;
+	BustReactAt = -1.f;
 }
 
 void ABRCharacter::ReturnToTruckAfterSearch()

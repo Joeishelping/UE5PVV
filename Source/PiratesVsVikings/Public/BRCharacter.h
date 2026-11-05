@@ -90,6 +90,10 @@ public:
 	 *  a suspect (no papers / contraband) reacts after a few seconds instead (fight, run or hands up). */
 	void WaitForSearch(ABRTruck* Truck, int32 Seat, ABRCharacter* SuspectCop);
 	bool IsWaitingForSearch() const { return SearchWaitTruck.IsValid(); }
+	/** Server: not waiting by the van any more (denied, arrested...). */
+	void StopWaitingForSearch();
+	/** Was patted down since this time. */
+	bool WasFriskedSince(float Time) const { return LastFriskedTime >= Time; }
 	void ReturnToTruckAfterSearch();
 	void TickSearchWait();
 	TWeakObjectPtr<ABRTruck> SearchWaitTruck;
@@ -544,6 +548,7 @@ public:
 	/** Who you're holding with your hands (Gang Beasts grab), and who's holding you. */
 	ABRCharacter* GetHandGrabTarget() const { return HandGrabTarget; }
 	ABRCharacter* GetGrabbedBy() const { return GrabbedBy; }
+	uint8 GetHandGrabMask() const { return HandGrabMask; }
 	float GetGrabStruggle() const { return GrabStruggle; }
 	/** Local: use the Settings menu's field of view. */
 	void ApplyCameraOptions();
@@ -702,7 +707,7 @@ protected:
 	/** Hold a mouse button at least this long and it's a REACH (arm stays out, hand glues on). Shorter = a punch. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HoldToReachSeconds = 0.18f;
 	/** Gang Beasts pacing: each hand can only throw a punch this often. */
-	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchCooldown = 0.42f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float PunchCooldown = 0.48f;
 	/** Hand / foot speed (cm/s, into the target) that counts as a full-power hit. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Brawl") float HardHitSpeed = 1500.f;
 	/** A head shot at least this hard (0-1 power) knocks them down on the spot. */
@@ -1061,6 +1066,12 @@ private:
 	int32 AppliedGymSpeed = 0;
 	/** Gang Beasts extras: sprint-punch charge, crouch-punch uppercut, wall slams, tripping over low stuff. */
 	float ChargePunchUntil = -1.f;
+	/** Arm fatigue from flurries (0..1): slows and weakens punches, recovers in a couple of seconds. */
+	float PunchFatigue = 0.f;
+	/** Being punched while down: how many times this knockdown (diminishing returns), and when last. */
+	int32 PoundCount = 0;
+	float LastPoundTime = -100.f;
+	float NextFacePlant = 0.f;
 	float UppercutUntil = -1.f;
 	bool bWallSlammed = false;
 	float NextTripCheck = 0.f;

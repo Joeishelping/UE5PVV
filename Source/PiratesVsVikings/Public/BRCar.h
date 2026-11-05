@@ -179,7 +179,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Truck") float BribeChance = 0.35f;
 	bool WantsBribe(const APVVCharacter* Interactor) const;
 	/** At the checkpoint, everyone scanned: confiscate contraband (they hand it over or fight), or deny entry (no papers). */
-	enum class ECheckpointAction : uint8 { None, Search, Deny, Wave };
+	enum class ECheckpointAction : uint8 { None, Search, PatDown, Deny, Wave };
 	/** Border Patrol's checkpoint steps for this truck. */
 	bool bSearched = false;
 	bool bWavedThrough = false;

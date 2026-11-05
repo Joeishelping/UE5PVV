@@ -1206,27 +1206,24 @@ Nothing to plug in. This only happens on the built-in test map.
 
 ## Part 15af: The checkpoint (you decide every truck)
 
-Nothing drives through the checkpoint on its own any more. At the truck:
+Nothing drives through on its own. At the truck:
 
-1. **Scan everyone (V).** The scan shows who has papers.
-2. **Hold E: SEARCH them for contraband.**
-   - Anyone carrying something either hands it over (seized: budget and points) or jumps out to fight or run.
-   - If nobody has anything, you're told they're clean.
-3. **Hold E: DENY ENTRY.** This only turns away the people with **no papers**; everyone else stays in the truck. Each person you deny:
-   - **usually goes quietly:** gets out and walks back to Mexico,
-   - **sometimes makes a run for it,** usually for the Wall,
-   - **sometimes takes a swing at you,** more often if they're the aggressive type.
-4. **Hold E: WAVE THEM THROUGH.** The barrier lifts, and you get the cleared-truck budget.
-
-- **O** still orders people out if you want to arrest someone yourself.
-- **Bribes:** if a driver offers one, holding E takes the bribe instead.
-- **If you ignore a truck:** it eventually forces its way through, and approval drops.
-- **A Runner player** with no papers gets turned out on the Mexican side.
+1. **Scan everyone (V).**
+2. **Hold E: Everybody OUT.** Everyone gets out and waits beside the van.
+3. **Search them.** Either hold **E** on each person, or hold **E** at the truck to **pat everyone down** at once.
+   - **Contraband:** they hand it over (seized) or fight or run.
+   - **Clean, with papers:** they get back in the van.
+   - **Clean, no papers:** they stay outside, waiting.
+4. **Hold E: DENY ENTRY.** This only affects the people with no papers.
+   - Most walk back to Mexico.
+   - Some run for it.
+   - Some swing at you.
+5. **Hold E: WAVE THEM THROUGH.** Anyone left outside gets back in, the barrier lifts, and you get the cleared-truck budget.
 
 **Box trucks:**
-- The scan and search only cover the cab. To find what's in the back, open the doors (E at the back).
-- When a Runner's smuggling truck reaches the Safe Zone, it's paid out, unloaded and taken away a few seconds later, with all the cargo in the back.
-- An NPC box truck's cargo disappears with it once it drives off.
+- **What's hidden:** contraband sits at the very front of the hold behind a wall of ordinary crates: **white bricks** (cocaine) and **olive green crates** (guns). Open the back, climb up the ramp, shove the crates aside and grab it.
+- **When you grab it:** it's seized, and **everyone in that truck is busted**. They jump out to fight, run or give up, and arresting them counts as a good catch.
+- **Cleanup:** when a box truck leaves (or a Runner's job truck is delivered), every crate and package it brought disappears with it, even ones you dragged out.
 
 ## Part 15ag: Climbing, grips, kicks and throws (Gang Beasts tuning)
 
@@ -1282,6 +1279,23 @@ Nothing drives through the checkpoint on its own any more. At the truck:
   - Build up a swing and let go to leap, or kick someone while you swing.
   - Kicking while you're hanging is a normal kick; it doesn't drop-kick you off the ledge.
 - **Vehicle cameras** (raft, boats, trucks, and passengers too): the people riding with you no longer pull the camera into the back of their heads.
+
+## Part 15aj: Fights: holds, fatigue, ground-and-pound, face plants
+
+- **Holds matter:**
+  - Grab someone with **both hands** and they're **pinned**: their punches and kicks don't work. They can only wriggle (mash Space) or **headbutt** you.
+  - With **one hand** on them, they can still swing, but their punches are about half as strong.
+  - The screen tells you when you're pinned.
+- **Arm fatigue:** throwing flurries tires your arms. Punches slow down and get weaker, then recover after a couple of seconds of not punching. Mashing loses to timing, grabbing and throwing.
+- **Keep them down:** punch someone who's on the floor to keep them there ("STAY DOWN!").
+  - Each hit adds a little less time, so you can't keep anyone down forever.
+  - NPCs only do it now and then.
+  - Kicking someone on the floor still punts them across the ground.
+- **Face plant:** hold someone in both hands and walk them into a wall, truck or post. Their face meets it, which is a big hit to the knockout meter. NPC grapplers do this to you too.
+- **Aiming for the head:**
+  - Punches lock onto the **face**, and a fist near the face counts as a head hit more reliably.
+  - Look **down** at someone's belly to go for the body instead.
+  - Players can now punch straight into a raised guard if they want to.
 
 ## Part 16: Checklist: everything you can plug in
 

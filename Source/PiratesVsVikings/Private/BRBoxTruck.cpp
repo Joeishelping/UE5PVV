@@ -275,7 +275,7 @@ void ABRBoxTruck::TickDoors(float DeltaSeconds)
 // ---------------------------------------------------------------------------------------------
 // Cargo + stowaways
 
-ABRPhysicsProp* ABRBoxTruck::SpawnCargo(const FVector& At, bool bPackage, ABRPlayerState* CargoOwner)
+ABRPhysicsProp* ABRBoxTruck::SpawnCargo(const FVector& At, bool bPackage, ABRPlayerState* CargoOwner, uint8 ContrabandLook)
 {
 	const FTransform T(FRotator(0.f, FMath::FRandRange(-20.f, 20.f), 0.f), At);
 	ABRPhysicsProp* Prop = GetWorld()->SpawnActorDeferred<ABRPhysicsProp>(ABRPhysicsProp::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
@@ -283,11 +283,14 @@ ABRPhysicsProp* ABRBoxTruck::SpawnCargo(const FVector& At, bool bPackage, ABRPla
 	{
 		return nullptr;
 	}
-	Prop->PropShape = bPackage ? 5 : 0;
+	// ContrabandLook: 0 = taped brown package, 1 = white brick of cocaine, 2 = olive weapons crate.
+	Prop->PropShape = bPackage ? (ContrabandLook == 2 ? 6 : 5) : 0;
 	Prop->bContraband = bPackage;
 	Prop->ContrabandOwner = CargoOwner;
-	Prop->Color = bPackage ? FLinearColor(0.55f, 0.4f, 0.2f) : FLinearColor(0.6f, 0.48f, 0.3f);
-	Prop->MassKg = bPackage ? 12.f : 25.f;
+	Prop->CargoOf = this;
+	Prop->Color = !bPackage ? FLinearColor(FMath::FRandRange(0.5f, 0.68f), FMath::FRandRange(0.4f, 0.5f), FMath::FRandRange(0.25f, 0.33f))
+		: (ContrabandLook == 1 ? FLinearColor(0.95f, 0.95f, 0.92f) : (ContrabandLook == 2 ? FLinearColor(0.24f, 0.3f, 0.16f) : FLinearColor(0.55f, 0.4f, 0.2f)));
+	Prop->MassKg = bPackage ? (ContrabandLook == 2 ? 30.f : 12.f) : 25.f;
 	Prop->FinishSpawning(T);
 	Cargo.Add(Prop);
 	return Prop;
@@ -301,18 +304,21 @@ void ABRBoxTruck::LoadNPCCargo()
 	}
 	const FTransform Root = SeatRoot->GetComponentTransform();
 	auto Spot = [&Root](float X, float Y, float Z) { return Root.TransformPositionNoScale(FVector(X, Y, Z)); };
-	// Packages on the floor at the front, crates piled in front of them.
-	const int32 NumPackages = FMath::FRand() < 0.45f ? FMath::RandRange(1, 3) : 0;
+	// Contraband (white bricks of coke, olive gun crates) tucked in at the very front, behind a wall of ordinary crates:
+	// you have to climb in and shift the boxes to see it.
+	const int32 NumPackages = FMath::FRand() < 0.55f ? FMath::RandRange(1, 3) : 0;
 	for (int32 i = 0; i < NumPackages; ++i)
 	{
-		SpawnCargo(Spot(HoldFrontX - 30.f - i * 35.f, FMath::FRandRange(-60.f, 60.f), HoldFloorZ + 20.f), true, nullptr);
+		const uint8 LookKind = FMath::FRand() < 0.35f ? 2 : 1;
+		SpawnCargo(Spot(HoldFrontX - 40.f - i * 40.f, FMath::FRandRange(-55.f, 55.f), HoldFloorZ + 20.f), true, nullptr, LookKind);
 	}
-	const int32 NumCrates = FMath::RandRange(4, 7);
+	const int32 NumCrates = FMath::RandRange(6, 9);
 	for (int32 i = 0; i < NumCrates; ++i)
 	{
 		const int32 Row = i % 3;
-		const int32 Layer = i / 3;
-		SpawnCargo(Spot(-190.f - Layer * 20.f, -65.f + Row * 65.f, HoldFloorZ + 35.f + Layer * 62.f), false, nullptr);
+		const int32 Layer = (i / 3) % 2;
+		const int32 Depth = i / 6;
+		SpawnCargo(Spot(-185.f - Depth * 65.f, -65.f + Row * 65.f, HoldFloorZ + 35.f + Layer * 62.f), false, nullptr);
 	}
 	// Somebody hiding back there?
 	if (FMath::FRand() < 0.3f)
@@ -543,7 +549,7 @@ void ABRBoxTruck::Tick(float DeltaSeconds)
 				}
 				for (ABRPhysicsProp* P : Cargo)
 				{
-					if (IsValid(P) && (P->IsCargoFrozen() || IsInHold(P->GetActorLocation(), 40.f)))
+					if (IsValid(P) && !P->IsHeld())
 					{
 						P->Destroy();
 					}
@@ -575,10 +581,10 @@ void ABRBoxTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		Stowed.Reset();
 		for (ABRPhysicsProp* P : Cargo)
 		{
-			if (IsValid(P) && (P->IsCargoFrozen() || IsInHold(P->GetActorLocation(), 30.f)))
+			if (IsValid(P) && !P->IsHeld())
 			{
-				Packages += P->bContraband ? 1 : 0;
-				P->Destroy();
+				Packages += (P->bContraband && (P->IsCargoFrozen() || IsInHold(P->GetActorLocation(), 30.f))) ? 1 : 0;
+				P->Destroy(); // the truck's gone: so is everything it was carrying (even crates dragged out of the back)
 			}
 		}
 		if (HasReachedFarSide() && (People > 0 || Packages > 0))
@@ -590,6 +596,50 @@ void ABRBoxTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void ABRBoxTruck::OnContrabandFound(ABRCharacter* Cop)
+{
+	if (!HasAuthority() || bBusted)
+	{
+		return;
+	}
+	bBusted = true;
+	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 330.f), TEXT("SMUGGLERS!"));
+	ABRGameState::Sfx(this, EBRSfx::ScanAlarm, GetActorLocation());
+	// Everyone aboard is in on it: out, and they're fair game to arrest (they'll fight, run or give up).
+	TArray<ABRCharacter*> Crew;
+	for (APVVCharacter* Occupant : Occupants)
+	{
+		if (ABRCharacter* C = Cast<ABRCharacter>(Occupant); C && C->IsNPC())
+		{
+			Crew.Add(C);
+		}
+	}
+	for (ABRCharacter* C : Crew)
+	{
+		Unseat(C);
+		C->bCarriesContraband = true; // (arresting them is a good catch, not harassment)
+		C->LaunchCharacter(FVector(FMath::FRandRange(-150.f, 150.f), FMath::FRandRange(-150.f, 150.f), 280.f), true, true);
+		C->ReactToBust(Cop, false);
+	}
+	for (const TWeakObjectPtr<ABRCharacter>& W : Stowed)
+	{
+		if (ABRCharacter* C = W.Get())
+		{
+			C->bCarriesContraband = true;
+		}
+	}
+	ReleaseStowed(Cop);
+	if (Cop)
+	{
+		Cop->Notify(LOCTEXT("TruckBusted", "Contraband in the back! Everyone in this truck is under arrest - tase them and zip-tie them."));
+	}
+	if (ABRGameMode* GM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+	{
+		GM->Feed(TEXT("Border Patrol found contraband hidden in a box truck!"));
+	}
+	ForceNetUpdate();
 }
 
 // ---------------------------------------------------------------------------------------------

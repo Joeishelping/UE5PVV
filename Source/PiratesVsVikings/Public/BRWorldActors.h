@@ -532,6 +532,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, Category = "BR|Prop") bool bContraband = false;
 	/** Runner who's paid for delivering it (and fined if it's seized). */
 	TWeakObjectPtr<class ABRPlayerState> ContrabandOwner;
+	/** The truck this was loaded in (box truck cargo). */
+	TWeakObjectPtr<AActor> CargoOf;
 	/** Server: ride along in a moving truck's cargo hold (no physics while frozen), or tumble about again. */
 	void SetCargoFrozen(bool bFrozen, USceneComponent* Floor);
 	bool IsCargoFrozen() const { return bCargoFrozen; }

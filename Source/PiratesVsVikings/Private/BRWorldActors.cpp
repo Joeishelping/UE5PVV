@@ -4,6 +4,7 @@
 #include "Components/CapsuleComponent.h"
 #include "BRSettings.h"
 #include "BRCharacter.h"
+#include "BRBoxTruck.h"
 #include "BRPatrolDuty.h"
 #include "BRDog.h"
 #include "BRGameMode.h"
@@ -2540,6 +2541,12 @@ void ABRPhysicsProp::BeginPlay()
 		Mesh->SetWorldScale3D(FVector(0.5f, 0.35f, 0.25f));
 		Mesh->SetMassOverrideInKg(NAME_None, 12.f, true);
 	}
+	// 6 = long weapons crate (stencilled olive box).
+	if (!PropMesh && PropShape == 6)
+	{
+		Mesh->SetWorldScale3D(FVector(1.1f, 0.45f, 0.32f));
+		Mesh->SetMassOverrideInKg(NAME_None, 30.f, true);
+	}
 	Mesh->SetUseCCD(true); // doesn't tunnel through truck floors
 	if (!PropMesh)
 	{
@@ -2637,8 +2644,13 @@ void ABRPhysicsProp::PickUp(ABRCharacter* By)
 			GM->ChangeApproval(2.f);
 			GM->Feed(FString::Printf(TEXT("%s seized a smuggling package!"), *By->GetPlayerDisplayName()));
 		}
-		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 60.f), TEXT("CONFISCATED"));
+		ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 60.f), PropShape == 6 ? TEXT("GUNS SEIZED") : TEXT("CONFISCATED"));
 		ABRGameState::FX(this, EBRFX::MoneyText, GetActorLocation() + FVector(0.f, 0.f, 110.f), TEXT("+$200 BUDGET"));
+		// Found in the back of a truck: everyone in that truck is in on it - arrest them.
+		if (ABRBoxTruck* Truck = Cast<ABRBoxTruck>(CargoOf.Get()))
+		{
+			Truck->OnContrabandFound(By);
+		}
 		Destroy();
 		return;
 	}

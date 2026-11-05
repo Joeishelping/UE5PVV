@@ -755,7 +755,9 @@ void ABRHUD::DrawHUD()
 	// --- Hand grabs
 	if (Me->GetGrabbedBy() && Me->GetCondition() == EPVVCondition::Normal)
 	{
-		Centered(TEXT("GRABBED!  MASH SPACE TO WRIGGLE FREE"), SY * 0.45f, Red, Big, 1.6f);
+		const bool bPinned = Me->GetGrabbedBy()->GetHandGrabMask() == 3;
+		Centered(bPinned ? TEXT("PINNED! (arms trapped)  HEADBUTT (middle mouse) or MASH SPACE") : TEXT("GRABBED!  Punch / headbutt / kick them, or MASH SPACE"),
+			SY * 0.45f, Red, Big, 1.6f);
 		Bar(SX * 0.5f - 150.f, SY * 0.45f + 40.f, 300.f, 16.f, Me->GetGrabStruggle(), Yellow);
 	}
 	else if (const ABRCharacter* Held = Me->GetHandGrabTarget())

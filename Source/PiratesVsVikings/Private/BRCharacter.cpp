@@ -2555,12 +2555,15 @@ void ABRCharacter::OnAttackStartedNative()
 				// Judge "in front" flat (left/right only), then aim at their head - or their BODY if their guard is up (smart).
 				const ABRCharacter* OtherBR = Cast<ABRCharacter>(Other);
 				const bool bGuardUp = OtherBR && OtherBR->IsBlocking();
-				const FName Spot = !bGuardUp && Other->GetMesh() && Other->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? FName(TEXT("head")) : FName(TEXT("spine_02"));
+				// Players: look down at their belly to go to the body; otherwise it's the head (even into a guard - your call).
+				const float RawPitch = FRotator::NormalizeAxis(AimRot.Pitch);
+				const bool bWantBody = bIsNPC ? bGuardUp : RawPitch < -18.f;
+				const FName Spot = !bWantBody && Other->GetMesh() && Other->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE ? FName(TEXT("head")) : FName(TEXT("spine_02"));
 				if (!Other->GetMesh() || Other->GetMesh()->GetBoneIndex(Spot) == INDEX_NONE)
 				{
 					continue;
 				}
-				const FVector SpotAt = Other->GetMesh()->GetBoneLocation(Spot);
+				const FVector SpotAt = Other->GetMesh()->GetBoneLocation(Spot) + (Spot == FName(TEXT("head")) ? FVector(0.f, 0.f, 10.f) : FVector::ZeroVector);
 				const float Along = FVector::DotProduct((SpotAt - Shoulder).GetSafeNormal2D(), Aim.GetSafeNormal2D());
 				if (Along > BestAssist)
 				{
@@ -3233,6 +3236,7 @@ void ABRCharacter::OnStateEffectsRefreshed()
 			if (HasAuthority())
 			{
 				bDropKicking = false;
+				PoundCount = 0;
 			}
 			// Gang Beasts get-up: push up off the floor (can't walk for a moment - grab them while they're getting up!).
 			GetUpUntil = GetWorld()->GetTimeSeconds() + GetUpSeconds;
@@ -3350,6 +3354,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickCameraView();
 	}
 	TickBox(DeltaSeconds);
+	PunchFatigue = FMath::Max(0.f, PunchFatigue - DeltaSeconds * 0.4f);
 	if (HasAuthority())
 	{
 		TickTrip();
@@ -4698,6 +4703,12 @@ void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 	{
 		return; // seeing birds
 	}
+	// Held in BOTH their hands: your arms are pinned - you can only wriggle (and headbutt / mash Space).
+	if (const ABRCharacter* Holder = GrabbedBy.Get(); Holder && Holder->HandGrabMask == 3)
+	{
+		FightOutOfGrab(0.04f);
+		return;
+	}
 	{
 		// Gang Beasts pacing: no machine-gun fists - each arm needs a moment to come back.
 		const float NowP = GetWorld()->GetTimeSeconds();
@@ -4721,7 +4732,9 @@ void ABRCharacter::Server_PunchHand_Implementation(bool bLeft)
 			}
 			return;
 		}
-		Ready = NowP + PunchCooldown;
+		// Arm fatigue: flurries tire you out (slower, weaker punches) - pick your moments, grab, throw, use the world.
+		Ready = NowP + PunchCooldown * (1.f + PunchFatigue);
+		PunchFatigue = FMath::Min(1.f, PunchFatigue + 0.17f);
 		ResetAttackCooldown(); // (our per-hand timing replaces the shared one - alternating hands flows)
 	}
 	if (bBlocking)
@@ -6285,6 +6298,31 @@ void ABRCharacter::BrawlerAct(ABRCharacter* Foe, float Aggression, float DeltaSe
 				SetActorRotation(FRotator(0.f, ToHazard.Rotation().Yaw, 0.f)); // face the drop: in you go
 			}
 		}
+		// No drop nearby but there's a wall / truck / post: march them into it face-first (see the FACE PLANT check).
+		else if (HandGrabMask == 3 && Now < BrawlHoldUntil && FightStyle != 3)
+		{
+			FVector BestDir = FVector::ZeroVector;
+			float BestDist = 600.f;
+			FCollisionQueryParams WallParams(SCENE_QUERY_STAT(BRNPCWallFind), false, this);
+			WallParams.AddIgnoredActor(Foe);
+			for (int32 k = 0; k < 8; ++k)
+			{
+				const FVector D = FRotator(0.f, k * 45.f, 0.f).Vector();
+				FHitResult WallHit;
+				const FVector From = GetActorLocation() + FVector(0.f, 0.f, 50.f);
+				if (GetWorld()->LineTraceSingleByChannel(WallHit, From, From + D * 600.f, ECC_Visibility, WallParams) && !Cast<APawn>(WallHit.GetActor())
+					&& WallHit.Distance < BestDist)
+				{
+					BestDist = WallHit.Distance;
+					BestDir = D;
+				}
+			}
+			if (!BestDir.IsZero())
+			{
+				SetActorRotation(FRotator(0.f, BestDir.Rotation().Yaw, 0.f));
+				AddMovementInput(BestDir, 0.85f);
+			}
+		}
 		// They're seeing birds and we've got both hands on them: UP over the head (then hurl - see BrawlerFinish).
 		if (HandGrabMask == 3 && Foe->IsDazed() && !bLiftOverhead && Aggression >= 0.7f)
 		{
@@ -6389,6 +6427,10 @@ void ABRCharacter::DoKick()
 	if (HasAuthority() && GrabbedBy)
 	{
 		FightOutOfGrab(0.25f); // kicking and flailing in their arms
+		if (GrabbedBy && GrabbedBy->HandGrabMask == 3)
+		{
+			return; // pinned in both their arms: you can flail, not kick
+		}
 	}
 	if (!HasAuthority() || GetCondition() != EPVVCondition::Normal || GetCarrier() || GetCurrentBoat() || bClimbing || bInCannon || Now - LastKickTime < 0.7f)
 	{
@@ -7013,6 +7055,28 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 		for (const FOverlapResult& H : Hits)
 		{
 			APVVCharacter* Victim = Cast<APVVCharacter>(H.GetActor());
+			if (Victim && Victim != this && bPunching && HasAuthority() && Victim->GetCondition() == EPVVCondition::KnockedDown && !Victim->GetCarrier())
+			{
+				// Gang Beasts: punch them while they're DOWN to keep them down (NPCs only do it now and then).
+				ABRCharacter* Down = Cast<ABRCharacter>(Victim);
+				if (Down && !Down->IsDead() && (!bIsNPC || FMath::FRand() < 0.15f) && Down->PoundCount < 6 && Now - Down->LastPoundTime > 0.35f)
+				{
+					Down->LastPoundTime = Now;
+					++Down->PoundCount;
+					Down->ExtendKnockdown(FMath::Max(0.15f, 0.55f - 0.08f * Down->PoundCount)); // diminishing: you can't keep them down forever
+					Down->ReceiveMeleeHit(this, HandHitMinDamage, HandVel.GetSafeNormal2D() * 60.f);
+					Down->Multicast_BodyHit(TEXT("spine_03"), HandVel.GetSafeNormal() * HitReaction * 0.8f);
+					ABRGameState::FX(this, EBRFX::PunchHit, Pos);
+					if (Down->PoundCount == 1)
+					{
+						ABRGameState::FX(this, EBRFX::PointsText, Pos + FVector(0.f, 0.f, 60.f), TEXT("STAY DOWN!"));
+					}
+					Multicast_Sfx(0);
+					HandReadyAt[i] = Now + 0.3f;
+					PunchUntil = -1.f;
+				}
+				continue;
+			}
 			if (!Victim || Victim == this || Victim == GetCarriedCharacter() || Victim->GetCarrier() || Victim->GetCondition() != EPVVCondition::Normal
 				|| (Cast<ABRCharacter>(Victim) && Cast<ABRCharacter>(Victim)->bPeaceful))
 			{
@@ -7029,7 +7093,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 				{
 					if (VictimBody->GetBoneIndex(BoneName) != INDEX_NONE)
 					{
-						const float D = FVector::Dist(VictimBody->GetBoneLocation(BoneName), Pos);
+						// (the head bone sits at the base of the skull: measure to the middle of the FACE, and give it a little benefit of the doubt)
+						const bool bHeadBone = FCString::Strcmp(BoneName, TEXT("head")) == 0;
+						const FVector BoneAt = VictimBody->GetBoneLocation(BoneName) + (bHeadBone ? FVector(0.f, 0.f, 12.f) : FVector::ZeroVector);
+						const float D = FVector::Dist(BoneAt, Pos) * (bHeadBone ? 0.8f : 1.f);
 						if (D < BestBoneDist)
 						{
 							BestBoneDist = D;
@@ -7049,7 +7116,11 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			const float Effective = 0.35f * Speed + 0.65f * Closing + FMath::Max(0.f, FVector::DotProduct(GetVelocity(), Into)) * (bCharge ? 0.75f : 0.3f);
 			// (a thrown punch that connects always counts for something - at least a third of full power; charges and uppercuts more)
 			const float Power = FMath::Clamp((Effective - SlapSpeed) / FMath::Max(100.f, HardHitSpeed - SlapSpeed), bPunching ? ((bCharge || bUppercut) ? 0.6f : 0.35f) : 0.f, 1.f);
-			const float Curve = Power * Power; // weak taps do very little, real swings do a lot
+			// Tired arms and being held both take the sting out of it.
+			const float HeldScale = GrabbedBy.IsValid() ? 0.55f : 1.f;
+			const float TiredScale = bPunching ? 1.f - 0.4f * PunchFatigue : 1.f;
+			const float EffPower = Power * HeldScale * TiredScale;
+			const float Curve = FMath::Square(EffPower); // weak taps do very little, real swings do a lot
 			if (!bPunching && Effective < SlapSpeed * 0.8f)
 			{
 				continue; // just a brush
@@ -7148,7 +7219,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			// A HARD clean shot to the head drops them on the spot (wobbly bodies fold).
 			// (vs the computer: an NPC needs a near-perfect shot to drop a player in one; a player drops an NPC a bit more easily)
 			const float OneShotPower = HeadKnockdownPower + (bIsNPC && KOVictim && !KOVictim->bIsNPC ? 0.15f : 0.f) - (!bIsNPC && KOVictim && KOVictim->bIsNPC ? 0.1f : 0.f);
-			if (bHeadHit && !bGuarded && Power >= OneShotPower && Victim->GetCondition() == EPVVCondition::Normal)
+			if (bHeadHit && !bGuarded && EffPower >= OneShotPower && Victim->GetCondition() == EPVVCondition::Normal)
 			{
 				Victim->ApplyKnockdown(this, Dir.GetSafeNormal2D() * 450.f + FVector(0.f, 0.f, 150.f));
 				ABRGameState::FX(this, EBRFX::PointsText, HitPoint + FVector(0.f, 0.f, 40.f), TEXT("CRACK!"));
@@ -8252,6 +8323,32 @@ void ABRCharacter::TickBodyPartGrab(float DeltaSeconds)
 				}
 				break;
 			}
+		}
+	}
+	// FACE PLANT: holding someone in both hands and driving them into a wall / truck / post = their face meets it.
+	if (ABRCharacter* Victim = HandGrabTarget.Get(); Victim && HandGrabMask == 3 && Victim->GetCondition() == EPVVCondition::Normal && Now >= NextFacePlant
+		&& GetVelocity().Size2D() > 150.f && Victim->GetMesh() && Victim->GetMesh()->GetBoneIndex(TEXT("head")) != INDEX_NONE)
+	{
+		const FVector Drive = GetVelocity().GetSafeNormal2D();
+		const FVector Head = Victim->GetMesh()->GetBoneLocation(TEXT("head"));
+		FHitResult Wall;
+		FCollisionQueryParams WallParams(SCENE_QUERY_STAT(BRFacePlant), false, this);
+		WallParams.AddIgnoredActor(Victim);
+		FCollisionObjectQueryParams WallTypes;
+		WallTypes.AddObjectTypesToQuery(ECC_WorldStatic);
+		WallTypes.AddObjectTypesToQuery(ECC_WorldDynamic);
+		WallTypes.AddObjectTypesToQuery(ECC_Vehicle);
+		if (FVector::DotProduct((Victim->GetActorLocation() - GetActorLocation()).GetSafeNormal2D(), Drive) > 0.3f
+			&& GetWorld()->SweepSingleByObjectType(Wall, Head, Head + Drive * 70.f, FQuat::Identity, WallTypes, FCollisionShape::MakeSphere(18.f), WallParams))
+		{
+			NextFacePlant = Now + 1.2f;
+			Victim->AddKO(Victim->HeadHitKO * 1.3f, this);
+			Victim->ReceiveMeleeHit(this, HandHitMaxDamage * 0.6f, -Drive * 120.f);
+			Victim->Multicast_BodyHit(TEXT("head"), -Drive * HitReaction * 1.2f);
+			ABRGameState::FX(this, EBRFX::PunchHit, Wall.ImpactPoint);
+			ABRGameState::FX(this, EBRFX::PointsText, Wall.ImpactPoint + FVector(0.f, 0.f, 50.f), TEXT("FACE PLANT!"));
+			Multicast_Sfx(1);
+			AddShake(0.35f);
 		}
 	}
 	// Holding someone's LEG and walking away from them: you pull their feet out from under them.

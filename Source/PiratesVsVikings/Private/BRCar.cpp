@@ -1700,10 +1700,21 @@ ABRTruck::ECheckpointAction ABRTruck::WantsCheckpointAction(const APVVCharacter*
 	{
 		return ECheckpointAction::None; // scan everyone first (V)
 	}
-	// 1) search them for contraband, 2) turn away anyone with no papers (only them), 3) wave the rest through.
-	if (!bSearched)
+	// 1) everybody OUT, 2) search them (one by one with E on each, or all at once at the truck),
+	// 3) turn away anyone with no papers (only them), 4) wave the rest through.
+	if (!bSteppedOut)
 	{
 		return ECheckpointAction::Search;
+	}
+	const float SearchFrom = CheckpointArrivalTime;
+	for (const TWeakObjectPtr<APVVCharacter>& W : WaitingOutside)
+	{
+		const ABRCharacter* C = Cast<ABRCharacter>(W.Get());
+		if (C && C->GetCondition() == EPVVCondition::Normal && !C->WasFriskedSince(SearchFrom))
+		{
+			return ECheckpointAction::PatDown;
+		}
+		bNoPapers |= HasNoPapers(C);
 	}
 	return bNoPapers ? ECheckpointAction::Deny : ECheckpointAction::Wave;
 }
@@ -1734,7 +1745,8 @@ FText ABRTruck::GetInteractPrompt_Implementation(APVVCharacter* Interactor) cons
 	}
 	switch (WantsCheckpointAction(Interactor))
 	{
-	case ECheckpointAction::Search: return LOCTEXT("SearchCP", "SEARCH them for contraband (hold) | O = order them out");
+	case ECheckpointAction::Search: return LOCTEXT("SearchCP", "Everybody OUT - step out for a search (hold)");
+	case ECheckpointAction::PatDown: return LOCTEXT("PatDown", "PAT DOWN everyone outside (hold) - or hold E on each person");
 	case ECheckpointAction::Deny: return LOCTEXT("Deny", "DENY ENTRY to the ones with NO PAPERS (hold) - the rest stay in");
 	case ECheckpointAction::Wave: return LOCTEXT("Wave", "WAVE THEM THROUGH - open the barrier (hold)");
 	default: break;
@@ -1805,11 +1817,26 @@ void ABRTruck::DenyEntry(ABRCharacter* Cop)
 			Denied.Add(Occupant);
 		}
 	}
+	for (const TWeakObjectPtr<APVVCharacter>& W : WaitingOutside)
+	{
+		if (HasNoPapers(W.Get()) && !Denied.Contains(W.Get()))
+		{
+			Denied.Add(W.Get());
+		}
+	}
 	int32 Count = 0;
 	for (APVVCharacter* P : Denied)
 	{
 		ABRCharacter* BRC = Cast<ABRCharacter>(P);
-		Unseat(P);
+		if (P->GetCurrentBoat() == this)
+		{
+			Unseat(P);
+		}
+		if (BRC)
+		{
+			BRC->StopWaitingForSearch();
+		}
+		WaitingOutside.Remove(P);
 		++Count;
 		ABRGameState::FX(this, EBRFX::PointsText, P->GetActorLocation() + FVector(0.f, 0.f, 130.f), TEXT("ENTRY DENIED"));
 		if (!BRC)
@@ -1844,12 +1871,48 @@ void ABRTruck::OnInteract_Implementation(APVVCharacter* Interactor)
 		{
 			switch (WantsCheckpointAction(Interactor))
 			{
-			case ECheckpointAction::Search: ConfiscateAtCheckpoint(Cast<ABRCharacter>(Interactor)); return;
+			case ECheckpointAction::Search:
+				bSearched = true;
+				bSteppedOut = true;
+				bReacted = true;
+				StepOutForSearch(Cast<ABRCharacter>(Interactor));
+				return;
+			case ECheckpointAction::PatDown:
+			{
+				TArray<ABRCharacter*> ToSearch;
+				for (const TWeakObjectPtr<APVVCharacter>& W : WaitingOutside)
+				{
+					if (ABRCharacter* C = Cast<ABRCharacter>(W.Get()); C && C->GetCondition() == EPVVCondition::Normal && !C->WasFriskedSince(CheckpointArrivalTime))
+					{
+						ToSearch.Add(C);
+					}
+				}
+				for (ABRCharacter* C : ToSearch)
+				{
+					C->Frisk(Cast<ABRCharacter>(Interactor)); // contraband: hand it over... or fight. Clean + papers: back in the van.
+				}
+				return;
+			}
 			case ECheckpointAction::Deny: DenyEntry(Cast<ABRCharacter>(Interactor)); return;
 			case ECheckpointAction::Wave:
+			{
+				// Anyone still standing outside gets back in; the barrier lifts once they're all aboard.
+				TArray<ABRCharacter*> Back;
+				for (const TWeakObjectPtr<APVVCharacter>& W : WaitingOutside)
+				{
+					if (ABRCharacter* C = Cast<ABRCharacter>(W.Get()))
+					{
+						Back.Add(C);
+					}
+				}
+				for (ABRCharacter* C : Back)
+				{
+					C->ReturnToTruckAfterSearch();
+				}
 				bWavedThrough = true; // DriveNPC lifts the barrier and pays the cleared-truck budget
 				ForceNetUpdate();
 				return;
+			}
 			default: break;
 			}
 		}
