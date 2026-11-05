@@ -180,8 +180,8 @@ bool ABRCharacter::IsMexicanCivilianVictim() const
 	{
 		return false;
 	}
-	const ABRDesertArena* Arena = TownArena(GetWorld());
-	return Arena && Arena->IsInTown(GetActorLocation());
+	const ABRDesertArena* TownMap = TownArena(GetWorld());
+	return TownMap && TownMap->IsInTown(GetActorLocation());
 }
 
 bool ABRCharacter::IsCrimeWitnessed() const
@@ -221,8 +221,8 @@ void ABRCharacter::ReportCrimeAgainst(ABRCharacter* Victim, float Heat)
 	{
 		return;
 	}
-	const ABRDesertArena* Arena = TownArena(GetWorld());
-	const bool bPlayerVictim = bIsNPC && !Victim->IsNPC() && !Victim->IsWarden() && Arena && Arena->IsInTown(Victim->GetActorLocation());
+	const ABRDesertArena* TownMap = TownArena(GetWorld());
+	const bool bPlayerVictim = bIsNPC && !Victim->IsNPC() && !Victim->IsWarden() && TownMap && TownMap->IsInTown(Victim->GetActorLocation());
 	if (!Victim->IsMexicanCivilianVictim() && !bPlayerVictim)
 	{
 		return;
@@ -276,8 +276,8 @@ void ABRCharacter::TickPoliciaHeat(float DeltaSeconds)
 	// Laying low (30 s with no new crimes) - the heat slowly dies down. Faster outside of town.
 	if (PoliciaHeat > 0.f && Now - LastCrimeTime > 30.f)
 	{
-		const ABRDesertArena* Arena = TownArena(GetWorld());
-		const bool bOutOfTown = !Arena || !Arena->IsInTown(GetActorLocation());
+		const ABRDesertArena* TownMap = TownArena(GetWorld());
+		const bool bOutOfTown = !TownMap || !TownMap->IsInTown(GetActorLocation());
 		PoliciaHeat = FMath::Max(0.f, PoliciaHeat - DeltaSeconds * (bOutOfTown ? 6.f : 2.f));
 		if (PoliciaStarsRep != PoliciaStars())
 		{

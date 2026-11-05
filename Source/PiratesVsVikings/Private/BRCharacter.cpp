@@ -792,12 +792,12 @@ void ABRCharacter::ApplyLook(const FBRLook& L)
 	const uint8 Uniform = (UniformOverride == 1 || UniformOverride == 3) ? UniformOverride : (HeldItem == EBRItem::Trumpet ? 2 : 0);
 	USkeletalMesh* UniTop = Uniform == 1 ? PoliciaShirtMesh.Get() : (Uniform == 2 ? MariachiShirtMesh.Get() : (Uniform == 3 ? BPUniformShirtMesh.Get() : nullptr));
 	USkeletalMesh* UniBottom = Uniform == 1 ? PoliciaPantsMesh.Get() : (Uniform == 2 ? MariachiPantsMesh.Get() : (Uniform == 3 ? BPUniformPantsMesh.Get() : nullptr));
-	auto Wear = [this](USkeletalMeshComponent* Part, USkeletalMesh* Mesh)
+	auto Wear = [this](USkeletalMeshComponent* Part, USkeletalMesh* UniformMesh)
 	{
-		if (Part && Mesh && Part->GetSkeletalMeshAsset() != Mesh)
+		if (Part && UniformMesh && Part->GetSkeletalMeshAsset() != UniformMesh)
 		{
 			BRMakeFollowerSafe(Part);
-			Part->SetSkeletalMeshAsset(Mesh);
+			Part->SetSkeletalMeshAsset(UniformMesh);
 			Part->SetLeaderPoseComponent(GetMesh(), true);
 		}
 	};
@@ -7232,7 +7232,7 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 			// (a thrown punch that connects always counts for something - at least a third of full power; charges and uppercuts more)
 			const float Power = FMath::Clamp((Effective - SlapSpeed) / FMath::Max(100.f, HardHitSpeed - SlapSpeed), bPunching ? ((bCharge || bUppercut) ? 0.6f : 0.35f) : 0.f, 1.f);
 			// Tired arms and being held both take the sting out of it.
-			const float HeldScale = GrabbedBy.IsValid() ? 0.55f : 1.f;
+			const float HeldScale = GrabbedBy != nullptr ? 0.55f : 1.f;
 			const float TiredScale = bPunching ? 1.f - 0.4f * PunchFatigue : 1.f;
 			const float EffPower = Power * HeldScale * TiredScale;
 			const float Curve = FMath::Square(EffPower); // weak taps do very little, real swings do a lot
