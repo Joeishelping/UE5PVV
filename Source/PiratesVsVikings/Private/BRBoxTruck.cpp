@@ -215,23 +215,23 @@ void ABRBoxTruck::SetDoorsOpen(bool bOpen, APVVCharacter* By)
 	OnRep_Doors();
 	ForceNetUpdate();
 	if (bOpen)
-	{
-		// Border Patrol open the back and find people hiding in it: the whole truck is busted.
-		ABRCharacter* Opener = Cast<ABRCharacter>(By);
-		bool bHidden = false;
-		for (const TWeakObjectPtr<ABRCharacter>& W : Stowed)
-		{
-			bHidden |= W.IsValid();
-		}
-		if (Opener && Opener->IsWarden() && bHidden && IsNPCTruck())
-		{
-			OnContrabandFound(Opener);
-		}
-		else
-		{
-			ReleaseStowed(Opener);
-		}
-	}
+{
+    // Border Patrol open the back and find people hiding in it: the whole truck is busted.
+    ABRCharacter* Opener = Cast<ABRCharacter>(By);
+    bool bTruckHasStowaway = false;
+    for (const TWeakObjectPtr<ABRCharacter>& W : Stowed)
+    {
+        bTruckHasStowaway |= W.IsValid();
+    }
+    if (Opener && Opener->IsWarden() && bTruckHasStowaway && IsNPCTruck())
+    {
+        OnContrabandFound(Opener);
+    }
+    else
+    {
+        ReleaseStowed(Opener);
+    }
+}
 	else
 	{
 		StowPeople();
