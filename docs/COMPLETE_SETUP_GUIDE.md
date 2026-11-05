@@ -1305,6 +1305,35 @@ Nothing drives through on its own. At the truck:
 - **Light things:** glue onto a crate, barrel or sack (under about 70 kg) and it comes with your hand as you move, so you can drag stuff around.
 - **Letting go:** release the button. The hand also slips off if you get yanked more than about 3 m away from your hold (thrown or knocked flying).
 
+## Part 15al: Mexican police (Policia) and the carcel
+
+This only exists on the built-in test map.
+
+- **Who they are:** 3 Policia officers in blue uniforms patrol town. The **CARCEL** (jail) is a stone cell with iron bars in the open north-west corner of town.
+- **What they care about:** only **crimes against Mexico**, meaning hurting townspeople or the Policia **in town**:
+
+  | Crime | Heat |
+  |---|---|
+  | Stabbing | +40 |
+  | Shooting | +50 |
+  | Killing | +70 |
+  | Knocking out someone who wasn't fighting you | +20 |
+  | Hitting a cop | 1.6 times as much |
+
+  - Crimes against Border Patrol, and the Border Patrol wanted level, are a different system. **The Policia ignore them.**
+  - Fist fights don't count. Neither does defending yourself, or a local jumping a Border Patrol agent.
+- **Someone has to SEE it:** a Policia officer within 35 m with line of sight, or a townsperson within 15 m who goes and tells them. If nobody saw it, nothing happens.
+- **Stars:** 40 heat = 1 star, 100 = 2 stars, 160 = 3 stars. The top of your screen shows them.
+- **Losing the heat:** lay low for 30 seconds and it starts dropping, faster if you leave town.
+- **Arrest:**
+  1. They chase you and fight you.
+  2. Once you're down, a cop **grabs you and drags you to the carcel** (mash Space when you come round to try to get loose).
+  3. You're locked in the cell for **30 seconds (1 star), 1 minute (2 stars) or 1.5 minutes (3 stars)**, with a fine of up to $300.
+  4. The cell is sealed and you can't climb out. When your time is up you're let out the front.
+- **Troublemakers:** about 15% of the locals pick fights and mug people. If the Policia see it, they arrest **them** too. People defending themselves are never arrested.
+- **Respawns:** dead townspeople are replaced about **3 minutes** later, and dead Policia about **2 minutes** later.
+- **Tuning:** **BP_BRGameMode → BR | Town** has *Policia Count*, *Villager Respawn Seconds*, *Policia Respawn Seconds* and *Troublemaker Chance*.
+
 ## Part 16: Checklist: everything you can plug in
 
 Tick these off. Anything you skip just stays silent or uses a simple placeholder; nothing breaks.

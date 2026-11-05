@@ -207,6 +207,34 @@ public:
 	bool bNoFightBack = false;
 	/** A Border Patrol sparring recruit (no trouble for hitting him, dogs leave him alone). */
 	bool bSparring = false;
+	// --- Mexican police (crimes against MEXICO only - separate from Border Patrol's wanted level) ---
+	/** A Policía officer / an ordinary townsperson (respawns a few minutes after dying). */
+	bool bPolicia = false;
+	bool bVillager = false;
+	/** A troublemaking local: picks fights and mugs people (and the Policía arrest them for it - if they see it). */
+	bool bTroublemaker = false;
+	bool IsCrimeWitnessed() const;
+	float PoliciaHeat = 0.f;
+	float LastCrimeTime = -100.f;
+	static constexpr float PoliciaWantedHeat = 40.f;
+	UPROPERTY(Replicated) bool bWantedByPolicia = false;
+	/** 1-3 stars (30 s / 1 min / 1.5 min in the cárcel). */
+	UPROPERTY(Replicated) uint8 PoliciaStarsRep = 0;
+	/** In the cárcel until this server time (-1 = free). */
+	UPROPERTY(Replicated) float MexJailEnd = -1.f;
+	float NextPoliciaThink = 0.f;
+	float LastPoliciaShout = -100.f;
+	TWeakObjectPtr<ABRCharacter> PoliciaPrisoner;
+	int32 PoliciaStars() const;
+	/** Would hurting this person be a crime against Mexico (a townsperson / Policía in town)? */
+	bool IsMexicanCivilianVictim() const;
+	/** Server: you hurt someone - if they're a Mexican civilian in town, the Policía want you. */
+	void ReportCrimeAgainst(ABRCharacter* Victim, float Heat);
+	void TickPoliciaHeat(float DeltaSeconds);
+	/** Policía NPC brain (true = it moved us this tick). */
+	bool TickPoliciaThink();
+	void SendToMexJail(ABRCharacter* Cop);
+	void MakePolicia();
 	/** In a high-noon duel: a loaner revolver, and which duel. */
 	UPROPERTY(Replicated) bool bDuelGun = false;
 	TWeakObjectPtr<class ABRDuelSpot> Duel;

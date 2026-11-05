@@ -441,6 +441,17 @@ void ABRHUD::DrawHUD()
 	{
 		DrawText(FString::Printf(TEXT("GOV. BUDGET $%d"), GS->WardenBudget), Green, 20.f, SY - 118.f, Big, 1.3f);
 	}
+	// Mexican police: your stars (crimes against Mexico only), and time left in the cárcel.
+	if (Me->MexJailEnd > 0.f)
+	{
+		const int32 Left = FMath::Max(0, FMath::CeilToInt(Me->MexJailEnd - GS->GetServerWorldTimeSeconds()));
+		Centered(FString::Printf(TEXT("CARCEL - out in %d s"), Left), 150.f, FLinearColor(1.f, 0.85f, 0.4f), Big, 1.4f);
+	}
+	else if (Me->bWantedByPolicia && Me->PoliciaStarsRep > 0)
+	{
+		const FString Stars = FString::ChrN(Me->PoliciaStarsRep, TEXT('*'));
+		Centered(FString::Printf(TEXT("POLICIA  %s  - they're after you (lay low / leave town)"), *Stars), 150.f, FLinearColor(0.35f, 0.6f, 1.f), Big, 1.3f);
+	}
 	if (GS->RushLeft > 0)
 	{
 		const float Pulse = 0.75f + 0.25f * FMath::Sin(Now * 6.f);

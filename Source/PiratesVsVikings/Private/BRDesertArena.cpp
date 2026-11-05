@@ -3,6 +3,7 @@
 #include "BRPolice.h"
 #include "BRBoxTruck.h"
 #include "BRDuel.h"
+#include "BRPolicia.h"
 #include "BRTunnels.h"
 #include "BRDoors.h"
 #include "BRAirWater.h"
@@ -1379,6 +1380,8 @@ void ABRDesertArena::SpawnGameplayActors(TSubclassOf<ABRTruck> RunnerTruckClass,
 	Car(5200.f, -5000.f, 0.f, true, FLinearColor(0.85f, 0.88f, 0.85f));
 	Car(-9500.f, -2400.f, 0.f, false, FLinearColor(0.5f, 0.2f, 0.1f));
 
+	// --- Policia station / carcel: open ground at the north-west corner of town (clear of the houses, gym and duel post).
+	World->SpawnActor<ABRMexJail>(ABRMexJail::StaticClass(), At(-15000.f, 6200.f, Ground, 0.f), Params);
 	// --- High-noon duel post (west end of town, past the welcome sign): the two marks are 15 m apart.
 	World->SpawnActor<ABRDuelSpot>(ABRDuelSpot::StaticClass(), At(-16750.f, 1000.f, Ground, 0.f), Params);
 	// --- Smuggling truck job board (south edge of town): box truck parks just east of it.

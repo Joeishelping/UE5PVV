@@ -477,6 +477,10 @@ void ABRCharacter::KnockOut(ABRCharacter* By)
 	}
 	bKnockedOut = true;
 	bWasKnockedOut = true;
+	if (By && !(AngryAt.IsValid() && AngryAt.Get() == By))
+	{
+		By->ReportCrimeAgainst(this, 20.f); // knocking out a townsperson who wasn't fighting you
+	}
 	ExtendKnockdown(KOExtraSeconds);
 	ABRGameState::FX(this, EBRFX::PointsText, GetActorLocation() + FVector(0.f, 0.f, 120.f), TEXT("KNOCKED OUT!"));
 	if (By)

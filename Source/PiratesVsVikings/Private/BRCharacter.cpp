@@ -199,6 +199,9 @@ void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ABRCharacter, bOnRide);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SelectedTrap, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, bDuelGun);
+	DOREPLIFETIME_CONDITION(ABRCharacter, bWantedByPolicia, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ABRCharacter, PoliciaStarsRep, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ABRCharacter, MexJailEnd, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(ABRCharacter, SprintStamina, COND_OwnerOnly);
 	DOREPLIFETIME(ABRCharacter, LiftStartTime);
 	DOREPLIFETIME(ABRCharacter, DragBone);
@@ -1243,6 +1246,10 @@ void ABRCharacter::TickWander(float DeltaSeconds)
 			TickOfficer(DeltaSeconds);
 		}
 		return;
+	}
+	if (bPolicia && !Controller && GetCondition() == EPVVCondition::Normal && !GetCurrentBoat() && !GetCarrier() && TickPoliciaThink())
+	{
+		return; // (dragging someone to the cells)
 	}
 	if (!bWandering || Controller || GetCurrentBoat() || GetCarrier() || GetCondition() != EPVVCondition::Normal)
 	{
@@ -3354,6 +3361,7 @@ void ABRCharacter::Tick(float DeltaSeconds)
 		TickCameraView();
 	}
 	TickBox(DeltaSeconds);
+	TickPoliciaHeat(DeltaSeconds);
 	PunchFatigue = FMath::Max(0.f, PunchFatigue - DeltaSeconds * 0.4f);
 	if (HasAuthority())
 	{
@@ -7265,6 +7273,10 @@ void ABRCharacter::TickHands(float DeltaSeconds)
 				{
 					FightOutOfGrab(0.18f + 0.3f * Curve); // punching the one holding you
 				}
+				if (bIsNPC && (bTroublemaker || MugTarget.IsValid()))
+				{
+					ReportCrimeAgainst(KOVictim, 14.f); // a troublemaker throwing punches in town
+				}
 			}
 			// A clean hit knocks their own punch off course and they need a beat before they can throw again.
 			if (KOVictim)
@@ -7517,6 +7529,8 @@ bool ABRCharacter::MugPlayer(ABRCharacter* Victim)
 	{
 		StartBrawling(Victim, 40.f, 0.75f);
 	}
+	bTroublemaker = true;
+	ReportCrimeAgainst(Victim, 45.f); // robbery: if anyone saw it, the Policía come for them
 	Victim->Notify(FText::Format(LOCTEXT("Mugged", "A local MUGGED you and took your {0}! Beat them up to get it back."), FText::FromString(BR::ItemName(Taken))));
 	return true;
 }
@@ -8452,6 +8466,10 @@ void ABRCharacter::Wound(float Amount, APVVCharacter* By, const FVector& At, con
 	}
 	Health = FMath::Max(0.f, Health - Amount);
 	LastWoundTime = GetWorld()->GetTimeSeconds();
+	if (ABRCharacter* Attacker = Cast<ABRCharacter>(By))
+	{
+		Attacker->ReportCrimeAgainst(this, bGun ? 50.f : 40.f); // stabbing / shooting a townsperson: the Policía care
+	}
 	// Blood: spurts where it went in (and out the back for a gunshot)...
 	ABRGameState::FXScaled(this, EBRFX::Blood, At, 1.5f);
 	ABRGameState::FXScaled(this, EBRFX::Blood, At + Dir.GetSafeNormal() * 25.f, 1.2f);
@@ -8483,6 +8501,17 @@ void ABRCharacter::Die(APVVCharacter* By, bool bGun)
 	}
 	bDead = true;
 	Health = 0.f;
+	if (ABRCharacter* Killer = Cast<ABRCharacter>(By))
+	{
+		Killer->ReportCrimeAgainst(this, 70.f); // murder in town
+	}
+	if (HasAuthority() && bIsNPC && (bVillager || bPolicia))
+	{
+		if (ABRGameMode* RespawnGM = GetWorld()->GetAuthGameMode<ABRGameMode>())
+		{
+			RespawnGM->QueueTownRespawn(bPolicia); // somebody new moves into town in a few minutes
+		}
+	}
 	LoseClient(TEXT("was KILLED"));
 	ReleaseHandGrab();
 	if (APVVCharacter* Carrier = GetCarrier())

@@ -1,5 +1,6 @@
 #include "BRGameMode.h"
 #include "BRBoxTruck.h"
+#include "BRPolicia.h"
 #include "BRGameInstance.h"
 #include "BRBotController.h"
 #include "BRCar.h"
@@ -191,6 +192,7 @@ void ABRGameMode::TickBR()
 	TickClients();
 	TickBots();
 	TickTownLife(GS);
+	TickTownRespawns();
 	if (GS->Phase == EBRPhase::Invasion)
 	{
 		TickBounty(GS);
@@ -863,6 +865,103 @@ void ABRGameMode::SpawnVillagers()
 		if (ABRCharacter* NPC = SpawnNPC(FTransform(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At)))
 		{
 			NPC->StartWandering(Home, VillagerWanderRadius);
+			NPC->bVillager = true;
+			NPC->bTroublemaker = FMath::FRand() < TroublemakerChance;
+		}
+	}
+	// The Policía (built-in town only: they need the cárcel).
+	if (ABRMexJail::Find(GetWorld()))
+	{
+		for (int32 i = 0; i < PoliciaCount; ++i)
+		{
+			SpawnTownPerson(true);
+		}
+	}
+}
+
+void ABRGameMode::SpawnTownPerson(bool bPolice)
+{
+	TArray<FVector> Spots;
+	BRMap::GetVillagerSpots(GetWorld(), Spots);
+	if (Spots.Num() == 0 && Arena && Arena->bBuildTestMap)
+	{
+		Arena->GetVillageSpots(Spots);
+	}
+	if (Spots.Num() == 0)
+	{
+		return;
+	}
+	const FVector Home = Spots[FMath::RandRange(0, Spots.Num() - 1)];
+	const FVector At = Home + FVector(FMath::FRandRange(-200.f, 200.f), FMath::FRandRange(-200.f, 200.f), 0.f);
+	if (ABRCharacter* NPC = SpawnNPC(FTransform(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), At)))
+	{
+		NPC->StartWandering(Home, bPolice ? 2500.f : VillagerWanderRadius);
+		if (bPolice)
+		{
+			NPC->MakePolicia();
+		}
+		else
+		{
+			NPC->bVillager = true;
+			NPC->bTroublemaker = FMath::FRand() < TroublemakerChance;
+		}
+	}
+}
+
+void ABRGameMode::QueueTownRespawn(bool bPolice)
+{
+	(bPolice ? PoliciaRespawnAt : VillagerRespawnAt).Add(GetWorld()->GetTimeSeconds() + (bPolice ? PoliciaRespawnSeconds : VillagerRespawnSeconds));
+}
+
+void ABRGameMode::TickTownRespawns()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	for (int32 i = VillagerRespawnAt.Num() - 1; i >= 0; --i)
+	{
+		if (Now >= VillagerRespawnAt[i])
+		{
+			VillagerRespawnAt.RemoveAt(i);
+			SpawnTownPerson(false);
+		}
+	}
+	for (int32 i = PoliciaRespawnAt.Num() - 1; i >= 0; --i)
+	{
+		if (Now >= PoliciaRespawnAt[i])
+		{
+			PoliciaRespawnAt.RemoveAt(i);
+			SpawnTownPerson(true);
+		}
+	}
+	// Troublemakers pick fights now and then (with a local, or a Mexican player - never with Border Patrol: that's not the Policía's problem).
+	if (FMath::FRand() < 1.f / 25.f)
+	{
+		TArray<ABRCharacter*> Trouble;
+		for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+		{
+			if (It->bTroublemaker && It->IsNPC() && It->GetCondition() == EPVVCondition::Normal && !It->IsBrawling() && It->MexJailEnd < 0.f && !It->GetCurrentBoat())
+			{
+				Trouble.Add(*It);
+			}
+		}
+		if (Trouble.Num() > 0)
+		{
+			ABRCharacter* Bully = Trouble[FMath::RandRange(0, Trouble.Num() - 1)];
+			ABRCharacter* Mark = nullptr;
+			float Best = 900.f;
+			for (TActorIterator<ABRCharacter> It(GetWorld()); It; ++It)
+			{
+				const float D = FVector::Dist(It->GetActorLocation(), Bully->GetActorLocation());
+				if (*It != Bully && D < Best && !It->IsWarden() && !It->bPolicia && It->GetCondition() == EPVVCondition::Normal && !It->GetCurrentBoat()
+					&& (It->bVillager || !It->IsNPC()))
+				{
+					Best = D;
+					Mark = *It;
+				}
+			}
+			if (Mark)
+			{
+				Bully->StartBrawling(Mark, 20.f, FMath::FRandRange(0.6f, 0.9f));
+			}
 		}
 	}
 }
@@ -1136,6 +1235,7 @@ void ABRGameMode::TickTownLife(ABRGameState* GS)
 			if (ABRCharacter* Thief = FindLocal(Mark->GetActorLocation(), 1400.f))
 			{
 				Thief->MugTarget = Mark;
+				Thief->bTroublemaker = true;
 				Thief->StartBrawling(Mark, 20.f, 0.6f); // walks right up to you...
 			}
 		}

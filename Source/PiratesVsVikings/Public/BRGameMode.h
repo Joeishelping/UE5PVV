@@ -36,6 +36,8 @@ public:
 	/** A Warden ordered everyone out of a vehicle. Finding no Runners = harassing citizens. */
 	void OnVehicleSearched(APVVCharacter* Warden, int32 RunnersFound);
 	void ChangeApproval(float Delta);
+	/** Server: a townsperson / Policia died - someone new turns up later. */
+	void QueueTownRespawn(bool bPolice);
 	/** A Border Patrol agent took a bribe on camera: scandal. */
 	void OnBribeFilmed(APVVCharacter* Warden, int32 Amount);
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Approval") float BribeScandalPenalty = 20.f;
@@ -182,6 +184,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") FIntPoint BorderRushSize = FIntPoint(10, 14);
 	/** Seconds of warning before they come out of the river. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Border Rush") float BorderRushWarning = 10.f;
+	/** Mexican police patrolling town (built-in map), and how soon dead townspeople / police are replaced (seconds). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") int32 PoliciaCount = 3;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") float VillagerRespawnSeconds = 180.f;
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") float PoliciaRespawnSeconds = 120.f;
+	/** Share of townspeople who are troublemakers (pick fights, mug people). */
+	UPROPERTY(EditDefaultsOnly, Category = "BR|Town") float TroublemakerChance = 0.15f;
+
 	/** NPCs per truck (driver included). Up to 4 seats - empty seats are where Runners hide. */
 	UPROPERTY(EditDefaultsOnly, Category = "BR|Traffic") FIntPoint NPCsPerTruck = FIntPoint(1, 3);
 	/**
@@ -241,6 +250,10 @@ private:
 	float NextWeatherChange = 0.f;
 	float NextNPCTruck = 30.f;
 	float NextBorderRush = 120.f;
+	TArray<float> VillagerRespawnAt;
+	TArray<float> PoliciaRespawnAt;
+	void SpawnTownPerson(bool bPolice);
+	void TickTownRespawns();
 	float RushSpawnIn = -1.f;
 	FVector RushSpot = FVector::ZeroVector;
 	int32 RushSpawned = 0;
