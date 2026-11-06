@@ -47,6 +47,26 @@
 			"Enabled": true
 		},
 		{
+			"Name": "OnlineSubsystemEOS",
+			"Enabled": false
+		},
+		{
+			"Name": "OnlineServicesEOS",
+			"Enabled": false
+		},
+		{
+			"Name": "EOSShared",
+			"Enabled": false
+		},
+		{
+			"Name": "EOSVoiceChat",
+			"Enabled": false
+		},
+		{
+			"Name": "SocketSubsystemEOS",
+			"Enabled": false
+		},
+		{
 			"Name": "PythonScriptPlugin",
 			"Enabled": true,
 			"TargetAllowList": [
