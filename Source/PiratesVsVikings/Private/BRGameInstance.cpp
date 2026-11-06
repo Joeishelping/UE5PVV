@@ -317,17 +317,27 @@ void UBRGameInstance::HostSteam()
 		Status(TEXT("Online isn't available (Online: ") + GetOnlineServiceName() + TEXT("). Use a packaged / Standalone game, not the editor window."));
 		return;
 	}
+
+	if (bIsHosting || (GetWorld() && GetWorld()->GetNetMode() == NM_ListenServer))
+	{
+		Status(TEXT("Already hosting this match."));
+		return;
+	}
+
 	if (NeedsLogin())
 	{
 		LoginThen(EAfterLogin::Host);
 		return;
 	}
+
 	if (Sessions->GetNamedSession(NAME_GameSession))
 	{
 		bHostAfterDestroy = true;
 		Sessions->DestroySession(NAME_GameSession);
 		return;
 	}
+
+	bIsHosting = true;
 	CreateSessionNow();
 }
 
@@ -337,6 +347,7 @@ void UBRGameInstance::CreateSessionNow()
 	const ULocalPlayer* Player = GetFirstGamePlayer();
 	if (!Sessions || !Player)
 	{
+		bIsHosting = false;
 		return;
 	}
 	const bool bLan = GetOnlineServiceName() == TEXT("NULL");
@@ -356,17 +367,20 @@ void UBRGameInstance::CreateSessionNow()
 	Status(TEXT("Creating session..."));
 	if (!Sessions->CreateSession(0, NAME_GameSession, Settings))
 	{
+		bIsHosting = false;
 		Status(TEXT("Could not create a session."));
 	}
 }
-
 void UBRGameInstance::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
 	if (!bWasSuccessful)
 	{
+		bIsHosting = false;
 		Status(TEXT("Creating the online game failed. Signed in? (Epic: check the Product IDs in Project Settings -> Epic Online Services.)"));
 		return;
 	}
+
+	bIsHosting = true;
 	Status(GetOnlineServiceName() == TEXT("EOS") ? TEXT("Hosting! Friends can find your game in FIND GAMES, or press INVITE.")
 		: TEXT("Hosting! Press Shift+Tab -> right-click a friend -> Invite to Game (or type Invite)."));
 	const FString Map = UGameplayStatics::GetCurrentLevelName(GetWorld(), true);
@@ -379,22 +393,34 @@ void UBRGameInstance::OnDestroySessionComplete(FName SessionName, bool bWasSucce
 	{
 		const FOnlineSessionSearchResult InviteToJoin = PendingInvite.GetValue();
 		PendingInvite.Reset();
+
 		if (IOnlineSessionPtr Sessions = GetSessions())
 		{
 			Status(TEXT("Invite accepted - joining..."));
-			Sessions->JoinSession(0, NAME_GameSession, InviteToJoin);
+			if (!Sessions->JoinSession(0, NAME_GameSession, InviteToJoin))
+			{
+				bJoinInProgress = false;
+				Status(TEXT("Steam rejected the invite join request."));
+			}
 		}
 		return;
 	}
+
 	if (bHostAfterDestroy)
 	{
 		bHostAfterDestroy = false;
 		CreateSessionNow();
+		return;
 	}
+
+	bIsHosting = false;
 }
 
 void UBRGameInstance::LeaveGame()
 {
+	bIsHosting = false;
+	bJoinInProgress = false;
+
 	if (IOnlineSessionPtr Sessions = GetSessions())
 	{
 		Sessions->DestroySession(NAME_GameSession);
@@ -402,7 +428,6 @@ void UBRGameInstance::LeaveGame()
 	const FString Map = UGameplayStatics::GetCurrentLevelName(GetWorld(), true);
 	UGameplayStatics::OpenLevel(GetWorld(), FName(*Map), true);
 }
-
 void UBRGameInstance::Invite()
 {
 	if (NeedsLogin())
@@ -537,34 +562,55 @@ void UBRGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 
 void UBRGameInstance::OnInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult)
 {
+	if (bJoinInProgress)
+	{
+		return;
+	}
+
 	IOnlineSessionPtr Sessions = GetSessions();
 	if (!bWasSuccessful || !Sessions || !InviteResult.IsValid())
 	{
 		Status(TEXT("That invite didn't work - ask for a new one."));
 		return;
 	}
+
+	bJoinInProgress = true;
+
 	if (Sessions->GetNamedSession(NAME_GameSession))
 	{
-		// We were hosting our own game: close it first, then join (in OnDestroySessionComplete).
 		Status(TEXT("Invite accepted - closing your own game first..."));
 		PendingInvite = InviteResult;
 		bHostAfterDestroy = false;
-		Sessions->DestroySession(NAME_GameSession);
+		if (!Sessions->DestroySession(NAME_GameSession))
+		{
+			PendingInvite.Reset();
+			bJoinInProgress = false;
+			Status(TEXT("Couldn't close the current session to join the invite."));
+		}
 		return;
 	}
-	Status(TEXT("Invite accepted - joining..."));
-	Sessions->JoinSession(ControllerId, NAME_GameSession, InviteResult);
-}
 
+	Status(TEXT("Invite accepted - joining..."));
+	if (!Sessions->JoinSession(ControllerId, NAME_GameSession, InviteResult))
+	{
+		bJoinInProgress = false;
+		Status(TEXT("Steam rejected the join request. Accept a fresh invite and try again."));
+	}
+}
 void UBRGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
 {
 	IOnlineSessionPtr Sessions = GetSessions();
 	FString Address;
+
 	if (Result != EOnJoinSessionCompleteResult::Success || !Sessions || !Sessions->GetResolvedConnectString(SessionName, Address))
 	{
+		bJoinInProgress = false;
 		Status(FString::Printf(TEXT("Couldn't join that game (error %d). Is the host still in the game? Same version?"), (int32)Result));
 		return;
 	}
+
+	bJoinInProgress = false;
+
 	if (APlayerController* PC = GetFirstLocalPlayerController())
 	{
 		PC->ClientTravel(Address, TRAVEL_Absolute);
