@@ -132,12 +132,12 @@ void UBRMenuWidget::BuildLayout()
 	FindSteamButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFindSteam);
 	InviteSteamButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnInviteSteam);
 
-	for (UButton* Button : { HostSteamButton, FindSteamButton, InviteSteamButton })
+		for (UButton* Button : { HostSteamButton, FindSteamButton, InviteSteamButton })
 	{
-		if (UHorizontalBoxSlot* Slot = OnlineRow->AddChildToHorizontalBox(Button))
+		if (UHorizontalBoxSlot* OnlineSlot = OnlineRow->AddChildToHorizontalBox(Button))
 		{
-			Slot->SetPadding(FMargin(4.f));
-			Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			OnlineSlot->SetPadding(FMargin(4.f));
+			OnlineSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
 	}
 	AddRow(Box, OnlineRow);
@@ -145,10 +145,10 @@ void UBRMenuWidget::BuildLayout()
 	UHorizontalBox* BrowseRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	UButton* BrowseButton = MakeButton(TEXT("BROWSE STEAM GAMES"), Neutral);
 	BrowseButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBrowseGames);
-	if (UHorizontalBoxSlot* Slot = BrowseRow->AddChildToHorizontalBox(BrowseButton))
+		if (UHorizontalBoxSlot* BrowseSlot = BrowseRow->AddChildToHorizontalBox(BrowseButton))
 	{
-		Slot->SetPadding(FMargin(4.f));
-		Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		BrowseSlot->SetPadding(FMargin(4.f));
+		BrowseSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	}
 	AddRow(Box, BrowseRow);
 
