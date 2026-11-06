@@ -51,6 +51,8 @@ public:
 	/** Bumped every time the list changes (the menu rebuilds its rows). */
 	int32 FoundGamesVersion = 0;
 	bool bSearching = false;
+	bool bIsHosting = false;
+	bool bJoinInProgress = false;
 	/** Signed in to the online service (Epic needs a login before you can host or join). */
 	bool IsLoggedIn() const;
 
