@@ -122,8 +122,45 @@ void UBRMenuWidget::BuildLayout()
 	AddRow(Box, Teams);
 	BuildCustomize(Box);
 
-	// (Hosting / joining buttons removed: you're adding your own hosting flow. The handlers below are still here if you want them back.)
+	// Steam hosting, joining, invites, and a browsable session list.
+	UHorizontalBox* OnlineRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	UButton* HostSteamButton = MakeButton(TEXT("HOST ON STEAM"), Go);
+	UButton* FindSteamButton = MakeButton(TEXT("FIND GAME"), RunnerColor);
+	UButton* InviteSteamButton = MakeButton(TEXT("STEAM INVITE"), Neutral);
 
+	HostSteamButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnHostSteam);
+	FindSteamButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnFindSteam);
+	InviteSteamButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnInviteSteam);
+
+	for (UButton* Button : { HostSteamButton, FindSteamButton, InviteSteamButton })
+	{
+		if (UHorizontalBoxSlot* Slot = OnlineRow->AddChildToHorizontalBox(Button))
+		{
+			Slot->SetPadding(FMargin(4.f));
+			Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+	}
+	AddRow(Box, OnlineRow);
+
+	UHorizontalBox* BrowseRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	UButton* BrowseButton = MakeButton(TEXT("BROWSE STEAM GAMES"), Neutral);
+	BrowseButton->OnClicked.AddDynamic(this, &UBRMenuWidget::OnBrowseGames);
+	if (UHorizontalBoxSlot* Slot = BrowseRow->AddChildToHorizontalBox(BrowseButton))
+	{
+		Slot->SetPadding(FMargin(4.f));
+		Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
+	AddRow(Box, BrowseRow);
+
+	AddRow(Box, MakeText(TEXT("OPEN STEAM SESSIONS"), 14, FLinearColor(0.75f, 0.75f, 0.75f)), 2.f);
+	USizeBox* ServerListLimit = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	ServerListLimit->SetMaxDesiredHeight(130.f);
+	UScrollBox* ServerScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
+	ServerList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	ServerScroll->AddChild(ServerList);
+	ServerListLimit->AddChild(ServerScroll);
+	AddRow(Box, ServerListLimit, 2.f);
+	
 	UHorizontalBox* Bottom = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	UButton* Play = MakeButton(TEXT("PLAY / RESUME"), Go);
 	UButton* Quit = MakeButton(TEXT("QUIT"), FLinearColor(0.5f, 0.12f, 0.1f));
